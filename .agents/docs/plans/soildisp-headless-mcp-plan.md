@@ -15,7 +15,7 @@
 3. `PileCalculator`で計算する。
 4. 計算結果をJSON成果物として保存する。
 5. 要求された場合だけ`PileReportRenderer`でPDFを生成する。
-6. 成否、検証エラー、成果物パスを機械可読JSONで返す。
+6. 成否、検証エラー、成果物metadataを機械可読JSONで返す。
 
 本改修での「headless」は、`MainForm`を非表示で起動することではない。WinForms、ウィンドウハンドル、メッセージループ、ダイアログ、疑似クリックに依存せず、計算ライブラリを直接呼び出せることを指す。
 
@@ -144,6 +144,8 @@ Serviceはファイルシステムへ書き込まない。保存先管理と原�
 
 新規プロジェクト名は`SoilStructure.Headless`、ターゲットは`net10.0`、出力種別は`Exe`とする。`SoilPile`だけを参照し、`SoilStructure`やWinFormsは参照しない。
 
+stdout envelopeは[統合MCPサーバー実装プランの`runner-envelope-v1`](./structural-mcp-server-plan.md#34-外部runner共通契約runner-envelope-v1)を規範とする。本節はSoilDisp固有値の具体例であり、top-level形状を独自に拡張しない。
+
 初期コマンドは1つに限定する。
 
 ```powershell
@@ -171,20 +173,36 @@ SoilStructure.Headless.exe run `
 ```json
 {
   "protocolVersion": 1,
+  "engine": "soildisp",
+  "engineVersion": "1.0.0",
+  "readiness": "production",
   "ok": true,
-  "result": {
+  "executionStatus": "success",
+  "engineeringStatus": "unknown",
+  "summary": {
     "inputSchemaVersion": 1,
-    "resultPath": "C:\\jobs\\123\\output\\result.json",
-    "pdfPath": "C:\\jobs\\123\\output\\report.pdf",
-    "pdfBytes": 248551,
-    "pdfSha256": "...",
-    "summary": {
-      "pileType": "castInPlace",
-      "soilLayerCount": 3,
-      "tipBearingKn": 0.0,
-      "isShortPile": false
-    }
+    "pileType": "castInPlace",
+    "soilLayerCount": 3,
+    "tipBearingKn": 0.0,
+    "isShortPile": false
   },
+  "messages": [],
+  "artifacts": [
+    {
+      "kind": "result",
+      "mediaType": "application/json",
+      "relativePath": "result.json",
+      "bytes": 12345,
+      "sha256": "..."
+    },
+    {
+      "kind": "report",
+      "mediaType": "application/pdf",
+      "relativePath": "report.pdf",
+      "bytes": 248551,
+      "sha256": "..."
+    }
+  ],
   "errors": []
 }
 ```
@@ -194,8 +212,15 @@ SoilStructure.Headless.exe run `
 ```json
 {
   "protocolVersion": 1,
+  "engine": "soildisp",
+  "engineVersion": "1.0.0",
+  "readiness": "production",
   "ok": false,
-  "result": null,
+  "executionStatus": "failed",
+  "engineeringStatus": "notRun",
+  "summary": null,
+  "messages": [],
+  "artifacts": [],
   "errors": [
     {
       "code": "validation_error",
@@ -355,7 +380,7 @@ PDFのバイナリハッシュだけを唯一のgoldenにしない。PDFライ�
 3. 引数配列でCLIを起動する。shell文字列連結は使用しない。
 4. タイムアウト時はプロセスツリーを終了する。
 5. stdout JSON、終了コード、成果物の実在、PDFハッシュを検証する。
-6. MCP応答には要約、警告、成果物パスを返す。巨大な`result.json`やPDFをそのままMCP応答へ埋め込まない。
+6. MCP応答には要約、警告、`artifactId`と相対pathを返す。巨大な`result.json`やPDFをそのままMCP応答へ埋め込まない。
 
 受入条件:
 
@@ -469,4 +494,3 @@ dotnet format SoilStructure.sln --verify-no-changes --include `
    - 開発中は`dotnet run`/framework-dependent build。
    - MCP運用時はversion固定されたpublishディレクトリを推奨する。
 5. MCPから許可する最大実行時間、入力JSONサイズ、地層数上限。
-

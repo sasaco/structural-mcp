@@ -1,0 +1,8 @@
+{
+  "note": "The first release is configured with environment variables; these are example values.",
+  "STRUCTURAL_MCP_WEBDAN_RUNNER": "C:/Users/example/Documents/WebDan2/WebDan2.Headless/bin/Release/net8.0/WebDan2.Headless.dll",
+  "STRUCTURAL_MCP_JOB_ROOT": "C:/Users/example/AppData/Local/structural-mcp/jobs",
+  "STRUCTURAL_MCP_ALLOWED_ROOTS": "C:/Users/example/Documents",
+  "STRUCTURAL_MCP_ENABLE_STEELDAN": "false",
+  "STRUCTURAL_MCP_TIMEOUT_MS": "180000"
+}

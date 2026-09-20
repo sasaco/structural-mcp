@@ -152,6 +152,8 @@ RC系:
 
 ### 5.3 応答envelope
 
+stdout envelopeは[統合MCPサーバー実装プランの`runner-envelope-v1`](./structural-mcp-server-plan.md#34-外部runner共通契約runner-envelope-v1)を規範とする。本節はWebDan2/SteelDan固有値の具体例であり、top-level形状を独自に分岐させない。SteelDan固有の`Severity`、`Message`、`JsonPointer`はstdoutではそれぞれ`level`、`text`、`path`へ写し、完全なengine結果は`result.json`へ保持する。
+
 成功例:
 
 ```json
@@ -159,6 +161,7 @@ RC系:
   "protocolVersion": 1,
   "ok": true,
   "engine": "webdan2-rc",
+  "engineVersion": "1.0.0",
   "readiness": "production",
   "executionStatus": "success",
   "engineeringStatus": "unknown",
@@ -195,6 +198,7 @@ RC系:
   "protocolVersion": 1,
   "ok": false,
   "engine": "steeldan",
+  "engineVersion": "1.0.0",
   "readiness": "experimental",
   "executionStatus": "failed",
   "engineeringStatus": "notRun",
@@ -202,9 +206,9 @@ RC系:
   "messages": [
     {
       "code": "SD-JSON-MALFORMED",
-      "severity": "error",
-      "message": "入力JSONの形式が不正です。",
-      "jsonPointer": ""
+      "level": "error",
+      "text": "入力JSONの形式が不正です。",
+      "path": ""
     }
   ],
   "artifacts": [],
@@ -290,7 +294,7 @@ RC系の`ReturnCode.NG`とSteelDanの`IsSuccess == false`は終了コード3へ�
 - `MemoryStream`は必ずCLI側でdisposeする。
 - コアが返したメッセージ順序を維持する。
 - RC系のメッセージIDは文字列codeへ安定変換する。例: `WDB2-0001`。元の`Level`、`ID`、`Text`も`result.json`へ保持する。
-- SteelDanの`Code`、`Severity`、`Message`、`JsonPointer`は意味を変えずに写す。
+- SteelDanの`Code`、`Severity`、`Message`、`JsonPointer`は意味を変えず、stdoutの共通field `code`、`level`、`text`、`path`へ写す。engine固有の原形は`result.json`へ保持する。
 - 例外スタック、ローカル絶対パス、内部型名をstdoutの`message`へ含めない。詳細はstderrへ出すが、入力本文は出さない。
 
 ### 7.4 プロセス分離と並列性

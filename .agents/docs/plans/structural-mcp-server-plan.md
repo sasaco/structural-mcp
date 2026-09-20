@@ -5,7 +5,7 @@
 - 対象リポジトリ: `structural-mcp`
 - 連携対象: `../FrameWeb3`、`../WebDan2`、`../SoilDisp`
 - 初期トランスポート: STDIO
-- 実装言語: TypeScript / Node.js 24
+- 実装言語: TypeScript / Node.js 24（Windows process-host helperのみ.NET 8 / Win32）
 
 ## 1. 目的
 
@@ -54,7 +54,9 @@ structural-mcp (Node.js)
         |
         +-- FrameWeb adapter -- child process --> FrameWeb3 headless runner
         |
-        +-- WebDan adapter --- child process --> WebDan2 headless runner
+        +-- WebDan adapter --- child process --> WebDan2 headless runner / run-rc
+        |
+        +-- SteelDan adapter - child process --> WebDan2 headless runner / run-steel
         |
         `-- SoilDisp adapter - child process --> SoilStructure.Headless
 ```
@@ -88,11 +90,13 @@ structural-mcp (Node.js)
 - ターゲットは`net8.0`。
 - `OutputFormat`は`Pdf`と`Markdown`。
 - 内部でstaticな`ErrorMessageService`やlanguage stateを利用するため、1呼出1プロセスを原則とする。
-- `SteelDan`は同repo内の別計算コアだが、初期MVPには含めない。別ツール追加時に独立した計画とfixtureを用意する。
+- `SteelDan`は同repo内の別計算コアであり、RC系とは別MCPツールとして扱う。
+- `SteelDan`は実行基盤をMVPへ含めるが、実運用oracle、容量式完全互換、PDF goldenが未完のため、既定無効かつ`experimental`として公開する。
 
 外部前提:
 
-- `WebDan2`側に、`.wdj`入力、output format、成果物ディレクトリを受け取る非対話JSON CLIを用意する。
+- `WebDan2`側に、`.wdj`/`.wsj`入力、output format、成果物ディレクトリを受け取る非対話JSON CLIを用意する。
+- RC系は`run-rc`、鋼系は`run-steel`サブコマンドとし、MCPでも`webdan_calculate`と`steeldan_calculate`へ分離する。
 - runnerはPDF/Markdownをstdoutへ埋め込まず、成果物ファイルと小さいJSON envelopeを返す。
 
 ### 3.3 SoilDisp
@@ -106,9 +110,9 @@ structural-mcp (Node.js)
 
 - `SoilStructure.Headless`が入力JSON、結果JSON、任意PDF、終了コード、stdout envelope契約を提供する。
 
-### 3.4 外部runner共通契約
+### 3.4 外部runner共通契約（`runner-envelope-v1`）
 
-各runnerは内部実装が異なっても、次を満たす。
+本節と`schemas/common/runner-envelope.schema.json`を全runnerの規範契約とする。個別runner計画の例と競合する場合は本節を優先し、個別計画も同じ変更で更新する。各runnerは内部実装が異なっても、次を満たす。
 
 - 非対話実行であり、stdin待ち、確認ダイアログ、GUI表示を行わない。
 - 引数は`--input`、`--output-dir`、必要なenum optionだけとする。
@@ -116,8 +120,11 @@ structural-mcp (Node.js)
 - 診断ログはstderr。
 - 成果物は指定された空のjob directory配下だけへ書く。
 - 成功はexit code 0。入力、検証、計算、I/Oを終了コードまたはerror categoryで区別する。
-- 応答に`protocolVersion`、`engineVersion`、`ok`、`summary`、`messages`、`artifacts`、`errors`を含める。
-- artifactにはrelative path、media type、byte size、SHA-256を含める。
+- `protocolVersion`は整数`1`、`engineVersion`は空でない文字列とする。
+- 応答に`protocolVersion`、`engine`、`engineVersion`、`readiness`、`ok`、`executionStatus`、`engineeringStatus`、`summary`、`messages`、`artifacts`、`errors`を含める。
+- `messages`は`level`、`code`、`text`、任意の`path`へ正規化する。engine固有の完全情報は`result.json`へ保存する。
+- artifactには`kind`、`mediaType`、`relativePath`、byte size、SHA-256を含める。`relativePath`はoutput directory基準で、絶対pathは禁止する。
+- 失敗時も同じtop-level fieldを返し、`summary`は`null`、`artifacts`は確定済み成果物だけとする。
 - stdout/stderrへ秘密情報、巨大な解析結果、PDF Base64を出さない。
 
 ## 4. 技術スタック
@@ -154,6 +161,8 @@ devDependencies
 
 子プロセス、ハッシュ、ファイル操作、UUID、AbortSignalはNode標準APIを優先し、shell wrapperや汎用command実行packageを導入しない。
 
+Windowsのprocess tree containmentだけはNode標準APIで満たせないため、repo内でbuild・署名・hash固定する小さな.NET 8/Win32 Job Object helperを例外として同梱する。解析ロジックは持たせない。
+
 ## 5. 目標ディレクトリ構成
 
 ```text
@@ -185,6 +194,7 @@ structural-mcp/
 |  |  |- capabilities.ts
 |  |  |- frameweb-analyze.ts
 |  |  |- webdan-calculate.ts
+|  |  |- steeldan-calculate.ts
 |  |  |- soildisp-calculate.ts
 |  |  |- get-job.ts
 |  |  `- read-text-artifact.ts
@@ -192,11 +202,14 @@ structural-mcp/
 |  |  |- engine-adapter.ts
 |  |  |- frameweb3-adapter.ts
 |  |  |- webdan2-adapter.ts
+|  |  |- steeldan-adapter.ts
 |  |  `- soildisp-adapter.ts
 |  |- process/
 |  |  |- process-runner.ts
 |  |  |- process-errors.ts
 |  |  `- process-tree.ts
+|  |- native/
+|  |  `- StructuralMcp.ProcessHost/
 |  |- jobs/
 |  |  |- job-store.ts
 |  |  |- job-manifest.ts
@@ -234,6 +247,10 @@ structural-mcp/
 {
   "schemaVersion": 1,
   "jobRoot": "C:/Users/example/AppData/Local/structural-mcp/jobs",
+  "globalConcurrency": 2,
+  "maxQueuedJobs": 8,
+  "maxJobBytes": 268435456,
+  "maxTextArtifactReadBytes": 262144,
   "allowedInputRoots": [
     "C:/Users/example/Documents"
   ],
@@ -241,24 +258,57 @@ structural-mcp/
     "frameweb3": {
       "enabled": true,
       "repositoryRoot": "C:/Users/example/Documents/FrameWeb3",
+      "runnerInstallRoot": "C:/Users/example/AppData/Local/structural-mcp/runners/frameweb3/1.0.0",
+      "runnerRelativePath": "FrameWeb/src/frameweb_headless.py",
+      "expectedProtocolVersion": 1,
+      "expectedEngineVersion": "1.0.0",
       "timeoutMs": 120000,
       "maxConcurrency": 1,
+      "maxInputBytes": 16777216,
+      "maxArtifactBytes": 134217728,
       "maxStdoutBytes": 1048576,
       "maxStderrBytes": 4194304
     },
     "webdan2": {
       "enabled": true,
       "repositoryRoot": "C:/Users/example/Documents/WebDan2",
+      "runnerInstallRoot": "C:/Users/example/AppData/Local/structural-mcp/runners/webdan2/1.0.0",
+      "runnerRelativePath": "WebDan2.Headless.exe",
+      "expectedProtocolVersion": 1,
+      "expectedEngineVersion": "1.0.0",
       "timeoutMs": 180000,
       "maxConcurrency": 1,
+      "maxInputBytes": 16777216,
+      "maxArtifactBytes": 134217728,
+      "maxStdoutBytes": 1048576,
+      "maxStderrBytes": 4194304
+    },
+    "steeldan": {
+      "enabled": false,
+      "readiness": "experimental",
+      "repositoryRoot": "C:/Users/example/Documents/WebDan2",
+      "runnerInstallRoot": "C:/Users/example/AppData/Local/structural-mcp/runners/webdan2/1.0.0",
+      "runnerRelativePath": "WebDan2.Headless.exe",
+      "expectedProtocolVersion": 1,
+      "expectedEngineVersion": "1.0.0",
+      "timeoutMs": 180000,
+      "maxConcurrency": 1,
+      "maxInputBytes": 16777216,
+      "maxArtifactBytes": 134217728,
       "maxStdoutBytes": 1048576,
       "maxStderrBytes": 4194304
     },
     "soildisp": {
       "enabled": true,
       "repositoryRoot": "C:/Users/example/Documents/SoilDisp",
+      "runnerInstallRoot": "C:/Users/example/AppData/Local/structural-mcp/runners/soildisp/1.0.0",
+      "runnerRelativePath": "SoilStructure.Headless.exe",
+      "expectedProtocolVersion": 1,
+      "expectedEngineVersion": "1.0.0",
       "timeoutMs": 180000,
       "maxConcurrency": 1,
+      "maxInputBytes": 16777216,
+      "maxArtifactBytes": 134217728,
       "maxStdoutBytes": 1048576,
       "maxStderrBytes": 4194304
     }
@@ -272,7 +322,7 @@ structural-mcp/
 2. repo直下の`config/structural-mcp.local.json`。
 3. exampleから導出せず、設定不足として起動エラーにする。
 
-commandや任意argsを設定値として受け取らない。各adapterが`repositoryRoot`から既知のrunner pathと固定引数を構築する。これにより設定ファイルを任意command実行面にしない。
+commandや任意argsを設定値として受け取らない。各adapterは`runnerInstallRoot`とengine別にallow-listした`runnerRelativePath`からversion固定entry pointを解決し、既知のlauncherと固定引数を構築する。FrameWeb3は固定`uv --directory <installed FrameWeb> run --locked ...`、.NET runnerは固定exeを使い、`.cmd`/`.ps1`をshell経由で起動しない。`repositoryRoot`はfixture探索など、明記した開発・health check用途だけに使い、mutableな`bin/Debug`を実行しない。install manifestにはrunner version、protocol version、relative path、配布物SHA-256を保存し、設定値と照合する。これにより設定ファイルを任意command実行面にせず、同じ配布物へのrollbackを可能にする。
 
 サーバーは設定全体が不正なら起動を拒否する。個別engineが未build、未導入、version不一致の場合はサーバー自体を起動し、`get_capabilities`で`unavailable`理由を返す。該当ツール呼出は`engine_unavailable`で失敗させる。
 
@@ -300,7 +350,7 @@ instructions先頭512文字以内に次を含める。
 
 目的:
 
-- 3 engineの有効/無効、runner存在、version、対応出力形式を確認する。
+- 4 engine（FrameWeb3、WebDan2 RC、SteelDan、SoilDisp）の有効/無効、readiness、runner存在、version、対応出力形式を確認する。
 
 annotations:
 
@@ -341,6 +391,23 @@ annotations:
 - return code、message level別件数、主要message要約。
 - `report.pdf`または`report.md` artifact。
 - runnerが完全結果を出せる場合は`result.json` artifact。
+
+#### `steeldan_calculate`
+
+目的:
+
+- `.wsj`入力をSteelDanで照査し、構造化結果と任意PDFを生成する。
+
+入力:
+
+- `source`: inline `.wsj`文字列または許可root内の`.wsj` file。
+- `generatePdf`: boolean、default true。
+
+出力:
+
+- execution statusとengineering statusを分離した照査要約。
+- `result.json`と、生成時の`report.pdf` artifact。
+- `readiness: experimental`。既定ではengine無効とし、設定で明示的に有効化した場合だけ実行する。
 
 #### `soildisp_calculate`
 
@@ -383,12 +450,14 @@ annotationsはread-onlyとする。
 
 入力:
 
-- `jobId`、`artifactId`、`offset`、`maxBytes`。
+- `jobId`、`artifactId`、`offsetBytes`、`maxBytes`。
 
 制約:
 
 - text系media typeだけ。
-- 1回の最大読取量を設定で制限する。
+- 1回の最大読取量を`maxTextArtifactReadBytes`で制限する。
+- 応答は`text`、`offsetBytes`、`nextOffsetBytes`、`eof`を返す。
+- offsetはUTF-8 byte offsetとする。開始位置がcontinuation byteなら次のcode point境界へ進め、末尾はcode pointを分割しない範囲で`maxBytes`以下にする。実際に採用した開始位置を`offsetBytes`で返す。
 - PDFやbinaryは内容を返さずpathとmetadataだけ返す。
 
 annotationsはread-onlyとする。
@@ -411,6 +480,9 @@ annotationsはread-onlyとする。
   "jobId": "018f...",
   "engine": "soildisp",
   "engineVersion": "1.0.0",
+  "readiness": "production",
+  "executionStatus": "success",
+  "engineeringStatus": "unknown",
   "summary": {},
   "messages": [
     {
@@ -426,7 +498,7 @@ annotationsはread-onlyとする。
       "mediaType": "application/json",
       "bytes": 12345,
       "sha256": "...",
-      "path": "C:/.../jobs/.../result.json"
+      "relativePath": "output/result.json"
     }
   ]
 }
@@ -439,7 +511,14 @@ annotationsはread-onlyとする。
   "ok": false,
   "jobId": "018f...",
   "engine": "webdan2",
+  "engineVersion": "1.0.0",
+  "readiness": "production",
+  "executionStatus": "failed",
+  "engineeringStatus": "notRun",
   "category": "validation",
+  "summary": null,
+  "messages": [],
+  "artifacts": [],
   "errors": [
     {
       "code": "invalid_input",
@@ -455,6 +534,7 @@ annotationsはread-onlyとする。
 - `invalid_request`: MCP入力schema不正。
 - `input_access`: pathが許可root外、未存在、size超過。
 - `engine_unavailable`: runner未build、runtime不足、version不一致。
+- `busy`: queue上限到達、または実行開始前のqueue deadline超過。
 - `validation`: engineが工学入力を拒否。
 - `calculation`: 計算不能、収束失敗、内部照査失敗。
 - `timeout`: deadline超過。
@@ -464,6 +544,8 @@ annotationsはread-onlyとする。
 - `internal`: 上記以外。
 
 MCPのtext `content`には人間向けの短い要約だけを置く。完全JSON、child stdout/stderr、stack traceをモデルへ返さない。
+
+`artifactId`はMCP側がjob manifest登録時に発行する安定識別子で、runnerの`kind`やファイル名とは独立する。`structuredContent`と`get_job`は`artifactId`とjob directory基準の`relativePath`だけを返し、PC固有の絶対pathは公開契約へ含めない。ローカル運用者が絶対pathを必要とする場合は、設定済み`jobRoot`とmanifestをMCP外の管理手順で参照する。
 
 ## 9. ジョブと成果物
 
@@ -513,8 +595,9 @@ MVPでは自動削除を行わない。`clean-owned-jobs.ps1`がownership marker
 - allow-listed environmentだけを渡し、不要なtokenやsecretを継承しない。
 - stdout/stderrを別々にcaptureし、byte limit超過でchildを停止する。
 - timeoutとAbortSignalを統合する。
-- Windowsでは、自分が生成し追跡しているPIDだけを対象にprocess treeを終了する。
-- kill前後でPID、開始時刻、親子関係を確認し、無関係な同名プロセスを停止しない。
+- Windowsでは小さな.NET 8 process-host helperを介してrunnerを起動する。helperはWin32 `CreateProcessW(..., CREATE_SUSPENDED, ...)`でdirect childを作り、`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`を設定したJob Objectへの割当成功後にだけresumeする。timeout、cancel、server終了、helper異常終了ではJob handleを閉じ、子孫を含むそのjobだけを終了する。
+- helperは任意command APIにせず、Node側adapterが解決した実行ファイルと引数配列だけを受け取る。PID名検索や`taskkill /IM`は使わない。
+- helper自身のPID、runner PID、開始時刻、Job Object割当結果を追跡し、割当失敗時は計算を開始せず`internal`として失敗させる。
 - exit後にstdout JSONをstrict parseし、余分なtextがあればprotocol errorにする。
 - server shutdown時にactive childをcancelし、完了をbounded waitする。
 
@@ -523,7 +606,8 @@ MVPでは自動削除を行わない。`clean-owned-jobs.ps1`がownership marker
 - engineごとのsemaphore、初期値1。
 - global上限2。
 - queue待ちにもdeadlineを適用する。
-- WebDan2は必ずprocess isolationを維持する。
+- `maxQueuedJobs`超過時はrunnerを起動せず、boundedなbusy errorを返す。
+- WebDan2/SteelDanは必ずprocess isolationを維持する。
 
 ## 11. path・入力安全性
 
@@ -546,6 +630,7 @@ file入力:
 
 - user指定output pathを受け取らない。
 - job output外のrunner申告pathを拒否する。
+- 各artifactの`maxArtifactBytes`とjob全体の`maxJobBytes`を確定前・登録前に検査する。
 - binary内容をMCP textへ埋め込まない。
 
 ## 12. 観測性
@@ -580,7 +665,7 @@ child stderrはjob logへ保存するが、MCP応答へは末尾のsanitized sum
 
 作業:
 
-1. 3 engineのrunner契約version、入力上限、timeout、artifact種別を表にする。
+1. 4 engineのrunner契約version、入力上限、timeout、artifact種別を表にする。
 2. 各engineの成功fixtureを最低1件、失敗fixtureを最低2件用意する。
 3. sibling repoのfixtureを正本とし、このrepoには小さいコピーまたはhash付きtest fixtureだけを置く。
 4. runnerが未実装のengineにはfake runnerを用意し、MCP側開発を阻害しない。
@@ -629,7 +714,7 @@ gate:
 作業:
 
 1. shell:falseのspawn、capture、limit、timeout、cancelを実装する。
-2. 子プロセスtree終了をWindowsで検証する。
+2. .NET 8の`StructuralMcp.ProcessHost`でWindows Job Object割当とkill-on-closeを実装する。
 3. strict stdout envelope parseを実装する。
 4. fake runnerで成功、非0終了、hang、巨大stdout、巨大stderr、不正JSON、途中artifactをテストする。
 5. engine semaphoreとglobal semaphoreを実装する。
@@ -637,6 +722,7 @@ gate:
 gate:
 
 - timeout後にfake child/grandchildが残らない。
+- Job Object割当失敗時にrunnerを実行せず、安全に失敗する。
 - stdout/stderr limitでMCP serverが落ちない。
 - childが異常終了しても次のtool callを処理できる。
 
@@ -696,7 +782,27 @@ gate:
 - 2呼出を同時要求してもengine semaphoreで安全に直列化される。
 - error/fatal messageを成功扱いしない。
 
-### Step 7: SoilDisp adapterを実装する
+### Step 7: SteelDan adapterを実装する
+
+前提:
+
+- [WebDan2 headless計画](./webdan2-headless-mcp-plan.md)の`run-steel`が共通契約を満たす。
+
+作業:
+
+1. WebDan2と同じversion固定runnerへ`run-steel`の固定引数を渡す。
+2. `.wsj` inline/file入力をjob inputへ保存する。
+3. execution statusとengineering statusを別fieldへ変換する。
+4. 構造化結果/PDF artifactを再hashし登録する。
+5. tool description、capability、全応答へ`experimental`を明示し、既定無効を維持する。
+
+gate:
+
+- 正常照査と工学的NGのどちらもprocess成功として区別できる。
+- 計算不能・入力不正はengine errorとして区別できる。
+- experimental表示がtool metadata、capability、resultの全てで欠落しない。
+
+### Step 8: SoilDisp adapterを実装する
 
 前提:
 
@@ -716,14 +822,14 @@ gate:
 - 3杭種でresult JSONを取得できる。
 - PDF requested時だけPDF artifactを作る。
 
-### Step 8: Codex登録とend-to-end testを実装する
+### Step 9: Codex登録とend-to-end testを実装する
 
 作業:
 
 1. `scripts/install-local.ps1`でbuild、local config存在確認、`codex mcp add`手順を案内する。
 2. user configを無断更新せず、明示実行時だけ登録する。
 3. `codex mcp list`と`/mcp`で接続を確認する。
-4. 3計算ツールを代表fixtureで呼ぶsmoke testを作る。
+4. 4計算ツールを代表fixtureで呼ぶsmoke testを作る。SteelDanはテスト設定でだけ明示的に有効化する。
 5. invalid、timeout、runner unavailableを実クライアントで確認する。
 
 登録例:
@@ -736,11 +842,11 @@ codex mcp add structural-mcp `
 
 gate:
 
-- 新しいCodexセッションで6ツールが列挙される。
+- 新しいCodexセッションで7ツールが列挙される。
 - 計算1件がjob/artifactまで完走する。
 - server終了後にrunner processが残らない。
 
-### Step 9: 運用ドキュメントとrelease gateを完成させる
+### Step 10: 運用ドキュメントとrelease gateを完成させる
 
 作業:
 
@@ -789,7 +895,7 @@ fake runnerで次を網羅する。
 - 同じ入力の再実行。
 - concurrency 2要求。
 
-実engine testはWindowsかつ各repo rootが設定された場合だけ実行する。未設定をpass扱いで黙ってskipせず、明示的な`SKIPPED_ENGINE_NOT_CONFIGURED`としてreportする。release gateでは3engineすべて必須とする。
+実engine testはWindowsかつ各runner install rootが設定された場合だけ実行する。未設定をpass扱いで黙ってskipせず、明示的な`SKIPPED_ENGINE_NOT_CONFIGURED`としてreportする。release gateではproduction readinessの3engineを必須、SteelDanはexperimental acceptance gateとして別表示する。
 
 ### 14.4 MCP protocol
 
@@ -808,6 +914,8 @@ fake runnerで次を網羅する。
 | FrameWeb3 | invalid model | none | validation/calculation category |
 | WebDan2 | representative `.wdj` | `report.pdf` | return code、message、PDF header/size/hash |
 | WebDan2 | same `.wdj` Markdown | `report.md` | non-empty UTF-8、expected headings |
+| SteelDan | representative `.wsj` | `result.json`/任意PDF | readiness、execution/engineering status、ratio、schema |
+| SteelDan | engineering NG `.wsj` | `result.json` | process成功と工学的NGの分離 |
 | SoilDisp | cast-in-place JSON | `result.json` | major values、schema |
 | SoilDisp | steel-soil-cement JSON | `result.json`/PDF | major values、PDF pages/text |
 | SoilDisp | rotary pile JSON | `result.json`/PDF | uplift/tip values、PDF pages/text |
@@ -851,7 +959,7 @@ git status --short
 - 本MVPは単一ユーザー・同一PC・信頼済みCodex host向け。
 - それでもtool input、file path、runner responseはすべてuntrustedとして検証する。
 - arbitrary command、arbitrary cwd、arbitrary output pathを公開しない。
-- engine repository rootは設定からのみ取得し、tool callで変更できない。
+- engine repository rootとrunner install rootは設定からのみ取得し、tool callで変更できない。
 - local input fileはallow root内だけ。
 - job output以外のartifactを登録しない。
 - child environmentをallow-listする。
@@ -887,7 +995,8 @@ Streamable HTTPへ移行する場合は別フェーズでOAuth、tenant分離、
 2. FrameWeb3をfeature flagで有効化する。
 3. WebDan2を有効化する。
 4. SoilDisp headless DoD後にSoilDispを有効化する。
-5. 全engineの実fixture gate後に`1.0.0`候補とする。
+5. SteelDan adapterとtoolを追加するが、`experimental`かつ既定無効を維持する。
+6. production readinessの3engineの実fixture gate後に`1.0.0`候補とする。SteelDanのproduction昇格は別release gateとする。
 
 ### rollback
 
@@ -907,7 +1016,7 @@ Streamable HTTPへ移行する場合は別フェーズでOAuth、tenant分離、
 | GUI依存がheadless経路へ混入する | adapter testでGUI process/window非生成を確認する |
 | 大きな解析結果でcontextを消費する | summaryだけ返し、完全結果はartifact化する |
 | 任意path読書きになる | allow root、realpath containment、owned job rootを強制する |
-| timeout後にprocessが残る | PID/親子検証付きprocess tree terminationをtestする |
+| timeout後にprocessが残る | Windows Job Object helperのkill-on-closeで子孫を閉じ、grandchild fixtureでtestする |
 | PDFのbinary hashが環境差で変わる | size/hashに加えページ数・抽出文字・主要値で回帰する |
 | engine更新で契約が壊れる | protocol/engine version health check、release fixture gate |
 | jobが蓄積する | 初期は明示cleanup script、実測後に安全なretentionを追加する |
@@ -921,9 +1030,10 @@ Streamable HTTPへ移行する場合は別フェーズでOAuth、tenant分離、
 4. `feat: register MCP server and common tools`
 5. `feat: add FrameWeb3 adapter`
 6. `feat: add WebDan2 adapter`
-7. `feat: add SoilDisp adapter`
-8. `test: add engine contract and end-to-end fixtures`
-9. `docs: add local installation security and operations guides`
+7. `feat: add experimental SteelDan adapter`
+8. `feat: add SoilDisp adapter`
+9. `test: add engine contract and end-to-end fixtures`
+10. `docs: add local installation security and operations guides`
 
 各コミットでunit/contract gateを通す。engine adapter commitは、そのengineのrunner protocol fixtureと統合テストを同時に含める。
 
@@ -932,22 +1042,23 @@ Streamable HTTPへ移行する場合は別フェーズでOAuth、tenant分離、
 - [ ] Node 24 / TypeScript strict / ESMのMCP serverが再現可能にbuildできる。
 - [ ] `package-lock.json`でMCP SDKを含む全依存が固定される。
 - [ ] STDIO stdoutへMCP以外のログを出さない。
-- [ ] `get_capabilities`が3engineの実状態とversionを返す。
+- [ ] `get_capabilities`が4engineの実状態、readiness、versionを返す。
 - [ ] `frameweb_analyze`がGUI/HTTP serverなしで代表モデルを解析できる。
 - [ ] `webdan_calculate`が`.wdj`からPDFとMarkdownを生成できる。
+- [ ] `steeldan_calculate`が`.wsj`から構造化結果と任意PDFを生成し、既定無効・`experimental`を明示する。
 - [ ] `soildisp_calculate`が3杭種の結果JSONと任意PDFを生成できる。
 - [ ] `get_job`と`read_text_artifact`がjob root外へアクセスできない。
 - [ ] 全計算ツールがsummary、messages、artifact metadataを共通形式で返す。
 - [ ] invalid input、engine unavailable、validation、calculation、timeout、protocol、I/Oを区別できる。
 - [ ] shell文字列結合なしでrunnerを起動する。
-- [ ] timeout/cancel後にchild/grandchild processが残らない。
+- [ ] Windows Job Object helperによりtimeout/cancel/server終了後にchild/grandchild processが残らない。
 - [ ] path traversal、symlink/junction、job外artifact、hash不一致を拒否する。
 - [ ] stdout/stderr/input/artifactのsize limitがテストされる。
 - [ ] engineごとのconcurrency limitとglobal limitが動作する。
 - [ ] unit、contract、protocol testが成功する。
-- [ ] Windows上で3engineのintegration fixture gateが成功する。
-- [ ] Codexへ登録し、新規セッションで6ツールが列挙される。
-- [ ] 代表3計算がCodexからjob/artifact生成まで完走する。
+- [ ] Windows上でproduction readinessの3engineとexperimental SteelDanのintegration fixture gateが成功する。
+- [ ] Codexへ登録し、新規セッションで7ツールが列挙される。
+- [ ] 代表4計算がCodexからjob/artifact生成まで完走する。SteelDanはテスト設定で明示的に有効化する。
 - [ ] README、設定例、troubleshooting、security、rollback手順が揃う。
 - [ ] local config、jobs、実顧客データ、秘密情報がgit/packageへ含まれない。
 
@@ -962,15 +1073,13 @@ Step 0で次を実測・合意してからproduct codeを開始する。
 5. 各engineの代表fixtureと期待主要値の正本。
 6. `allowedInputRoots`の既定値を空にするか、workspace rootを自動追加するか。
    - 安全側の推奨は空で、明示設定必須。
-7. job artifactをユーザーへ返す際、絶対pathを含めるかartifact IDだけにするか。
-   - ローカルMVPでは絶対path併記、将来HTTP化時はIDのみを推奨する。
-8. 各engineのtimeout、input/output size、同時実行数の実測値。
-9. job cleanupの運用責任者と保存期間。
-10. `1.0.0`にSteelDanを含めないことの最終確認。
+7. 各engineのtimeout、input/output size、同時実行数の実測値。
+8. job cleanupの運用責任者と保存期間。
+9. SteelDanを`production`へ昇格するための実運用oracle、容量式、帳票/PDF、フォント受入の完了判定。
 
 ## 23. 参考資料
 
 - [OpenAI: Model Context Protocol](https://learn.chatgpt.com/docs/extend/mcp?translationFallback=ja-JP)
 - [OpenAI: Build an MCP server](https://developers.openai.com/plugins/build/mcp-server)
 - [SoilDisp headless化・MCP連携準備 改修プラン](./soildisp-headless-mcp-plan.md)
-
+- [WebDan2 headless化・MCP連携準備 改修プラン](./webdan2-headless-mcp-plan.md)

@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.structural-mcp/
+config/structural-mcp.local.json
+*.log
