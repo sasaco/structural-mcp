@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../FrameWeb3"
+		},
+		{
+			"path": "../SoilDisp"
+		},
+		{
+			"path": "../WebDan2"
+		}
+	],
+	"settings": {}
+}
