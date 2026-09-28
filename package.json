@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local MCP server for WebDan2 and SteelDan structural calculations",
+  "description": "Local MCP gateway for FEMPython, Capacita, and SoilStructure",
   "main": "dist/src/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",

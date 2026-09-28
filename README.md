@@ -1,21 +1,33 @@
 # structural-mcp
 
-`WebDan2`と`SteelDan`をCodexなどのAIから利用するためのローカルSTDIO MCPサーバーです。解析式は再実装せず、`../WebDan2`の.NET計算コアを1 tool callごとのheadless processとして実行します。
+`FEMPython`、`Capacita`、`SoilStructure` の構造解析・照査機能を、Codex などの MCP client から利用するためのローカル STDIO MCP gateway です。各計算エンジンの式はこのリポジトリへ再実装せず、Git submodule として固定した各プロジェクトの非対話 entry point を呼び出します。
 
-> [!IMPORTANT]
-> 2026-09-21現在、WebDan2とSteelDanの第一段階を実装済みです。SteelDanは実運用oracleによる数値完全一致が未認定のため、`experimental`かつ既定無効です。
+## 公開対象
 
-## 実装済みツール
+| Submodule | MCP で扱う領域 | 主な成果物 | 現在の状態 |
+|---|---|---|---|
+| [`FEMPython`](./FEMPython/) | 骨組・有限要素解析 | 解析結果 JSON | submodule 追加済み、MCP adapter は未実装 |
+| [`Capacita`](./Capacita/) | RC・鋼部材の断面照査 | 結果 JSON、PDF、Markdown、Excel | 既存 adapter あり。旧 runner path から submodule への移行中 |
+| [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算と帳票作成 | 中間結果 JSON、PDF | submodule 追加済み、MCP adapter は未実装 |
+
+> [!NOTE]
+> `WebDan2` は旧リポジトリ名です。現在の正式なリポジトリ名は `Capacita` で、RC 計算コアは `RcDan`、鋼部材計算コアは `SteelDan`、統合アプリケーションは `WebDanforCS` に整理されています。互換性維持のため、現行 MCP の tool ID と環境変数には `webdan` という旧名称が残っています。
+
+## 現在の MCP interface
+
+現時点でルートの TypeScript server に接続済みなのは、Capacita の protocol v1 と互換な次の tool です。
 
 | Tool | Purpose | Output |
 |---|---|---|
-| `get_capabilities` | engineの利用可否、readiness、制限を確認 | capability一覧 |
-| `webdan_calculate` | `.wdj`をWebDan2で照査 | 要約、`result.json`、PDFまたはMarkdown、任意XLSX |
-| `steeldan_calculate` | `.wsj`をSteelDanで照査 | 照査要約、`result.json`、任意PDF |
-| `get_job` | 過去のjobを取得 | manifestとartifact metadata |
-| `read_text_artifact` | JSON/Markdown/text成果物を範囲読取 | UTF-8 text fragment |
+| `get_capabilities` | engine の利用可否、readiness、制限を確認 | capability 一覧 |
+| `webdan_calculate` | Capacita の RC 断面照査を実行 | 要約、`result.json`、PDF または Markdown、任意 XLSX |
+| `steeldan_calculate` | Capacita の鋼部材照査を実行 | 照査要約、`result.json`、任意 PDF |
+| `get_job` | 過去の job を取得 | manifest と artifact metadata |
+| `read_text_artifact` | JSON・Markdown・text 成果物を範囲読取 | UTF-8 text fragment |
 
-計算ツールはPDFや巨大な結果をMCP応答へ埋め込みません。短いsummaryとartifact metadataを返し、完全な結果はjob directoryへ保存します。`executionStatus`と`engineeringStatus`は別項目です。プロセスが正常終了しても、照査結果が`not_ok`になることがあります。
+FEMPython と SoilStructure はリポジトリへの組込みまで完了していますが、tool と runner の接続は今後の実装対象です。
+
+計算 tool は PDF や巨大な結果を MCP 応答へ埋め込みません。短い summary と artifact metadata を返し、完全な結果は job directory へ保存します。`executionStatus` と `engineeringStatus` は別項目です。process が正常終了しても、照査結果が `not_ok` になることがあります。
 
 ## 構成
 
@@ -26,85 +38,98 @@ Codex / MCP client
         v
 structural-mcp (Node.js 24 / TypeScript)
         |
-        | child process per call
-        v
-WebDan2.Headless (.NET 8)
-        +-- run-rc    --> WebDan2.WebDan2.Main()
-        `-- run-steel --> SteelDan.SteelDan.Main()
+        +-- FEMPython adapter ------> FEMPython        （未実装）
+        +-- Capacita adapter -------> RcDan / SteelDan （既存互換 tool）
+        `-- SoilStructure adapter --> SoilPile          （未実装）
 ```
 
-runnerのstdoutはprotocol v1 JSON 1件だけです。成果物には相対path、byte size、SHA-256を付与し、MCP側でもjob directory内にあることとhashを再検証します。
+runner は 1 tool call ごとに別 process で起動する方針です。stdout は小さな JSON envelope に限定し、完全な計算結果や帳票は artifact として管理します。
+
+## clone と submodule
+
+新しく取得する場合は submodule を同時に clone します。
+
+```powershell
+git clone --recurse-submodules https://github.com/sasaco/structural-mcp.git
+cd structural-mcp
+```
+
+通常の clone 後に submodule を取得する場合、または登録 commit へ揃える場合は次を実行します。
+
+```powershell
+git submodule update --init --recursive
+```
+
+submodule はそれぞれ検証済み commit に固定されています。各 submodule 内で branch を進めても、ルート側の参照 commit を更新しない限り他の利用者へは反映されません。
 
 ## 必要環境
 
-- Node.js 24以上
-- .NET SDK 8以上
-- 同じ親directoryに`structural-mcp`と`WebDan2`を配置
+- Node.js 24 以上（MCP server）
+- Python 3.12 と `uv`（FEMPython）
+- .NET SDK 8 以上（Capacita）
+- .NET SDK 10（SoilStructure。`global.json` を参照）
+- Windows（現在の各アプリケーションと帳票生成環境）
 
-## buildとtest
+各 engine 固有の構築・検証手順は、[FEMPython README](./FEMPython/README.md)、[Capacita README](./Capacita/README.md)、[SoilStructure README](./SoilStructure/README.md) を参照してください。
+
+## MCP server の build
 
 ```powershell
-dotnet build ..\WebDan2\WebDan2.Headless\WebDan2.Headless.csproj -c Release
 npm ci
 npm run build
-npm test
 ```
 
-`npm test`はMCP SDKの`StdioClientTransport`で実サーバーを起動し、次を確認します。
-
-- 5 toolsの列挙
-- 実`.wdj`によるWebDan2 Markdown生成とtext artifact読取
-- 実`.wsj`によるSteelDan result JSON/PDF生成
-- allowed root外の入力path拒否
-
-人間が結果を確認するsmoke出力も実行できます。
-
-```powershell
-npm run smoke
-```
+現行の Capacita adapter は、protocol v1 互換の headless runner DLL を `STRUCTURAL_MCP_WEBDAN_RUNNER` で受け取ります。旧 `../WebDan2` を前提とした既定 path と integration test は、Capacita submodule の正式な runner 配置が確定するまでの互換層です。
 
 ## 設定
 
-設定はMCP processの環境変数で渡します。
+設定は MCP process の環境変数で渡します。
 
 | Environment variable | Default | Meaning |
 |---|---|---|
-| `STRUCTURAL_MCP_WEBDAN_RUNNER` | `../WebDan2/WebDan2.Headless/bin/Release/net8.0/WebDan2.Headless.dll` | runner DLLの絶対path |
-| `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP所有job root |
-| `STRUCTURAL_MCP_ALLOWED_ROOTS` | `%USERPROFILE%/Documents` | 読取可能な入力root。複数指定はWindowsで`;`区切り |
-| `STRUCTURAL_MCP_ENABLE_STEELDAN` | `false` | experimental SteelDanを明示的に有効化 |
+| `STRUCTURAL_MCP_WEBDAN_RUNNER` | 旧 `../WebDan2/.../WebDan2.Headless.dll` | Capacita protocol v1 互換 runner DLL の絶対 path。変数名は後方互換のため維持 |
+| `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP 所有 job root |
+| `STRUCTURAL_MCP_ALLOWED_ROOTS` | `%USERPROFILE%/Documents` | 読取可能な入力 root。複数指定は Windows で `;` 区切り |
+| `STRUCTURAL_MCP_ENABLE_STEELDAN` | `false` | experimental な SteelDan を明示的に有効化 |
 | `STRUCTURAL_MCP_TIMEOUT_MS` | `180000` | runner timeout |
 | `STRUCTURAL_MCP_MAX_INPUT_BYTES` | `16777216` | 入力上限 |
-| `STRUCTURAL_MCP_MAX_ARTIFACT_BYTES` | `134217728` | artifact単体上限 |
-| `STRUCTURAL_MCP_MAX_TEXT_READ_BYTES` | `262144` | text artifactの1回の読取上限 |
+| `STRUCTURAL_MCP_MAX_ARTIFACT_BYTES` | `134217728` | artifact 単体上限 |
+| `STRUCTURAL_MCP_MAX_TEXT_READ_BYTES` | `262144` | text artifact の 1 回の読取上限 |
 
-例は[`config/structural-mcp.example.json`](./config/structural-mcp.example.json)にもあります。
+例は [`config/structural-mcp.example.json`](./config/structural-mcp.example.json) にあります。
 
-## Codexへの登録
+## Codex への登録
 
-先にrunnerとMCPをbuildしてから登録します。
+runner と MCP server を build した後、互換 runner の実際の配置を指定して登録します。
 
 ```powershell
 codex mcp add structural-mcp `
-  --env STRUCTURAL_MCP_WEBDAN_RUNNER=C:\path\to\WebDan2.Headless.dll `
+  --env STRUCTURAL_MCP_WEBDAN_RUNNER=C:\path\to\capacita-headless.dll `
   --env STRUCTURAL_MCP_JOB_ROOT=C:\path\to\structural-mcp-jobs `
   --env STRUCTURAL_MCP_ALLOWED_ROOTS=C:\path\to\Documents `
   --env STRUCTURAL_MCP_ENABLE_STEELDAN=true `
   -- node C:\path\to\structural-mcp\dist\src\index.js
 ```
 
-登録後にCodexを新しいsessionで開き、`get_capabilities`で状態を確認してください。
+登録後に Codex を新しい session で開き、`get_capabilities` で状態を確認してください。
+
+開発中はrelease用の `structural-mcp` と分けて `structural-mcp-dev` を登録し、build後に新しいCodex sessionから実際のtoolを呼びます。具体的な登録command、反復手順、MSI配布方針は[配布・開発中MCPテスト計画](./.agents/docs/plans/distribution-and-development-testing-plan.md)を参照してください。
 
 ## セキュリティ境界と既知の制約
 
-- 入力fileはrealpath解決後にallowed root内であることを確認します。
-- AIから任意command、cwd、出力pathを受け取るshell toolは提供しません。
-- job IDとartifact pathを検証し、job root外の読取りを拒否します。
-- runnerのstdout/stderr、入力、artifact、timeoutに上限があります。
-- 現版のtimeout停止は直接のrunner processが対象です。Windows Job Objectによる将来の孫processまでの強制終了は未実装です。
-- SteelDanは`experimental`です。構造計算結果は設計者による照査を代替しません。
+- 入力 file は realpath 解決後に allowed root 内であることを確認します。
+- AI から任意 command、cwd、出力 path を受け取る shell tool は提供しません。
+- job ID と artifact path を検証し、job root 外の読取りを拒否します。
+- runner の stdout・stderr、入力、artifact、timeout に上限があります。
+- 現版の timeout 停止は直接の runner process が対象です。将来の孫 process までを Windows Job Object で強制終了する処理は未実装です。
+- SteelDan は `experimental` です。構造計算結果は設計者による照査を代替しません。
 
 ## 関連文書
 
-- [統合MCPサーバー実装プラン](./.agents/docs/plans/structural-mcp-server-plan.md)
-- [WebDan2 headless化・MCP連携準備プラン](./.agents/docs/plans/webdan2-headless-mcp-plan.md)
+- [FEMPython](./FEMPython/README.md)
+- [Capacita](./Capacita/README.md)
+- [SoilStructure](./SoilStructure/README.md)
+- [配布・開発中MCPテスト計画](./.agents/docs/plans/distribution-and-development-testing-plan.md)
+- [統合 MCP server 実装プラン](./.agents/docs/plans/structural-mcp-server-plan.md)（旧名称を含む歴史的計画）
+- [旧 WebDan2 headless 計画](./.agents/docs/plans/webdan2-headless-mcp-plan.md)（現在の Capacita）
+- [旧 SoilDisp headless 計画](./.agents/docs/plans/soildisp-headless-mcp-plan.md)（現在の SoilStructure）

@@ -4,13 +4,13 @@
 			"path": "."
 		},
 		{
-			"path": "../FrameWeb3"
+			"path": "FEMPython"
 		},
 		{
-			"path": "../SoilDisp"
+			"path": "Capacita"
 		},
 		{
-			"path": "../WebDan2"
+			"path": "SoilStructure"
 		}
 	],
 	"settings": {}

@@ -84,7 +84,7 @@ async function calculate(
     errors: envelope.errors,
   };
   await saveManifest(job.directory, manifest);
-  const label = isRc ? "WebDan2" : "SteelDan";
+  const label = isRc ? "Capacita (RC)" : "Capacita (SteelDan)";
   const summary = envelope.ok
     ? `${label}の計算が完了しました。jobId: ${job.jobId}`
     : `${label}の計算は失敗しました。jobId: ${job.jobId}`;
@@ -95,34 +95,37 @@ export function createServer(config: AppConfig): McpServer {
   const server = new McpServer(
     { name: "structural-mcp", version: "0.1.0" },
     {
-      instructions: "WebDan2とSteelDanの構造照査を実行します。計算前にget_capabilitiesでreadinessを確認してください。SteelDanはexperimentalです。executionStatus=successは計算処理の完了だけを表し、engineeringStatus=not_okを許容します。工学判定と成果物は必ず別々に確認してください。",
+      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。現在接続済みの計算toolはCapacitaのRC照査とSteelDan照査です。計算前にget_capabilitiesでreadinessを確認してください。SteelDanはexperimentalです。executionStatus=successは計算処理の完了だけを表し、engineeringStatus=not_okを許容します。工学判定と成果物は必ず別々に確認してください。",
     },
   );
 
   server.registerTool("get_capabilities", {
     title: "Structural engine capabilities",
-    description: "WebDan2とSteelDan runnerの利用可否、readiness、制限を返します。",
+    description: "FEMPython、Capacita、SoilStructureの接続状況と、利用可能なrunnerのreadiness・制限を返します。",
     inputSchema: {},
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => textResponse({
     protocolVersion: 1,
     engines: {
-      webdan2: { enabled: true, readiness: "production", outputFormats: ["pdf", "markdown"] },
+      fempython: { enabled: false, readiness: "unavailable", note: "MCP adapter is not implemented" },
+      capacita: { enabled: true, readiness: "production", compatibilityTool: "webdan_calculate", outputFormats: ["pdf", "markdown"] },
+      webdan2: { enabled: true, readiness: "production", aliasFor: "capacita", deprecated: true, outputFormats: ["pdf", "markdown"] },
       steeldan: { enabled: config.steelDanEnabled, readiness: "experimental", outputFormats: ["json", "pdf"] },
+      soilstructure: { enabled: false, readiness: "unavailable", note: "MCP adapter is not implemented" },
     },
     limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxArtifactBytes: config.maxArtifactBytes },
-  }, `WebDan2は利用可能です。SteelDanは${config.steelDanEnabled ? "有効" : "無効"}（experimental）です。`));
+  }, `Capacitaは利用可能です。SteelDanは${config.steelDanEnabled ? "有効" : "無効"}（experimental）です。FEMPythonとSoilStructureは未接続です。`));
 
   server.registerTool("webdan_calculate", {
-    title: "Run WebDan2 RC verification",
-    description: ".wdjをWebDan2で照査し、PDFまたはMarkdownの成果物を作成します。",
+    title: "Run Capacita RC verification",
+    description: ".wdjをCapacitaのRC計算で照査し、PDFまたはMarkdownの成果物を作成します。tool IDは後方互換のためwebdan_calculateを維持しています。",
     inputSchema: { ...sourceShape, outputFormat: z.enum(["pdf", "markdown"]).default("pdf") },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ inputPath, input, outputFormat }) => {
     try {
       return await calculate("webdan_calculate", inputPath, input, outputFormat, config);
     } catch (error) {
-      return textResponse({ ok: false, category: "calculation", errors: [{ code: "request_failed", message: error instanceof Error ? error.message : String(error) }] }, "WebDan2の実行に失敗しました。", true);
+      return textResponse({ ok: false, category: "calculation", errors: [{ code: "request_failed", message: error instanceof Error ? error.message : String(error) }] }, "Capacita RCの実行に失敗しました。", true);
     }
   });
 

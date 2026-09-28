@@ -1,5 +1,8 @@
 # structural-mcp 統合MCPサーバー実装プラン
 
+> [!NOTE]
+> この文書は旧リポジトリ名で作成した歴史的な実装プランです。現在の submodule 名は `FEMPython`、`Capacita`、`SoilStructure` です。本文中の `FrameWeb3`、`WebDan2`、`SoilDisp` は当時の名称・配置を示します。現在の構成と実装状況は [README](../../../README.md) を正とします。
+
 - 状態: Proposed
 - 作成日: 2026-09-20
 - 対象リポジトリ: `structural-mcp`

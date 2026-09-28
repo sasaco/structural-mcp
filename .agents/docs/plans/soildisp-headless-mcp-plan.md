@@ -1,5 +1,8 @@
 # SoilDisp headless化・MCP連携準備 改修プラン
 
+> [!NOTE]
+> `SoilDisp` は現在 `SoilStructure` submodule 内の構成要素です。この文書は旧リポジトリ配置に対する歴史的計画として保持しています。現行 submodule と実装状況は [README](../../../README.md) を参照してください。
+
 - 状態: Proposed
 - 作成日: 2026-09-20
 - 対象リポジトリ: `../SoilDisp`

@@ -1,5 +1,8 @@
 # WebDan2 headless化・MCP連携準備 改修プラン
 
+> [!NOTE]
+> `WebDan2` は現在の `Capacita` の旧リポジトリ名です。この文書は旧構成に対する歴史的計画として保持しています。現行 submodule と実装状況は [README](../../../README.md) を参照してください。
+
 - 状態: Proposed
 - 作成日: 2026-09-20
 - 対象リポジトリ: `../WebDan2`
