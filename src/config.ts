@@ -81,7 +81,7 @@ export async function loadConfig(): Promise<AppConfig> {
   );
   const soilStructureConfiguration = await runnerConfiguration(
     "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER",
-    resolve(sourceRoot, "SoilStructure/SoilStructure.Headless/bin/Release/net10.0/SoilStructure.Headless.exe"),
+    resolve(sourceRoot, "SoilStructure/SoilStructure/Headless/bin/Release/net10.0/SoilStructure.Headless.exe"),
   );
   const defaultJobs = process.env.LOCALAPPDATA
     ? resolve(process.env.LOCALAPPDATA, "structural-mcp/jobs")

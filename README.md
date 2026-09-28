@@ -104,7 +104,7 @@ run-ground-displacement --input <file> --output-dir <empty-dir> --generate-pdf t
 | Environment variable | Default | Meaning |
 |---|---|---|
 | `STRUCTURAL_MCP_WEBDAN_RUNNER` | 旧 `../WebDan2/.../WebDan2.Headless.dll` | Capacita protocol v1 互換 runner DLL の絶対 path。変数名は後方互換のため維持 |
-| `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure.Headless/bin/Release/net10.0/SoilStructure.Headless.exe` | SoilStructure protocol v1 runner の絶対 path |
+| `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure/Headless/bin/Release/net10.0/SoilStructure.Headless.exe` | SoilStructure protocol v1 runner の絶対 path |
 | `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP 所有 job root |
 | `STRUCTURAL_MCP_ALLOWED_ROOTS` | `%USERPROFILE%/Documents` | 読取可能な入力 root。複数指定は Windows で `;` 区切り |
 | `STRUCTURAL_MCP_ENABLE_STEELDAN` | `false` | experimental な SteelDan を明示的に有効化 |

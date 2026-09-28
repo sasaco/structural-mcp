@@ -333,11 +333,11 @@ PDFのバイナリハッシュだけを唯一のgoldenにしない。PDFライ�
 
 想定ファイル:
 
-- `../SoilDisp/SoilStructure.Headless/SoilStructure.Headless.csproj`
-- `../SoilDisp/SoilStructure.Headless/Program.cs`
-- `../SoilDisp/SoilStructure.Headless/HeadlessOptions.cs`
-- `../SoilDisp/SoilStructure.Headless/HeadlessResponse.cs`
-- `../SoilDisp/SoilStructure.Headless/AtomicArtifactWriter.cs`
+- `../SoilDisp/SoilStructure/Headless/SoilStructure.Headless.csproj`
+- `../SoilDisp/SoilStructure/Headless/Program.cs`
+- `../SoilDisp/SoilStructure/Headless/HeadlessOptions.cs`
+- `../SoilDisp/SoilStructure/Headless/HeadlessResponse.cs`
+- `../SoilDisp/SoilStructure/Headless/AtomicArtifactWriter.cs`
 - `../SoilDisp/SoilStructure.sln`
 
 作業:
@@ -401,8 +401,8 @@ PDFのバイナリハッシュだけを唯一のgoldenにしない。PDFライ�
 | SoilDisp | `SoilPile/Execution/PileAnalysisExecution.cs` | 実行結果コンテナ |
 | SoilDisp | `SoilPile/Execution/PileAnalysisService.cs` | 計算と任意PDF生成の共通入口 |
 | SoilDisp | `SoilStructure/MainForm.cs` | 共通Factory/Service利用へ変更 |
-| SoilDisp | `SoilStructure.Headless/*` | JSON CLI実装 |
-| SoilDisp | `SoilStructure.Headless.Tests/*` | fixture、回帰、プロトコル、成果物テスト |
+| SoilDisp | `SoilStructure/Headless/*` | JSON CLI実装 |
+| SoilDisp | `SoilStructure/Headless/tests/*` | fixture、回帰、プロトコル、成果物テスト |
 | SoilDisp | `SoilStructure.sln` | CLIとテストプロジェクトを追加 |
 | SoilDisp | `docs/headless-cli.md` | CLI・JSON・終了コード契約 |
 | structural-mcp | 別実装計画 | MCPツールとプロセス管理。今回は変更しない |
@@ -417,9 +417,9 @@ PDFのバイナリハッシュだけを唯一のgoldenにしない。PDFライ�
 dotnet build SoilStructure.sln -c Release
 dotnet test SoilStructure.sln -c Release --no-build
 
-dotnet run --project SoilStructure.Headless/SoilStructure.Headless.csproj -c Release --no-build -- run `
-  --input SoilStructure.Headless.Tests/TestData/cast-in-place.json `
-  --output-dir SoilStructure.Headless.Tests/TestResults/cast-in-place `
+dotnet run --project SoilStructure/Headless/SoilStructure.Headless.csproj -c Release --no-build -- run `
+  --input SoilStructure/Headless/tests/TestData/cast-in-place.json `
+  --output-dir SoilStructure/Headless/tests/TestResults/cast-in-place `
   --pdf
 
 git diff --check
@@ -431,8 +431,8 @@ git diff --check
 dotnet format SoilStructure.sln --verify-no-changes --include `
   SoilPile/Execution `
   SoilStructure/MainForm.cs `
-  SoilStructure.Headless `
-  SoilStructure.Headless.Tests
+  SoilStructure/Headless `
+  SoilStructure/Headless/tests
 ```
 
 既知のベースラインとして、ソリューション全体の`dotnet format --verify-no-changes`は既存の`PileCalculator.cs`、`PileReportRenderer.cs`、`clsSoilPile.cs`、VBファイル等の書式・CA2200違反で失敗する。これを本改修で一括修正して無関係な巨大差分を作らない。新規・変更対象の限定format、Release build、test、数値/PDF回帰を完了条件とする。
