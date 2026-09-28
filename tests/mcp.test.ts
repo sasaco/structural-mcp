@@ -45,9 +45,12 @@ test("lists all tools and reports independently available runners", async () => 
   const result = await client.listTools();
   assert.deepEqual(result.tools.map((tool) => tool.name).sort(), [
     "get_capabilities",
+    "get_environment_template",
     "get_job",
     "read_text_artifact",
     "soilstructure_calculate",
+    "soilstructure_export_sdc",
+    "soilstructure_ground_displacement",
     "steeldan_calculate",
     "webdan_calculate",
   ]);
@@ -56,14 +59,42 @@ test("lists all tools and reports independently available runners", async () => 
   const engines = (capabilities.structuredContent as {
     engines: {
       capacita: { enabled: boolean };
-      soilstructure: { enabled: boolean };
+      soilstructure: { enabled: boolean; outputFormats: string[]; tools: string[] };
       steeldan: { enabled: boolean; readiness: string };
     };
   }).engines;
   assert.equal(engines.capacita.enabled, true);
   assert.equal(engines.soilstructure.enabled, true);
+  assert.deepEqual(engines.soilstructure.outputFormats, ["json", "pdf", "sdc", "jot"]);
+  assert.deepEqual(engines.soilstructure.tools, [
+    "soilstructure_calculate",
+    "soilstructure_export_sdc",
+    "soilstructure_ground_displacement",
+  ]);
   assert.equal(engines.steeldan.enabled, true);
   assert.equal(engines.steeldan.readiness, "experimental");
+
+  const environmentTemplate = await client.callTool({
+    name: "get_environment_template",
+    arguments: { engine: "soilstructure" },
+  });
+  assert.equal(environmentTemplate.isError, undefined);
+  const environment = environmentTemplate.structuredContent as {
+    fileName: string;
+    content: string;
+    variables: Array<{ engine: string; name: string; value: string; readable: boolean; source: string }>;
+  };
+  assert.equal(environment.fileName, ".env");
+  assert.equal(environment.variables.length, 1);
+  const soilStructure = environment.variables.find((item) => item.engine === "soilstructure");
+  assert.deepEqual(soilStructure, {
+    engine: "soilstructure",
+    name: "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER",
+    value: fakeRunner,
+    readable: true,
+    source: "environment",
+  });
+  assert.match(environment.content, /STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER=/);
 });
 
 test("calls Capacita through the generalized runner and reads an artifact", async () => {
@@ -142,6 +173,60 @@ test("accepts inline SoilStructure JSON and enforces exactly one source", async 
   const invalid = await client.callTool({ name: "soilstructure_calculate", arguments: { input: "not json" } });
   assert.equal(invalid.isError, true);
   assert.match(JSON.stringify(invalid.structuredContent), /有効なJSON/);
+});
+
+test("exports SoilStructure SDC artifacts", async () => {
+  const result = await client.callTool({
+    name: "soilstructure_export_sdc",
+    arguments: { inputPath: resolve(fixtureRoot, "soilstructure-features.json") },
+  });
+  assert.equal(result.isError, undefined);
+  const structured = result.structuredContent as {
+    jobId: string;
+    tool: string;
+    engine: string;
+    artifacts: Array<{ artifactId: string; name: string; mediaType: string }>;
+  };
+  assert.equal(structured.tool, "soilstructure_export_sdc");
+  assert.equal(structured.engine, "soilstructure");
+  assert.ok(structured.artifacts.some((item) => item.name === "result.json"));
+  assert.ok(structured.artifacts.some((item) =>
+    item.name === "report.sdc" && item.mediaType === "text/plain; charset=shift_jis"));
+  const sdc = structured.artifacts.find((item) => item.name === "report.sdc");
+  assert.ok(sdc);
+  const read = await client.callTool({
+    name: "read_text_artifact",
+    arguments: { jobId: structured.jobId, artifactId: sdc.artifactId },
+  });
+  assert.equal(read.isError, true);
+  assert.match(JSON.stringify(read.structuredContent), /UTF-8/);
+});
+
+test("runs SoilStructure ground displacement with optional PDF and JOT artifacts", async () => {
+  const inline = await readFile(resolve(fixtureRoot, "soilstructure-features.json"), "utf8");
+  const result = await client.callTool({
+    name: "soilstructure_ground_displacement",
+    arguments: { input: inline, generatePdf: true, generateJot: true },
+  });
+  assert.equal(result.isError, undefined);
+  const structured = result.structuredContent as {
+    tool: string;
+    artifacts: Array<{ name: string }>;
+  };
+  assert.equal(structured.tool, "soilstructure_ground_displacement");
+  assert.ok(structured.artifacts.some((item) => item.name === "result.json"));
+  assert.ok(structured.artifacts.some((item) => item.name === "report.pdf"));
+  assert.ok(structured.artifacts.some((item) => item.name === "ground-displacementL1.JOT"));
+  assert.ok(structured.artifacts.some((item) => item.name === "ground-displacementL2.JOT"));
+
+  const withoutOptionalArtifacts = await client.callTool({
+    name: "soilstructure_ground_displacement",
+    arguments: { input: inline, generatePdf: false, generateJot: false },
+  });
+  assert.equal(withoutOptionalArtifacts.isError, undefined);
+  const names = (withoutOptionalArtifacts.structuredContent as { artifacts: Array<{ name: string }> })
+    .artifacts.map((item) => item.name);
+  assert.deepEqual(names, ["result.json"]);
 });
 
 test("starts and runs SoilStructure when the Capacita runner is missing", async () => {

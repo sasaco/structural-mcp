@@ -22,11 +22,10 @@ interface CalculationSpec {
   tool: JobManifest["tool"];
   engine: JobManifest["engine"];
   runnerPath: string;
-  command: "run-rc" | "run-steel" | "run";
+  command: "run-rc" | "run-steel" | "run" | "export-sdc" | "run-ground-displacement";
   extensions: readonly string[];
   jobExtension: ".wdj" | ".wsj" | ".soilstructure.json";
-  optionName: "--output-format" | "--generate-pdf";
-  optionValue: string;
+  runnerOptions: readonly string[];
   jsonInput?: boolean;
   label: string;
 }
@@ -92,8 +91,7 @@ async function calculate(
     spec.engine,
     job.inputPath,
     job.outputDirectory,
-    spec.optionName,
-    spec.optionValue,
+    spec.runnerOptions,
     config,
   );
   const artifacts = await verifyArtifacts(job.outputDirectory, envelope, config);
@@ -153,9 +151,37 @@ export function createServer(config: AppConfig): McpServer {
   const server = new McpServer(
     { name: "structural-mcp", version: "0.1.0" },
     {
-      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。executionStatusとengineeringStatusは別々に確認し、成果物はjob単位で扱ってください。",
+      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。SoilStructureは杭計算、SDC出力、地盤応答変位を別toolで扱います。.envの作成やrunner pathの質問にはget_environment_templateを使用してください。executionStatusとengineeringStatusは別々に確認し、成果物はjob単位で扱ってください。",
     },
   );
+
+  server.registerTool("get_environment_template", {
+    title: "Get structural-mcp .env template",
+    description: "AIが対象プロジェクトの.envを作成するときに使うrunner設定名、推奨絶対パス、読取可否を返します。既存.envや秘密情報は読み取りません。",
+    inputSchema: { engine: z.enum(["all", "capacita", "soilstructure"]).default("all") },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ engine }) => {
+    const entries = [
+      { engine: "capacita", ...config.runnerConfigurations.capacita },
+      { engine: "soilstructure", ...config.runnerConfigurations.soilStructure },
+    ].filter((entry) => engine === "all" || entry.engine === engine).map((entry) => ({
+      engine: entry.engine,
+      name: entry.environmentVariable,
+      value: entry.resolvedPath ?? entry.configuredPath,
+      readable: entry.resolvedPath !== null,
+      source: entry.source,
+    }));
+    const content = entries
+      .map((entry) => `${entry.name}='${entry.value.replaceAll("'", "''")}'`)
+      .join("\n");
+    return textResponse({
+      schemaVersion: 1,
+      fileName: ".env",
+      format: "dotenv",
+      variables: entries,
+      content: `${content}\n`,
+    }, `${engine === "all" ? "全runner" : engine}のpathを含む.envテンプレートを返しました。`);
+  });
 
   server.registerTool("get_capabilities", {
     title: "Structural engine capabilities",
@@ -169,8 +195,15 @@ export function createServer(config: AppConfig): McpServer {
       capacita: { enabled: capacitaEnabled, readiness: capacitaEnabled ? "production" : "unavailable", compatibilityTool: "webdan_calculate", outputFormats: ["pdf", "markdown"] },
       webdan2: { enabled: capacitaEnabled, readiness: capacitaEnabled ? "production" : "unavailable", aliasFor: "capacita", deprecated: true, outputFormats: ["pdf", "markdown"] },
       steeldan: { enabled: steelDanEnabled, readiness: "experimental", outputFormats: ["json", "pdf"] },
-      soilstructure: { enabled: soilStructureEnabled, readiness: soilStructureEnabled ? "production" : "unavailable", inputFormats: [".soilstructure.json", ".json", "inline-json"], outputFormats: ["json", "pdf"] },
+      soilstructure: {
+        enabled: soilStructureEnabled,
+        readiness: soilStructureEnabled ? "production" : "unavailable",
+        inputFormats: [".soilstructure.json", ".json", "inline-json"],
+        outputFormats: ["json", "pdf", "sdc", "jot"],
+        tools: ["soilstructure_calculate", "soilstructure_export_sdc", "soilstructure_ground_displacement"],
+      },
     },
+    configurationTool: "get_environment_template",
     limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxArtifactBytes: config.maxArtifactBytes },
   }, `Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}です。`));
 
@@ -185,7 +218,7 @@ export function createServer(config: AppConfig): McpServer {
       return await calculate({
         tool: "webdan_calculate", engine: "webdan2", runnerPath: config.capacitaRunner,
         command: "run-rc", extensions: [".wdj"], jobExtension: ".wdj",
-        optionName: "--output-format", optionValue: outputFormat, label: "Capacita (RC)",
+        runnerOptions: ["--output-format", outputFormat], label: "Capacita (RC)",
       }, inputPath, input, config);
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));
@@ -206,7 +239,7 @@ export function createServer(config: AppConfig): McpServer {
       return await calculate({
         tool: "steeldan_calculate", engine: "steeldan", runnerPath: config.capacitaRunner,
         command: "run-steel", extensions: [".wsj"], jobExtension: ".wsj",
-        optionName: "--generate-pdf", optionValue: String(generatePdf), label: "Capacita (SteelDan)",
+        runnerOptions: ["--generate-pdf", String(generatePdf)], label: "Capacita (SteelDan)",
       }, inputPath, input, config);
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));
@@ -226,7 +259,52 @@ export function createServer(config: AppConfig): McpServer {
       return await calculate({
         tool: "soilstructure_calculate", engine: "soilstructure", runnerPath: config.soilStructureRunner,
         command: "run", extensions: [".soilstructure.json", ".json"], jobExtension: ".soilstructure.json",
-        optionName: "--generate-pdf", optionValue: String(generatePdf), jsonInput: true, label: "SoilStructure",
+        runnerOptions: ["--generate-pdf", String(generatePdf)], jsonInput: true, label: "SoilStructure 杭計算",
+      }, inputPath, input, config);
+    } catch (error) {
+      return requestFailure(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  server.registerTool("soilstructure_export_sdc", {
+    title: "Export SoilStructure SNAP SDC files",
+    description: "SoilStructure document JSONの杭計算とsdcExport設定から、通常・液状化L1/L2のSNAP連携SDCファイルを作成します。inputPathまたはinputのどちらか一方だけを指定してください。",
+    inputSchema: { ...sourceShape },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, input }) => {
+    const sourceError = invalidSourceSelection(inputPath, input);
+    if (sourceError) return sourceError;
+    if (config.soilStructureRunner === null) return unavailable("soilstructure", "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER");
+    try {
+      return await calculate({
+        tool: "soilstructure_export_sdc", engine: "soilstructure", runnerPath: config.soilStructureRunner,
+        command: "export-sdc", extensions: [".soilstructure.json", ".json"], jobExtension: ".soilstructure.json",
+        runnerOptions: [], jsonInput: true, label: "SoilStructure SNAP連携",
+      }, inputPath, input, config);
+    } catch (error) {
+      return requestFailure(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  server.registerTool("soilstructure_ground_displacement", {
+    title: "Run SoilStructure ground displacement calculation",
+    description: "SoilStructure document JSONのgroundDisplacement設定からL1/L2地盤応答変位を計算し、構造化結果、任意のPDFとJOTを作成します。inputPathまたはinputのどちらか一方だけを指定してください。",
+    inputSchema: {
+      ...sourceShape,
+      generatePdf: z.boolean().default(true),
+      generateJot: z.boolean().default(true),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, input, generatePdf, generateJot }) => {
+    const sourceError = invalidSourceSelection(inputPath, input);
+    if (sourceError) return sourceError;
+    if (config.soilStructureRunner === null) return unavailable("soilstructure", "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER");
+    try {
+      return await calculate({
+        tool: "soilstructure_ground_displacement", engine: "soilstructure", runnerPath: config.soilStructureRunner,
+        command: "run-ground-displacement", extensions: [".soilstructure.json", ".json"], jobExtension: ".soilstructure.json",
+        runnerOptions: ["--generate-pdf", String(generatePdf), "--generate-jot", String(generateJot)],
+        jsonInput: true, label: "SoilStructure 地盤応答変位",
       }, inputPath, input, config);
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));

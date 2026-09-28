@@ -6,8 +6,30 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const requestedInput = process.argv[2];
+const requestedOperation = process.argv[3] ?? "pile";
 if (!requestedInput) {
-  throw new Error("usage: npm run smoke:soilstructure -- <absolute .json path>");
+  throw new Error("usage: npm run smoke:soilstructure -- <absolute .json path> [pile|sdc|ground]");
+}
+const operations = {
+  pile: {
+    tool: "soilstructure_calculate",
+    arguments: { generatePdf: true },
+    expectedArtifacts: ["result.json", "report.pdf"],
+  },
+  sdc: {
+    tool: "soilstructure_export_sdc",
+    arguments: {},
+    expectedArtifacts: ["result.json", "report.sdc"],
+  },
+  ground: {
+    tool: "soilstructure_ground_displacement",
+    arguments: { generatePdf: true, generateJot: true },
+    expectedArtifacts: ["result.json", "report.pdf", "ground-displacementL1.JOT", "ground-displacementL2.JOT"],
+  },
+};
+const operation = operations[requestedOperation];
+if (!operation) {
+  throw new Error("SoilStructure smoke operation must be pile, sdc, or ground");
 }
 
 const inputPath = resolve(requestedInput);
@@ -31,8 +53,8 @@ const transport = new StdioClientTransport({
 try {
   await client.connect(transport);
   const result = await client.callTool({
-    name: "soilstructure_calculate",
-    arguments: { inputPath, generatePdf: true },
+    name: operation.tool,
+    arguments: { inputPath, ...operation.arguments },
   });
   if (result.isError) {
     throw new Error(`SoilStructure MCP smoke failed: ${JSON.stringify(result.structuredContent)}`);
@@ -40,15 +62,16 @@ try {
 
   const value = result.structuredContent;
   const artifacts = Array.isArray(value.artifacts) ? value.artifacts : [];
-  const report = artifacts.find((artifact) => artifact.name === "report.pdf");
-  const calculation = artifacts.find((artifact) => artifact.name === "result.json");
-  if (value.ok !== true || value.engine !== "soilstructure" || !report || !calculation) {
+  const names = new Set(artifacts.map((artifact) => artifact.name));
+  if (value.ok !== true || value.engine !== "soilstructure" ||
+      operation.expectedArtifacts.some((name) => !names.has(name))) {
     throw new Error(`Unexpected SoilStructure response: ${JSON.stringify(value)}`);
   }
 
   process.stdout.write(`${JSON.stringify({
     ok: value.ok,
     engine: value.engine,
+    operation: requestedOperation,
     jobId: value.jobId,
     artifacts: artifacts.map(({ name, bytes, mediaType }) => ({ name, bytes, mediaType })),
   })}\n`);

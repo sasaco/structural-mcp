@@ -7,6 +7,10 @@ import { fileURLToPath } from "node:url";
 export interface AppConfig {
   capacitaRunner: string | null;
   soilStructureRunner: string | null;
+  runnerConfigurations: {
+    capacita: RunnerConfiguration;
+    soilStructure: RunnerConfiguration;
+  };
   jobRoot: string;
   allowedInputRoots: string[];
   steelDanEnabled: boolean;
@@ -16,6 +20,13 @@ export interface AppConfig {
   maxStderrBytes: number;
   maxArtifactBytes: number;
   maxTextReadBytes: number;
+}
+
+export interface RunnerConfiguration {
+  environmentVariable: string;
+  configuredPath: string;
+  resolvedPath: string | null;
+  source: "environment" | "default";
 }
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -43,24 +54,34 @@ function absolutePath(name: string, fallback: string): string {
   return resolve(value);
 }
 
-async function readableRunner(name: string, fallback: string): Promise<string | null> {
-  const path = absolutePath(name, fallback);
+async function runnerConfiguration(name: string, fallback: string): Promise<RunnerConfiguration> {
+  const configuredPath = absolutePath(name, fallback);
   try {
-    await access(path, constants.R_OK);
-    return await realpath(path);
+    await access(configuredPath, constants.R_OK);
+    return {
+      environmentVariable: name,
+      configuredPath,
+      resolvedPath: await realpath(configuredPath),
+      source: process.env[name] === undefined ? "default" : "environment",
+    };
   } catch {
-    return null;
+    return {
+      environmentVariable: name,
+      configuredPath,
+      resolvedPath: null,
+      source: process.env[name] === undefined ? "default" : "environment",
+    };
   }
 }
 
 export async function loadConfig(): Promise<AppConfig> {
-  const capacitaRunner = await readableRunner(
+  const capacitaConfiguration = await runnerConfiguration(
     "STRUCTURAL_MCP_WEBDAN_RUNNER",
     resolve(sourceRoot, "../WebDan2/WebDan2.Headless/bin/Release/net8.0/WebDan2.Headless.dll"),
   );
-  const soilStructureRunner = await readableRunner(
+  const soilStructureConfiguration = await runnerConfiguration(
     "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER",
-    resolve(sourceRoot, "SoilStructure/SoilStructure.Headless/bin/Release/net10.0/SoilStructure.Headless.dll"),
+    resolve(sourceRoot, "SoilStructure/SoilStructure.Headless/bin/Release/net10.0/SoilStructure.Headless.exe"),
   );
   const defaultJobs = process.env.LOCALAPPDATA
     ? resolve(process.env.LOCALAPPDATA, "structural-mcp/jobs")
@@ -74,8 +95,12 @@ export async function loadConfig(): Promise<AppConfig> {
 
   await mkdir(jobRoot, { recursive: true });
   return {
-    capacitaRunner,
-    soilStructureRunner,
+    capacitaRunner: capacitaConfiguration.resolvedPath,
+    soilStructureRunner: soilStructureConfiguration.resolvedPath,
+    runnerConfigurations: {
+      capacita: capacitaConfiguration,
+      soilStructure: soilStructureConfiguration,
+    },
     jobRoot: await realpath(jobRoot),
     allowedInputRoots: await Promise.all(allowedInputRoots.map((root) => realpath(root))),
     steelDanEnabled: booleanValue("STRUCTURAL_MCP_ENABLE_STEELDAN", false),

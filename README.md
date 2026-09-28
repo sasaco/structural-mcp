@@ -8,7 +8,7 @@
 |---|---|---|---|
 | [`FEMPython`](./FEMPython/) | 骨組・有限要素解析 | 解析結果 JSON | submodule 追加済み、MCP adapter は未実装 |
 | [`Capacita`](./Capacita/) | RC・鋼部材の断面照査 | 結果 JSON、PDF、Markdown、Excel | 既存 adapter あり。旧 runner path から submodule への移行中 |
-| [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算と帳票作成 | 中間結果 JSON、PDF | MCP adapter 接続済み。headless runner を個別設定して利用 |
+| [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算、SNAP連携、地盤応答変位 | 中間結果 JSON、PDF、SDC、JOT | MCP adapter 接続済み。headless runner を個別設定して利用 |
 
 > [!NOTE]
 > `WebDan2` は旧リポジトリ名です。現在の正式なリポジトリ名は `Capacita` で、RC 計算コアは `RcDan`、鋼部材計算コアは `SteelDan`、統合アプリケーションは `WebDanforCS` に整理されています。互換性維持のため、現行 MCP の tool ID と環境変数には `webdan` という旧名称が残っています。
@@ -20,9 +20,12 @@
 | Tool | Purpose | Output |
 |---|---|---|
 | `get_capabilities` | engine の利用可否、readiness、制限を確認 | capability 一覧 |
+| `get_environment_template` | AIが `.env` を作成するときのrunner設定名と推奨絶対パスを取得 | dotenv template、pathの読取可否 |
 | `webdan_calculate` | Capacita の RC 断面照査を実行 | 要約、`result.json`、PDF または Markdown、任意 XLSX |
 | `steeldan_calculate` | Capacita の鋼部材照査を実行 | 照査要約、`result.json`、任意 PDF |
 | `soilstructure_calculate` | SoilStructure document JSON から杭計算を実行 | 計算要約、`result.json`、任意 PDF |
+| `soilstructure_export_sdc` | 杭計算と `sdcExport` 設定からSNAP連携データを生成 | `result.json`、通常・液状化L1/L2 SDC |
+| `soilstructure_ground_displacement` | `groundDisplacement` 設定からL1/L2地盤応答変位を計算 | `result.json`、任意 PDF、任意 L1/L2 JOT |
 | `get_job` | 過去の job を取得 | manifest と artifact metadata |
 | `read_text_artifact` | JSON・Markdown・text 成果物を範囲読取 | UTF-8 text fragment |
 
@@ -41,7 +44,7 @@ structural-mcp (Node.js 24 / TypeScript)
         |
         +-- FEMPython adapter ------> FEMPython        （未実装）
         +-- Capacita adapter -------> RcDan / SteelDan （既存互換 tool）
-        `-- SoilStructure adapter --> SoilPile / headless runner
+        `-- SoilStructure adapter --> SoilPile / SoilDisp / headless runner
 ```
 
 runner は 1 tool call ごとに別 process で起動する方針です。stdout は小さな JSON envelope に限定し、完全な計算結果や帳票は artifact として管理します。
@@ -82,7 +85,17 @@ npm run build
 
 現行の Capacita adapter は、protocol v1 互換の headless runner DLL を `STRUCTURAL_MCP_WEBDAN_RUNNER` で受け取ります。旧 `../WebDan2` を前提とした既定 path と integration test は、Capacita submodule の正式な runner 配置が確定するまでの互換層です。
 
-SoilStructure adapter は `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` の runner に、`run --input <file> --output-dir <dir> --generate-pdf true|false` で接続します。入力には allowed root 内の `.soilstructure.json` / `.json` path、または inline JSON を指定できます。`inputPath` と `input` は同時には指定できません。
+SoilStructure adapter は `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` の runner に、次の非対話commandで接続します。
+
+```text
+run --input <file> --output-dir <empty-dir> --generate-pdf true|false
+export-sdc --input <file> --output-dir <empty-dir>
+run-ground-displacement --input <file> --output-dir <empty-dir> --generate-pdf true|false --generate-jot true|false
+```
+
+入力には allowed root 内の `.soilstructure.json` / `.json` path、または inline JSON を指定できます。`inputPath` と `input` は同時には指定できません。SDCはCP932・CRLFで通常版と、入力に液状化低減係数がある場合はL1/L2版を生成します。JOTもCP932・CRLFで、文書の `includeL1` / `includeL2` に従って最大2ファイルを生成します。
+
+別プロジェクトからrunnerを直接呼ぶスクリプトの `.env` をAIに作成させる場合、AIは最初に `get_environment_template` を呼びます。応答には設定キー、現在の推奨絶対path、runnerが読み取り可能かどうか、およびそのまま保存できるdotenv形式の `content` が含まれます。MCPは既存の `.env` や秘密情報を読み取りません。
 
 ## 設定
 
@@ -91,7 +104,7 @@ SoilStructure adapter は `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` の runner に�
 | Environment variable | Default | Meaning |
 |---|---|---|
 | `STRUCTURAL_MCP_WEBDAN_RUNNER` | 旧 `../WebDan2/.../WebDan2.Headless.dll` | Capacita protocol v1 互換 runner DLL の絶対 path。変数名は後方互換のため維持 |
-| `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure.Headless/bin/Release/net10.0/SoilStructure.Headless.dll` | SoilStructure protocol v1 runner の絶対 path |
+| `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure.Headless/bin/Release/net10.0/SoilStructure.Headless.exe` | SoilStructure protocol v1 runner の絶対 path |
 | `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP 所有 job root |
 | `STRUCTURAL_MCP_ALLOWED_ROOTS` | `%USERPROFILE%/Documents` | 読取可能な入力 root。複数指定は Windows で `;` 区切り |
 | `STRUCTURAL_MCP_ENABLE_STEELDAN` | `false` | experimental な SteelDan を明示的に有効化 |

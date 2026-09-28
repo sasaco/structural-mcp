@@ -47,7 +47,12 @@ export interface ArtifactRecord {
 export interface JobManifest {
   schemaVersion: 1;
   jobId: string;
-  tool: "webdan_calculate" | "steeldan_calculate" | "soilstructure_calculate";
+  tool:
+    | "webdan_calculate"
+    | "steeldan_calculate"
+    | "soilstructure_calculate"
+    | "soilstructure_export_sdc"
+    | "soilstructure_ground_displacement";
   engine: "webdan2" | "steeldan" | "soilstructure";
   engineVersion: string;
   readiness: string;

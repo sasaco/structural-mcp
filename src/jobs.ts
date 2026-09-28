@@ -103,8 +103,12 @@ export async function readTextArtifact(
   const manifest = await loadManifest(jobId, config);
   const artifact = manifest.artifacts.find((item) => item.artifactId === artifactId);
   if (!artifact) throw new Error("artifactId was not found in this job");
-  if (!(artifact.mediaType.startsWith("text/") || artifact.mediaType.startsWith("application/json"))) {
-    throw new Error("artifact is not a text media type");
+  const mediaType = artifact.mediaType.toLowerCase();
+  const isJson = mediaType.startsWith("application/json");
+  const isUtf8Text = mediaType.startsWith("text/") &&
+    (!mediaType.includes("charset=") || mediaType.includes("charset=utf-8"));
+  if (!isJson && !isUtf8Text) {
+    throw new Error("artifact is not an UTF-8 text media type");
   }
   const limit = Math.min(maxBytes, config.maxTextReadBytes);
   const path = await realpath(resolve(jobDirectory(jobId, config), artifact.relativePath));

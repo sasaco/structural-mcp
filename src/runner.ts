@@ -4,15 +4,14 @@ import { runnerEnvelopeSchema, type RunnerEnvelope } from "./contracts.js";
 
 export async function runEngine(
   runnerPath: string,
-  command: "run-rc" | "run-steel" | "run",
+  command: "run-rc" | "run-steel" | "run" | "export-sdc" | "run-ground-displacement",
   expectedEngine: "webdan2" | "steeldan" | "soilstructure",
   inputPath: string,
   outputDirectory: string,
-  optionName: "--output-format" | "--generate-pdf",
-  optionValue: string,
+  runnerOptions: readonly string[],
   config: AppConfig,
 ): Promise<RunnerEnvelope> {
-  const runnerArgs = [command, "--input", inputPath, "--output-dir", outputDirectory, optionName, optionValue];
+  const runnerArgs = [command, "--input", inputPath, "--output-dir", outputDirectory, ...runnerOptions];
   const isDll = runnerPath.toLowerCase().endsWith(".dll");
   const isNodeScript = /\.(?:cjs|mjs|js)$/i.test(runnerPath);
   const executable = isDll ? "dotnet" : isNodeScript ? process.execPath : runnerPath;
