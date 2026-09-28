@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/index.js",
     "test": "npm run build && node --test dist/tests/*.test.js",
-    "smoke": "npm run build && node scripts/smoke-test.mjs"
+    "smoke": "npm run build && node scripts/smoke-test.mjs",
+    "smoke:soilstructure": "npm run build && node scripts/smoke-soilstructure.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

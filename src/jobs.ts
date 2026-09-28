@@ -25,7 +25,7 @@ export async function resolveInputPath(inputPath: string, config: AppConfig): Pr
 export async function createJob(
   tool: JobManifest["tool"],
   input: string,
-  extension: ".wdj" | ".wsj",
+  extension: ".wdj" | ".wsj" | ".soilstructure.json",
   config: AppConfig,
 ): Promise<{ jobId: string; directory: string; inputPath: string; outputDirectory: string }> {
   if (Buffer.byteLength(input, "utf8") > config.maxInputBytes) throw new Error("input exceeds the configured size limit");
@@ -36,7 +36,7 @@ export async function createJob(
   const outputDirectory = resolve(directory, "output");
   await mkdir(inputDirectory, { recursive: true });
   await mkdir(outputDirectory, { recursive: true });
-  const inputPath = resolve(inputDirectory, tool === "webdan_calculate" ? `model${extension}` : `model${extension}`);
+  const inputPath = resolve(inputDirectory, `model${extension}`);
   await writeFile(inputPath, input, { encoding: "utf8", flag: "wx" });
   return { jobId, directory, inputPath, outputDirectory };
 }

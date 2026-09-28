@@ -5,7 +5,8 @@ import { delimiter, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface AppConfig {
-  runnerDll: string;
+  capacitaRunner: string | null;
+  soilStructureRunner: string | null;
   jobRoot: string;
   allowedInputRoots: string[];
   steelDanEnabled: boolean;
@@ -42,10 +43,24 @@ function absolutePath(name: string, fallback: string): string {
   return resolve(value);
 }
 
+async function readableRunner(name: string, fallback: string): Promise<string | null> {
+  const path = absolutePath(name, fallback);
+  try {
+    await access(path, constants.R_OK);
+    return await realpath(path);
+  } catch {
+    return null;
+  }
+}
+
 export async function loadConfig(): Promise<AppConfig> {
-  const runnerDll = absolutePath(
+  const capacitaRunner = await readableRunner(
     "STRUCTURAL_MCP_WEBDAN_RUNNER",
     resolve(sourceRoot, "../WebDan2/WebDan2.Headless/bin/Release/net8.0/WebDan2.Headless.dll"),
+  );
+  const soilStructureRunner = await readableRunner(
+    "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER",
+    resolve(sourceRoot, "SoilStructure/SoilStructure.Headless/bin/Release/net10.0/SoilStructure.Headless.dll"),
   );
   const defaultJobs = process.env.LOCALAPPDATA
     ? resolve(process.env.LOCALAPPDATA, "structural-mcp/jobs")
@@ -57,10 +72,10 @@ export async function loadConfig(): Promise<AppConfig> {
     return resolve(root);
   });
 
-  await access(runnerDll, constants.R_OK);
   await mkdir(jobRoot, { recursive: true });
   return {
-    runnerDll,
+    capacitaRunner,
+    soilStructureRunner,
     jobRoot: await realpath(jobRoot),
     allowedInputRoots: await Promise.all(allowedInputRoots.map((root) => realpath(root))),
     steelDanEnabled: booleanValue("STRUCTURAL_MCP_ENABLE_STEELDAN", false),

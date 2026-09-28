@@ -14,9 +14,22 @@ import {
 import { runEngine } from "./runner.js";
 
 const sourceShape = {
-  inputPath: z.string().min(1).optional().describe("Allowed-root内の.wdjまたは.wsjファイル絶対path"),
-  input: z.string().min(1).optional().describe("保存ファイルの内容をinlineで指定"),
+  inputPath: z.string().min(1).optional().describe("Allowed root内にある入力ファイルの絶対パス"),
+  input: z.string().min(1).optional().describe("入力ファイルの内容をinlineで指定"),
 };
+
+interface CalculationSpec {
+  tool: JobManifest["tool"];
+  engine: JobManifest["engine"];
+  runnerPath: string;
+  command: "run-rc" | "run-steel" | "run";
+  extensions: readonly string[];
+  jobExtension: ".wdj" | ".wsj" | ".soilstructure.json";
+  optionName: "--output-format" | "--generate-pdf";
+  optionValue: string;
+  jsonInput?: boolean;
+  label: string;
+}
 
 function textResponse(value: unknown, summary: string, isError = false) {
   return {
@@ -33,44 +46,62 @@ function publicManifest(manifest: JobManifest): Record<string, unknown> {
 async function inputContents(
   inputPath: string | undefined,
   input: string | undefined,
-  extension: ".wdj" | ".wsj",
+  extensions: readonly string[],
+  jsonInput: boolean,
   config: AppConfig,
 ): Promise<string> {
-  if ((inputPath === undefined) === (input === undefined)) throw new Error("inputPathまたはinputのどちらか一方を指定してください。");
-  if (input !== undefined) {
-    if (Buffer.byteLength(input, "utf8") > config.maxInputBytes) throw new Error("inputがsize上限を超えています。");
-    return input;
+  if ((inputPath === undefined) === (input === undefined)) {
+    throw new Error("inputPathまたはinputのどちらか一方だけを指定してください。");
   }
-  const resolved = await resolveInputPath(inputPath!, config);
-  if (!resolved.toLowerCase().endsWith(extension)) throw new Error(`入力fileの拡張子は${extension}である必要があります。`);
-  return readFile(resolved, "utf8");
+  let contents: string;
+  if (input !== undefined) {
+    if (Buffer.byteLength(input, "utf8") > config.maxInputBytes) throw new Error("inputがサイズ上限を超えています。");
+    contents = input;
+  } else {
+    const resolved = await resolveInputPath(inputPath!, config);
+    if (!extensions.some((extension) => resolved.toLowerCase().endsWith(extension))) {
+      throw new Error(`入力ファイルの拡張子は${extensions.join(" または ")}である必要があります。`);
+    }
+    contents = await readFile(resolved, "utf8");
+  }
+  if (jsonInput) {
+    try {
+      const parsed: unknown = JSON.parse(contents);
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("root value must be an object");
+      }
+    } catch (error) {
+      throw new Error(`入力は有効なJSON objectではありません: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return contents;
 }
 
 async function calculate(
-  tool: JobManifest["tool"],
+  spec: CalculationSpec,
   inputPath: string | undefined,
   input: string | undefined,
-  optionValue: string,
   config: AppConfig,
 ): Promise<ReturnType<typeof textResponse>> {
-  const isRc = tool === "webdan_calculate";
-  const contents = await inputContents(inputPath, input, isRc ? ".wdj" : ".wsj", config);
+  const contents = await inputContents(inputPath, input, spec.extensions, spec.jsonInput ?? false, config);
   const startedAt = new Date().toISOString();
-  const job = await createJob(tool, contents, isRc ? ".wdj" : ".wsj", config);
+  const job = await createJob(spec.tool, contents, spec.jobExtension, config);
   const envelope = await runEngine(
-    isRc ? "run-rc" : "run-steel",
+    spec.runnerPath,
+    spec.command,
+    spec.engine,
     job.inputPath,
     job.outputDirectory,
-    isRc ? "--output-format" : "--generate-pdf",
-    optionValue,
+    spec.optionName,
+    spec.optionValue,
     config,
   );
   const artifacts = await verifyArtifacts(job.outputDirectory, envelope, config);
   const manifest: JobManifest = {
     schemaVersion: 1,
     jobId: job.jobId,
-    tool,
-    engine: isRc ? "webdan2" : "steeldan",
+    tool: spec.tool,
+    engine: spec.engine,
     engineVersion: envelope.engineVersion,
     readiness: envelope.readiness,
     createdAt: startedAt,
@@ -84,37 +115,64 @@ async function calculate(
     errors: envelope.errors,
   };
   await saveManifest(job.directory, manifest);
-  const label = isRc ? "Capacita (RC)" : "Capacita (SteelDan)";
   const summary = envelope.ok
-    ? `${label}の計算が完了しました。jobId: ${job.jobId}`
-    : `${label}の計算は失敗しました。jobId: ${job.jobId}`;
+    ? `${spec.label}の計算が完了しました。jobId: ${job.jobId}`
+    : `${spec.label}の計算に失敗しました。jobId: ${job.jobId}`;
   return textResponse(publicManifest(manifest), summary, !envelope.ok);
 }
 
+function requestFailure(message: string) {
+  return textResponse(
+    { ok: false, category: "calculation", errors: [{ code: "request_failed", message }] },
+    "計算の実行に失敗しました。",
+    true,
+  );
+}
+
+function unavailable(engine: string, environmentVariable: string) {
+  return textResponse(
+    {
+      ok: false,
+      category: "engine_unavailable",
+      errors: [{ code: `${engine}_unavailable`, message: `${environmentVariable}に読み取り可能なrunnerを設定してください。` }],
+    },
+    `${engine}は利用できません。`,
+    true,
+  );
+}
+
+function invalidSourceSelection(inputPath: string | undefined, input: string | undefined) {
+  if ((inputPath === undefined) !== (input === undefined)) return null;
+  return requestFailure("inputPathまたはinputのどちらか一方だけを指定してください。");
+}
+
 export function createServer(config: AppConfig): McpServer {
+  const capacitaEnabled = config.capacitaRunner !== null;
+  const soilStructureEnabled = config.soilStructureRunner !== null;
+  const steelDanEnabled = capacitaEnabled && config.steelDanEnabled;
   const server = new McpServer(
     { name: "structural-mcp", version: "0.1.0" },
     {
-      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。現在接続済みの計算toolはCapacitaのRC照査とSteelDan照査です。計算前にget_capabilitiesでreadinessを確認してください。SteelDanはexperimentalです。executionStatus=successは計算処理の完了だけを表し、engineeringStatus=not_okを許容します。工学判定と成果物は必ず別々に確認してください。",
+      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。executionStatusとengineeringStatusは別々に確認し、成果物はjob単位で扱ってください。",
     },
   );
 
   server.registerTool("get_capabilities", {
     title: "Structural engine capabilities",
-    description: "FEMPython、Capacita、SoilStructureの接続状況と、利用可能なrunnerのreadiness・制限を返します。",
+    description: "FEMPython、Capacita、SoilStructureの接続状態とrunnerのreadiness・制限を返します。",
     inputSchema: {},
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => textResponse({
     protocolVersion: 1,
     engines: {
       fempython: { enabled: false, readiness: "unavailable", note: "MCP adapter is not implemented" },
-      capacita: { enabled: true, readiness: "production", compatibilityTool: "webdan_calculate", outputFormats: ["pdf", "markdown"] },
-      webdan2: { enabled: true, readiness: "production", aliasFor: "capacita", deprecated: true, outputFormats: ["pdf", "markdown"] },
-      steeldan: { enabled: config.steelDanEnabled, readiness: "experimental", outputFormats: ["json", "pdf"] },
-      soilstructure: { enabled: false, readiness: "unavailable", note: "MCP adapter is not implemented" },
+      capacita: { enabled: capacitaEnabled, readiness: capacitaEnabled ? "production" : "unavailable", compatibilityTool: "webdan_calculate", outputFormats: ["pdf", "markdown"] },
+      webdan2: { enabled: capacitaEnabled, readiness: capacitaEnabled ? "production" : "unavailable", aliasFor: "capacita", deprecated: true, outputFormats: ["pdf", "markdown"] },
+      steeldan: { enabled: steelDanEnabled, readiness: "experimental", outputFormats: ["json", "pdf"] },
+      soilstructure: { enabled: soilStructureEnabled, readiness: soilStructureEnabled ? "production" : "unavailable", inputFormats: [".soilstructure.json", ".json", "inline-json"], outputFormats: ["json", "pdf"] },
     },
     limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxArtifactBytes: config.maxArtifactBytes },
-  }, `Capacitaは利用可能です。SteelDanは${config.steelDanEnabled ? "有効" : "無効"}（experimental）です。FEMPythonとSoilStructureは未接続です。`));
+  }, `Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}です。`));
 
   server.registerTool("webdan_calculate", {
     title: "Run Capacita RC verification",
@@ -122,10 +180,15 @@ export function createServer(config: AppConfig): McpServer {
     inputSchema: { ...sourceShape, outputFormat: z.enum(["pdf", "markdown"]).default("pdf") },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ inputPath, input, outputFormat }) => {
+    if (config.capacitaRunner === null) return unavailable("capacita", "STRUCTURAL_MCP_WEBDAN_RUNNER");
     try {
-      return await calculate("webdan_calculate", inputPath, input, outputFormat, config);
+      return await calculate({
+        tool: "webdan_calculate", engine: "webdan2", runnerPath: config.capacitaRunner,
+        command: "run-rc", extensions: [".wdj"], jobExtension: ".wdj",
+        optionName: "--output-format", optionValue: outputFormat, label: "Capacita (RC)",
+      }, inputPath, input, config);
     } catch (error) {
-      return textResponse({ ok: false, category: "calculation", errors: [{ code: "request_failed", message: error instanceof Error ? error.message : String(error) }] }, "Capacita RCの実行に失敗しました。", true);
+      return requestFailure(error instanceof Error ? error.message : String(error));
     }
   });
 
@@ -135,13 +198,38 @@ export function createServer(config: AppConfig): McpServer {
     inputSchema: { ...sourceShape, generatePdf: z.boolean().default(true) },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ inputPath, input, generatePdf }) => {
+    if (config.capacitaRunner === null) return unavailable("steeldan", "STRUCTURAL_MCP_WEBDAN_RUNNER");
     if (!config.steelDanEnabled) {
       return textResponse({ ok: false, category: "engine_unavailable", errors: [{ code: "steeldan_disabled", message: "STRUCTURAL_MCP_ENABLE_STEELDAN=trueで明示的に有効化してください。" }] }, "SteelDanは無効です。", true);
     }
     try {
-      return await calculate("steeldan_calculate", inputPath, input, String(generatePdf), config);
+      return await calculate({
+        tool: "steeldan_calculate", engine: "steeldan", runnerPath: config.capacitaRunner,
+        command: "run-steel", extensions: [".wsj"], jobExtension: ".wsj",
+        optionName: "--generate-pdf", optionValue: String(generatePdf), label: "Capacita (SteelDan)",
+      }, inputPath, input, config);
     } catch (error) {
-      return textResponse({ ok: false, category: "calculation", errors: [{ code: "request_failed", message: error instanceof Error ? error.message : String(error) }] }, "SteelDanの実行に失敗しました。", true);
+      return requestFailure(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  server.registerTool("soilstructure_calculate", {
+    title: "Run SoilStructure pile calculation",
+    description: "SoilStructure document JSONを計算し、構造化結果と任意のPDF帳票を作成します。inputPathまたはinputのどちらか一方だけを指定してください。",
+    inputSchema: { ...sourceShape, generatePdf: z.boolean().default(true) },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, input, generatePdf }) => {
+    const sourceError = invalidSourceSelection(inputPath, input);
+    if (sourceError) return sourceError;
+    if (config.soilStructureRunner === null) return unavailable("soilstructure", "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER");
+    try {
+      return await calculate({
+        tool: "soilstructure_calculate", engine: "soilstructure", runnerPath: config.soilStructureRunner,
+        command: "run", extensions: [".soilstructure.json", ".json"], jobExtension: ".soilstructure.json",
+        optionName: "--generate-pdf", optionValue: String(generatePdf), jsonInput: true, label: "SoilStructure",
+      }, inputPath, input, config);
+    } catch (error) {
+      return requestFailure(error instanceof Error ? error.message : String(error));
     }
   });
 

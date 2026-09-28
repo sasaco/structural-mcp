@@ -1,6 +1,7 @@
 {
-  "note": "Example values for the current Capacita compatibility adapter. STRUCTURAL_MCP_WEBDAN_RUNNER keeps its legacy name and must point to a protocol-v1-compatible headless runner.",
+  "note": "Runner paths are independent. Missing runners are reported as unavailable without preventing the MCP server or another engine from starting.",
   "STRUCTURAL_MCP_WEBDAN_RUNNER": "C:/path/to/capacita-headless.dll",
+  "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER": "C:/path/to/SoilStructure.Headless.dll",
   "STRUCTURAL_MCP_JOB_ROOT": "C:/Users/example/AppData/Local/structural-mcp/jobs",
   "STRUCTURAL_MCP_ALLOWED_ROOTS": "C:/Users/example/Documents",
   "STRUCTURAL_MCP_ENABLE_STEELDAN": "false",

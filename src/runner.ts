@@ -3,15 +3,21 @@ import type { AppConfig } from "./config.js";
 import { runnerEnvelopeSchema, type RunnerEnvelope } from "./contracts.js";
 
 export async function runEngine(
-  command: "run-rc" | "run-steel",
+  runnerPath: string,
+  command: "run-rc" | "run-steel" | "run",
+  expectedEngine: "webdan2" | "steeldan" | "soilstructure",
   inputPath: string,
   outputDirectory: string,
   optionName: "--output-format" | "--generate-pdf",
   optionValue: string,
   config: AppConfig,
 ): Promise<RunnerEnvelope> {
-  const args = [config.runnerDll, command, "--input", inputPath, "--output-dir", outputDirectory, optionName, optionValue];
-  const child = spawn("dotnet", args, {
+  const runnerArgs = [command, "--input", inputPath, "--output-dir", outputDirectory, optionName, optionValue];
+  const isDll = runnerPath.toLowerCase().endsWith(".dll");
+  const isNodeScript = /\.(?:cjs|mjs|js)$/i.test(runnerPath);
+  const executable = isDll ? "dotnet" : isNodeScript ? process.execPath : runnerPath;
+  const args = isDll || isNodeScript ? [runnerPath, ...runnerArgs] : runnerArgs;
+  const child = spawn(executable, args, {
     shell: false,
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
@@ -60,7 +66,7 @@ export async function runEngine(
   }
   const parsed = runnerEnvelopeSchema.safeParse(decoded);
   if (!parsed.success) throw new Error(`runner response violated protocol v1: ${parsed.error.message}`);
-  if (parsed.data.engine !== (command === "run-rc" ? "webdan2" : "steeldan")) {
+  if (parsed.data.engine !== expectedEngine) {
     throw new Error("runner returned an unexpected engine name");
   }
   if (exit.code === 0 && !parsed.data.ok) throw new Error("runner exit code and response disagree");
