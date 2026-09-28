@@ -1,0 +1,9 @@
+[submodule "FEMPython"]
+	path = FEMPython
+	url = https://github.com/sasaco/FEMPython.git
+[submodule "Capacita"]
+	path = Capacita
+	url = https://github.com/sasaco/Capacita.git
+[submodule "SoilStructure"]
+	path = SoilStructure
+	url = https://github.com/sasaco/SoilStructure.git
