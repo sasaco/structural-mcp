@@ -25,7 +25,7 @@ export async function resolveInputPath(inputPath: string, config: AppConfig): Pr
 export async function createJob(
   tool: JobManifest["tool"],
   input: string,
-  extension: ".wdj" | ".wsj" | ".soilstructure.json",
+  extension: ".wdj" | ".wsj" | ".json" | ".soilstructure.json",
   config: AppConfig,
 ): Promise<{ jobId: string; directory: string; inputPath: string; outputDirectory: string }> {
   if (Buffer.byteLength(input, "utf8") > config.maxInputBytes) throw new Error("input exceeds the configured size limit");

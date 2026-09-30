@@ -53,17 +53,26 @@ test("lists all tools and reports independently available runners", async () => 
     "soilstructure_ground_displacement",
     "steeldan_calculate",
     "webdan_calculate",
+    "webdan_compose_wdj",
+    "webdan_inspect",
+    "webdan_validate",
   ]);
   const capabilities = await client.callTool({ name: "get_capabilities", arguments: {} });
   assert.equal(capabilities.isError, undefined);
   const engines = (capabilities.structuredContent as {
     engines: {
-      capacita: { enabled: boolean };
+      capacita: { enabled: boolean; tools: string[] };
       soilstructure: { enabled: boolean; outputFormats: string[]; tools: string[] };
       steeldan: { enabled: boolean; readiness: string };
     };
   }).engines;
   assert.equal(engines.capacita.enabled, true);
+  assert.deepEqual(engines.capacita.tools, [
+    "webdan_inspect",
+    "webdan_validate",
+    "webdan_compose_wdj",
+    "webdan_calculate",
+  ]);
   assert.equal(engines.soilstructure.enabled, true);
   assert.deepEqual(engines.soilstructure.outputFormats, ["json", "pdf", "sdc", "jot"]);
   assert.deepEqual(engines.soilstructure.tools, [
@@ -112,6 +121,44 @@ test("calls Capacita through the generalized runner and reads an artifact", asyn
   const read = await client.callTool({ name: "read_text_artifact", arguments: { jobId: structured.jobId, artifactId: "result", maxBytes: 4096 } });
   assert.equal(read.isError, undefined);
   assert.match((read.structuredContent as { text: string }).text, /"command":"run-rc"/);
+});
+
+test("inspects, validates, and composes Capacita WDJ artifacts", async () => {
+  for (const name of ["webdan_inspect", "webdan_validate"] as const) {
+    const result = await client.callTool({ name, arguments: { input: "{}" } });
+    assert.equal(result.isError, undefined);
+    const structured = result.structuredContent as {
+      summary: { command: string };
+      artifacts: Array<{ artifactId: string; name: string }>;
+    };
+    assert.equal(structured.summary.command, name === "webdan_inspect" ? "inspect-rc" : "validate-rc");
+    assert.ok(structured.artifacts.some((item) => item.name === "result.json"));
+  }
+
+  const composed = await client.callTool({
+    name: "webdan_compose_wdj",
+    arguments: {
+      input: "{}",
+      request: {
+        member: { m_no: 1, section: { shape: "rectangle", width_mm: 350, height_mm: 350 } },
+        point: { index: 1 },
+        rebar: { upper: { diameter_mm: 19, count: 2 }, lower: { diameter_mm: 19, count: 2 } },
+      },
+    },
+  });
+  assert.equal(composed.isError, undefined);
+  const structured = composed.structuredContent as {
+    jobId: string;
+    artifacts: Array<{ artifactId: string; name: string }>;
+  };
+  const wdj = structured.artifacts.find((item) => item.name === "generated.wdj");
+  assert.ok(wdj);
+  const read = await client.callTool({
+    name: "read_text_artifact",
+    arguments: { jobId: structured.jobId, artifactId: wdj.artifactId },
+  });
+  assert.equal(read.isError, undefined);
+  assert.doesNotThrow(() => JSON.parse((read.structuredContent as { text: string }).text));
 });
 
 test("preserves the experimental SteelDan adapter", async () => {

@@ -18,13 +18,70 @@ const sourceShape = {
   input: z.string().min(1).optional().describe("入力ファイルの内容をinlineで指定"),
 };
 
+const rebarSideSchema = z.object({
+  diameter_mm: z.number().int().positive().optional(),
+  count: z.number().int().positive().optional(),
+  cover_to_center_mm: z.number().finite().nullable().optional(),
+  first_row_count: z.number().finite().nullable().optional(),
+  row_spacing_mm: z.number().finite().nullable().optional(),
+  adjacent_spacing_mm: z.number().finite().nullable().optional(),
+  slope_cos: z.number().finite().nullable().optional(),
+}).strict();
+
+const webdanComposeRequestSchema = z.object({
+  design: z.object({
+    application_id: z.number().int().optional(),
+    standard_id: z.number().int().optional(),
+  }).strict().optional(),
+  member: z.object({
+    m_no: z.number().int().positive(),
+    group_name: z.string().trim().min(1).optional(),
+    section: z.object({
+      shape: z.literal("rectangle").default("rectangle"),
+      width_mm: z.number().finite().positive(),
+      height_mm: z.number().finite().positive(),
+    }).strict().optional(),
+  }).strict(),
+  point: z.object({
+    index: z.number().int().positive(),
+    name: z.string().trim().min(1).optional(),
+    axis: z.enum(["My-Vz", "Mz-Vy"]).optional(),
+    checks: z.object({
+      upper: z.boolean().optional(),
+      lower: z.boolean().optional(),
+      bending: z.boolean().optional(),
+      shear: z.boolean().optional(),
+      torsion: z.boolean().optional(),
+    }).strict().optional(),
+  }).strict(),
+  rebar: z.object({ upper: rebarSideSchema.optional(), lower: rebarSideSchema.optional() }).strict().optional(),
+  materials: z.object({
+    group_no: z.number().finite().optional(),
+    longitudinal_grade: z.enum(["SD295", "SD345", "SD390", "SD490"]).optional(),
+    concrete: z.object({
+      fck_mpa: z.number().finite().positive().optional(),
+      max_aggregate_mm: z.number().finite().positive().optional(),
+    }).strict().optional(),
+  }).strict().optional(),
+  forces: z.record(z.string(), z.number().finite().nullable()).optional(),
+  calculation: z.object({
+    bending: z.boolean().optional(),
+    shear: z.boolean().optional(),
+    torsion: z.boolean().optional(),
+    print_calculation: z.boolean().optional(),
+    print_section_forces: z.boolean().optional(),
+    print_safety_ratios: z.boolean().optional(),
+    print_summary: z.boolean().optional(),
+  }).strict().optional(),
+}).strict();
+
 interface CalculationSpec {
   tool: JobManifest["tool"];
   engine: JobManifest["engine"];
   runnerPath: string;
-  command: "run-rc" | "run-steel" | "run" | "export-sdc" | "run-ground-displacement";
+  command: "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel" | "run" | "export-sdc" | "run-ground-displacement";
   extensions: readonly string[];
-  jobExtension: ".wdj" | ".wsj" | ".soilstructure.json";
+  jobExtension: ".wdj" | ".wsj" | ".json" | ".soilstructure.json";
   runnerOptions: readonly string[];
   jsonInput?: boolean;
   label: string;
@@ -81,8 +138,10 @@ async function calculate(
   inputPath: string | undefined,
   input: string | undefined,
   config: AppConfig,
+  transformInput?: (contents: string) => string,
 ): Promise<ReturnType<typeof textResponse>> {
-  const contents = await inputContents(inputPath, input, spec.extensions, spec.jsonInput ?? false, config);
+  const source = await inputContents(inputPath, input, spec.extensions, spec.jsonInput ?? false, config);
+  const contents = transformInput?.(source) ?? source;
   const startedAt = new Date().toISOString();
   const job = await createJob(spec.tool, contents, spec.jobExtension, config);
   const envelope = await runEngine(
@@ -114,8 +173,8 @@ async function calculate(
   };
   await saveManifest(job.directory, manifest);
   const summary = envelope.ok
-    ? `${spec.label}の計算が完了しました。jobId: ${job.jobId}`
-    : `${spec.label}の計算に失敗しました。jobId: ${job.jobId}`;
+    ? `${spec.label}が完了しました。jobId: ${job.jobId}`
+    : `${spec.label}に失敗しました。jobId: ${job.jobId}`;
   return textResponse(publicManifest(manifest), summary, !envelope.ok);
 }
 
@@ -192,8 +251,15 @@ export function createServer(config: AppConfig): McpServer {
     protocolVersion: 1,
     engines: {
       fempython: { enabled: false, readiness: "unavailable", note: "MCP adapter is not implemented" },
-      capacita: { enabled: capacitaEnabled, readiness: capacitaEnabled ? "production" : "unavailable", compatibilityTool: "webdan_calculate", outputFormats: ["pdf", "markdown"] },
-      webdan2: { enabled: capacitaEnabled, readiness: capacitaEnabled ? "production" : "unavailable", aliasFor: "capacita", deprecated: true, outputFormats: ["pdf", "markdown"] },
+      capacita: {
+        enabled: capacitaEnabled,
+        readiness: capacitaEnabled ? "production" : "unavailable",
+        compatibilityTool: "webdan_calculate",
+        inputFormats: [".wdj", "inline-json"],
+        outputFormats: ["wdj", "json", "pdf", "markdown"],
+        tools: ["webdan_inspect", "webdan_validate", "webdan_compose_wdj", "webdan_calculate"],
+      },
+      webdan2: { enabled: capacitaEnabled, readiness: capacitaEnabled ? "production" : "unavailable", aliasFor: "capacita", deprecated: true, outputFormats: ["wdj", "json", "pdf", "markdown"] },
       steeldan: { enabled: steelDanEnabled, readiness: "experimental", outputFormats: ["json", "pdf"] },
       soilstructure: {
         enabled: soilStructureEnabled,
@@ -223,6 +289,60 @@ export function createServer(config: AppConfig): McpServer {
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));
     }
+  });
+
+  server.registerTool("webdan_inspect", {
+    title: "Inspect Capacita RC input",
+    description: ".wdjをCapacitaの文書・RC domain modelで読み、部材、算出点、配筋、材料、断面力、計算条件を正規化して返します。計算は実行しません。",
+    inputSchema: sourceShape,
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ inputPath, input }) => {
+    if (config.capacitaRunner === null) return unavailable("capacita", "STRUCTURAL_MCP_WEBDAN_RUNNER");
+    const invalid = invalidSourceSelection(inputPath, input);
+    if (invalid) return invalid;
+    try {
+      return await calculate({
+        tool: "webdan_inspect", engine: "webdan2", runnerPath: config.capacitaRunner,
+        command: "inspect-rc", extensions: [".wdj"], jobExtension: ".wdj", runnerOptions: [], jsonInput: true,
+        label: "Capacita RC入力検査",
+      }, inputPath, input, config);
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
+  });
+
+  server.registerTool("webdan_validate", {
+    title: "Validate Capacita RC input",
+    description: ".wdjのJSON構造、参照、選択状態、RC domain制約、主要な重複fieldの整合を検証します。計算は実行しません。",
+    inputSchema: sourceShape,
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ inputPath, input }) => {
+    if (config.capacitaRunner === null) return unavailable("capacita", "STRUCTURAL_MCP_WEBDAN_RUNNER");
+    const invalid = invalidSourceSelection(inputPath, input);
+    if (invalid) return invalid;
+    try {
+      return await calculate({
+        tool: "webdan_validate", engine: "webdan2", runnerPath: config.capacitaRunner,
+        command: "validate-rc", extensions: [".wdj"], jobExtension: ".wdj", runnerOptions: [], jsonInput: false,
+        label: "Capacita RC入力検証",
+      }, inputPath, input, config);
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
+  });
+
+  server.registerTool("webdan_compose_wdj", {
+    title: "Compose Capacita RC input",
+    description: "既存.wdjへ明示されたRC意味変更を適用し、同期済みgenerated.wdj、検査結果、変更差分をjob artifactとして返します。不足する設計条件は推測しません。",
+    inputSchema: { ...sourceShape, request: webdanComposeRequestSchema },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ inputPath, input, request }) => {
+    if (config.capacitaRunner === null) return unavailable("capacita", "STRUCTURAL_MCP_WEBDAN_RUNNER");
+    const invalid = invalidSourceSelection(inputPath, input);
+    if (invalid) return invalid;
+    try {
+      return await calculate({
+        tool: "webdan_compose_wdj", engine: "webdan2", runnerPath: config.capacitaRunner,
+        command: "compose-rc", extensions: [".wdj"], jobExtension: ".json", runnerOptions: [], jsonInput: true,
+        label: "Capacita RC入力作成",
+      }, inputPath, input, config, (baseDocument) => JSON.stringify({ baseDocument, request }));
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
   });
 
   server.registerTool("steeldan_calculate", {

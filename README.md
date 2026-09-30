@@ -21,6 +21,9 @@
 |---|---|---|
 | `get_capabilities` | engine の利用可否、readiness、制限を確認 | capability 一覧 |
 | `get_environment_template` | AIが `.env` を作成するときのrunner設定名と推奨絶対パスを取得 | dotenv template、pathの読取可否 |
+| `webdan_inspect` | WDJをCapacitaのdomain modelで読取り、入力を正規化 | 部材・算出点・配筋・材料・断面力・計算条件、診断 |
+| `webdan_validate` | WDJの構造・参照・選択・主要な重複fieldを検証 | 検証結果、診断 |
+| `webdan_compose_wdj` | 既存WDJへ明示された意味変更を適用 | 新しいWDJ、変更差分、検証結果 |
 | `webdan_calculate` | Capacita の RC 断面照査を実行 | 要約、`result.json`、PDF または Markdown、任意 XLSX |
 | `steeldan_calculate` | Capacita の鋼部材照査を実行 | 照査要約、`result.json`、任意 PDF |
 | `soilstructure_calculate` | SoilStructure document JSON から杭計算を実行 | 計算要約、`result.json`、任意 PDF |
@@ -81,9 +84,12 @@ submodule はそれぞれ検証済み commit に固定されています。各 s
 ```powershell
 npm ci
 npm run build
+dotnet build .\Capacita\WebDanforCS\Headless\WebDanforCS.Headless.csproj -c Release
 ```
 
-現行の Capacita adapter は、protocol v1 互換の headless runner DLL を `STRUCTURAL_MCP_WEBDAN_RUNNER` で受け取ります。旧 `../WebDan2` を前提とした既定 path と integration test は、Capacita submodule の正式な runner 配置が確定するまでの互換層です。
+現行の Capacita adapter は、protocol v1 互換の `WebDanforCS.Headless` runnerを `STRUCTURAL_MCP_WEBDAN_RUNNER` で受け取ります。未指定時は、このリポジトリ内のRelease buildを使用します。
+
+Capacita runner のRC commandは `inspect-rc`、`validate-rc`、`compose-rc`、`run-rc` です。`webdan_compose_wdj` は入力元を直接上書きせず、MCPのjob directoryに `generated.wdj` を生成します。対象プロジェクトへの配置と命名はclient側のskillが担当します。
 
 SoilStructure adapter は `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` の runner に、次の非対話commandで接続します。
 
@@ -103,7 +109,7 @@ run-ground-displacement --input <file> --output-dir <empty-dir> --generate-pdf t
 
 | Environment variable | Default | Meaning |
 |---|---|---|
-| `STRUCTURAL_MCP_WEBDAN_RUNNER` | 旧 `../WebDan2/.../WebDan2.Headless.dll` | Capacita protocol v1 互換 runner DLL の絶対 path。変数名は後方互換のため維持 |
+| `STRUCTURAL_MCP_WEBDAN_RUNNER` | `./Capacita/WebDanforCS/Headless/bin/Release/net8.0/WebDanforCS.Headless.dll` | Capacita protocol v1 互換 runner DLL の絶対 path。変数名は後方互換のため維持 |
 | `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure/Headless/bin/Release/net10.0/SoilStructure.Headless.exe` | SoilStructure protocol v1 runner の絶対 path |
 | `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP 所有 job root |
 | `STRUCTURAL_MCP_ALLOWED_ROOTS` | `%USERPROFILE%/Documents` | 読取可能な入力 root。複数指定は Windows で `;` 区切り |

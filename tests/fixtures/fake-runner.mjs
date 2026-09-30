@@ -11,7 +11,7 @@ const inputPath = options.get("--input");
 const outputDirectory = options.get("--output-dir");
 if (!command || !inputPath || !outputDirectory) throw new Error("missing required runner arguments");
 
-const engine = command === "run-rc"
+const engine = ["run-rc", "inspect-rc", "validate-rc", "compose-rc"].includes(command)
   ? "webdan2"
   : command === "run-steel"
     ? "steeldan"
@@ -19,7 +19,7 @@ const engine = command === "run-rc"
       ? "soilstructure"
       : null;
 if (engine === null) throw new Error(`unsupported command: ${command}`);
-if (engine === "webdan2" && !options.has("--output-format")) throw new Error("missing --output-format");
+if (command === "run-rc" && !options.has("--output-format")) throw new Error("missing --output-format");
 if (["run-steel", "run", "run-ground-displacement"].includes(command) && !options.has("--generate-pdf")) {
   throw new Error("missing --generate-pdf");
 }
@@ -27,6 +27,12 @@ if (command === "run-ground-displacement" && !options.has("--generate-jot")) thr
 
 const source = await readFile(inputPath, "utf8");
 if (engine === "soilstructure") JSON.parse(source);
+if (["inspect-rc", "validate-rc"].includes(command)) JSON.parse(source);
+const composeInput = command === "compose-rc" ? JSON.parse(source) : null;
+if (composeInput !== null) {
+  JSON.parse(composeInput.baseDocument);
+  if (composeInput.request === null || typeof composeInput.request !== "object") throw new Error("missing compose request");
+}
 await mkdir(outputDirectory, { recursive: true });
 
 const artifacts = [];
@@ -43,7 +49,9 @@ async function artifact(kind, name, mediaType, contents) {
 }
 
 await artifact("result", "result.json", "application/json", `${JSON.stringify({ engine, input: basename(inputPath), command })}\n`);
-if (command === "export-sdc") {
+if (command === "compose-rc") {
+  await artifact("wdj", "generated.wdj", "application/json; charset=utf-8", composeInput.baseDocument);
+} else if (command === "export-sdc") {
   await artifact("sdc", "report.sdc", "text/plain; charset=shift_jis", "fake sdc\r\n");
 } else if (command === "run-ground-displacement") {
   if (options.get("--generate-pdf") === "true") {

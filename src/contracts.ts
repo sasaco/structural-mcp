@@ -49,6 +49,9 @@ export interface JobManifest {
   jobId: string;
   tool:
     | "webdan_calculate"
+    | "webdan_inspect"
+    | "webdan_validate"
+    | "webdan_compose_wdj"
     | "steeldan_calculate"
     | "soilstructure_calculate"
     | "soilstructure_export_sdc"

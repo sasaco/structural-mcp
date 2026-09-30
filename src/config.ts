@@ -77,7 +77,7 @@ async function runnerConfiguration(name: string, fallback: string): Promise<Runn
 export async function loadConfig(): Promise<AppConfig> {
   const capacitaConfiguration = await runnerConfiguration(
     "STRUCTURAL_MCP_WEBDAN_RUNNER",
-    resolve(sourceRoot, "../WebDan2/WebDan2.Headless/bin/Release/net8.0/WebDan2.Headless.dll"),
+    resolve(sourceRoot, "Capacita/WebDanforCS/Headless/bin/Release/net8.0/WebDanforCS.Headless.dll"),
   );
   const soilStructureConfiguration = await runnerConfiguration(
     "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER",
