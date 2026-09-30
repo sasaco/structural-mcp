@@ -6,12 +6,19 @@ import type { JobManifest } from "./contracts.js";
 import {
   createJob,
   loadManifest,
+  materializeArtifact,
   readTextArtifact,
   resolveInputPath,
   saveManifest,
   verifyArtifacts,
 } from "./jobs.js";
 import { runEngine } from "./runner.js";
+import {
+  soilStructureDocumentSchema,
+  soilStructureExamples,
+  soilStructurePythonTemplate,
+  soilStructureRunnerContract,
+} from "./soilstructure-contract.js";
 
 const sourceShape = {
   inputPath: z.string().min(1).optional().describe("Allowed root内にある入力ファイルの絶対パス"),
@@ -79,7 +86,7 @@ interface CalculationSpec {
   tool: JobManifest["tool"];
   engine: JobManifest["engine"];
   runnerPath: string;
-  command: "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel" | "run" | "export-sdc" | "run-ground-displacement";
+  command: "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel" | "validate" | "run" | "export-sdc" | "run-ground-displacement";
   extensions: readonly string[];
   jobExtension: ".wdj" | ".wsj" | ".json" | ".soilstructure.json";
   runnerOptions: readonly string[];
@@ -208,9 +215,9 @@ export function createServer(config: AppConfig): McpServer {
   const soilStructureEnabled = config.soilStructureRunner !== null;
   const steelDanEnabled = capacitaEnabled && config.steelDanEnabled;
   const server = new McpServer(
-    { name: "structural-mcp", version: "0.1.0" },
+    { name: "structural-mcp", version: "0.2.0" },
     {
-      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。SoilStructureは杭計算、SDC出力、地盤応答変位を別toolで扱います。.envの作成やrunner pathの質問にはget_environment_templateを使用してください。executionStatusとengineeringStatusは別々に確認し、成果物はjob単位で扱ってください。",
+      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateで対象operationごとに検証できます。executionStatusとengineeringStatusは別々に確認し、成果物はjob単位で扱ってください。指定先への配置にはmaterialize_artifactを使用できます。",
     },
   );
 
@@ -266,10 +273,22 @@ export function createServer(config: AppConfig): McpServer {
         readiness: soilStructureEnabled ? "production" : "unavailable",
         inputFormats: [".soilstructure.json", ".json", "inline-json"],
         outputFormats: ["json", "pdf", "sdc", "jot"],
-        tools: ["soilstructure_calculate", "soilstructure_export_sdc", "soilstructure_ground_displacement"],
+        tools: [
+          "soilstructure_get_schema",
+          "soilstructure_get_runner_contract",
+          "soilstructure_validate",
+          "soilstructure_calculate",
+          "soilstructure_export_sdc",
+          "soilstructure_ground_displacement",
+        ],
       },
     },
     configurationTool: "get_environment_template",
+    artifactMaterializationTool: "materialize_artifact",
+    pathPolicy: {
+      allowedInputRoots: config.allowedInputRoots,
+      allowedOutputRoots: config.allowedOutputRoots,
+    },
     limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxArtifactBytes: config.maxArtifactBytes },
   }, `Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}です。`));
 
@@ -366,6 +385,71 @@ export function createServer(config: AppConfig): McpServer {
     }
   });
 
+  server.registerTool("soilstructure_get_schema", {
+    title: "Get SoilStructure document schema",
+    description: "SoilStructure document schemaVersion 1のJSON Schema、単位・杭種の意味、operation別必須section、任意の例を返します。不足する設計条件の推測には使用しません。",
+    inputSchema: { includeExamples: z.boolean().default(true) },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ includeExamples }) => textResponse({
+    schemaVersion: 1,
+    documentSchema: soilStructureDocumentSchema,
+    operationRequirements: {
+      pile: { requiredSections: ["pile", "pileGroup", "soilRows"], tool: "soilstructure_calculate" },
+      sdc: {
+        requiredSections: ["pile", "pileGroup", "soilRows", "sdcExport"],
+        supportedPileTypes: [4, 5, 6],
+        unsupportedPileTypes: [],
+        tool: "soilstructure_export_sdc",
+      },
+      ground: {
+        requiredSections: ["pile", "pileGroup", "soilRows", "groundDisplacement"],
+        tool: "soilstructure_ground_displacement",
+      },
+    },
+    validationTool: "soilstructure_validate",
+    ...(includeExamples ? { examples: soilStructureExamples } : {}),
+  }, "SoilStructure document schemaVersion 1を返しました。"));
+
+  server.registerTool("soilstructure_get_runner_contract", {
+    title: "Get SoilStructure standalone runner contract",
+    description: "Python等のstandalone scriptからSoilStructure.Headlessを安全に呼ぶためのcommand、artifact、文字コード、envelope、検証・atomic配置の雛形を返します。",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async () => {
+    const runner = config.runnerConfigurations.soilStructure;
+    return textResponse({
+      schemaVersion: 1,
+      runner: {
+        environmentVariable: runner.environmentVariable,
+        path: runner.resolvedPath ?? runner.configuredPath,
+        readable: runner.resolvedPath !== null,
+        source: runner.source,
+      },
+      contract: soilStructureRunnerContract,
+      pythonTemplate: soilStructurePythonTemplate,
+    }, "SoilStructure standalone runner contractを返しました。");
+  });
+
+  server.registerTool("soilstructure_validate", {
+    title: "Validate SoilStructure input",
+    description: "成果物を公開せず、指定operationを実行可能かSoilStructure本体の変換・計算・出力条件で検証します。inputPathまたはinputのどちらか一方だけを指定してください。",
+    inputSchema: { ...sourceShape, operation: z.enum(["pile", "sdc", "ground"]).default("pile") },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, input, operation }) => {
+    const sourceError = invalidSourceSelection(inputPath, input);
+    if (sourceError) return sourceError;
+    if (config.soilStructureRunner === null) return unavailable("soilstructure", "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER");
+    try {
+      return await calculate({
+        tool: "soilstructure_validate", engine: "soilstructure", runnerPath: config.soilStructureRunner,
+        command: "validate", extensions: [".soilstructure.json", ".json"], jobExtension: ".soilstructure.json",
+        runnerOptions: ["--operation", operation], jsonInput: true, label: `SoilStructure ${operation}入力検証`,
+      }, inputPath, input, config);
+    } catch (error) {
+      return requestFailure(error instanceof Error ? error.message : String(error));
+    }
+  });
+
   server.registerTool("soilstructure_calculate", {
     title: "Run SoilStructure pile calculation",
     description: "SoilStructure document JSONを計算し、構造化結果と任意のPDF帳票を作成します。inputPathまたはinputのどちらか一方だけを指定してください。",
@@ -388,7 +472,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("soilstructure_export_sdc", {
     title: "Export SoilStructure SNAP SDC files",
-    description: "SoilStructure document JSONの杭計算とsdcExport設定から、通常・液状化L1/L2のSNAP連携SDCファイルを作成します。inputPathまたはinputのどちらか一方だけを指定してください。",
+    description: "SoilStructure document JSONの杭計算とsdcExport設定から、杭種4/5/6の通常・液状化L1/L2 SNAP連携SDCファイルを作成します。回転杭では押込み側と引抜き側のf/g杭先端ばね・杭先端支持力を出力します。inputPathまたはinputのどちらか一方だけを指定してください。",
     inputSchema: { ...sourceShape },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ inputPath, input }) => {
@@ -461,6 +545,29 @@ export function createServer(config: AppConfig): McpServer {
       return textResponse(result, `${artifactId}を${result.offsetBytes} byteから読み取りました。`);
     } catch (error) {
       return textResponse({ ok: false, category: "input_access", errors: [{ code: "artifact_read_failed", message: error instanceof Error ? error.message : String(error) }] }, "成果物を読み取れませんでした。", true);
+    }
+  });
+
+  server.registerTool("materialize_artifact", {
+    title: "Materialize a job artifact",
+    description: "job artifactをSTRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS配下の既存フォルダーへhash検証後に原子的に配置します。既存ファイルの置換にはoverwrite=trueが必要です。",
+    inputSchema: {
+      jobId: z.string().min(1),
+      artifactId: z.string().min(1),
+      destinationPath: z.string().min(1).describe("許可されたoutput root配下の絶対ファイルパス"),
+      overwrite: z.boolean().default(false),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  }, async ({ jobId, artifactId, destinationPath, overwrite }) => {
+    try {
+      const result = await materializeArtifact(jobId, artifactId, destinationPath, overwrite, config);
+      return textResponse({ ok: true, jobId, artifactId, ...result }, `${artifactId}を${result.destinationPath}へ配置しました。`);
+    } catch (error) {
+      return textResponse({
+        ok: false,
+        category: "artifact_materialization",
+        errors: [{ code: "artifact_materialization_failed", message: error instanceof Error ? error.message : String(error) }],
+      }, "成果物を配置できませんでした。", true);
     }
   });
 

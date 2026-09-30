@@ -26,11 +26,15 @@
 | `webdan_compose_wdj` | 既存WDJへ明示された意味変更を適用 | 新しいWDJ、変更差分、検証結果 |
 | `webdan_calculate` | Capacita の RC 断面照査を実行 | 要約、`result.json`、PDF または Markdown、任意 XLSX |
 | `steeldan_calculate` | Capacita の鋼部材照査を実行 | 照査要約、`result.json`、任意 PDF |
+| `soilstructure_get_schema` | document schemaVersion 1、単位、operation別必須sectionを取得 | JSON Schema、入力例 |
+| `soilstructure_get_runner_contract` | standalone script用のrunner契約を取得 | command、artifact、文字コード、Python雛形 |
+| `soilstructure_validate` | 対象operationの入力をSoilStructure本体で事前検証 | path付き診断、artifactなしのjob |
 | `soilstructure_calculate` | SoilStructure document JSON から杭計算を実行 | 計算要約、`result.json`、任意 PDF |
 | `soilstructure_export_sdc` | 杭計算と `sdcExport` 設定からSNAP連携データを生成 | `result.json`、通常・液状化L1/L2 SDC |
 | `soilstructure_ground_displacement` | `groundDisplacement` 設定からL1/L2地盤応答変位を計算 | `result.json`、任意 PDF、任意 L1/L2 JOT |
 | `get_job` | 過去の job を取得 | manifest と artifact metadata |
 | `read_text_artifact` | JSON・Markdown・text 成果物を範囲読取 | UTF-8 text fragment |
+| `materialize_artifact` | 検証済みjob artifactを許可済み出力rootへ配置 | 配置先、bytes、SHA-256 |
 
 FEMPython はリポジトリへの組込みまで完了していますが、tool と runner の接続は今後の実装対象です。Capacita と SoilStructure の runner は独立して検出されるため、一方が未導入でも MCP server と他方の engine は利用できます。
 
@@ -94,12 +98,15 @@ Capacita runner のRC commandは `inspect-rc`、`validate-rc`、`compose-rc`、`
 SoilStructure adapter は `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` の runner に、次の非対話commandで接続します。
 
 ```text
+validate --input <file> --output-dir <empty-dir> --operation pile|sdc|ground
 run --input <file> --output-dir <empty-dir> --generate-pdf true|false
 export-sdc --input <file> --output-dir <empty-dir>
 run-ground-displacement --input <file> --output-dir <empty-dir> --generate-pdf true|false --generate-jot true|false
 ```
 
-入力には allowed root 内の `.soilstructure.json` / `.json` path、または inline JSON を指定できます。`inputPath` と `input` は同時には指定できません。SDCはCP932・CRLFで通常版と、入力に液状化低減係数がある場合はL1/L2版を生成します。JOTもCP932・CRLFで、文書の `includeL1` / `includeL2` に従って最大2ファイルを生成します。
+入力には allowed root 内の `.soilstructure.json` / `.json` path、または inline JSON を指定できます。`inputPath` と `input` は同時には指定できません。SDC出力は4（鋼管ソイルセメント杭）、5（回転杭）、6（場所打ち杭）に対応します。回転杭では `sdcExport.steelPipeDiameterM` を `pile.diameterM` と一致させ、`steelPipeThicknessMm` と `corrosionAllowanceMm` を設計入力として明示してください。出力には押込み側に加えて引抜き側のf/g杭先端ばね・杭先端支持力を含みます。SDCはCP932・CRLFで通常版と、入力に液状化低減係数がある場合はL1/L2版を生成します。JOTもCP932・CRLFで、文書の `includeL1` / `includeL2` に従って最大2ファイルを生成します。
+
+client AIは、入力作成前に`soilstructure_get_schema`、standalone Python作成前に`soilstructure_get_runner_contract`を呼びます。設計条件が不足している場合は推測せず、不足fieldをユーザーへ確認します。作成後は`soilstructure_validate`を実行し、成功した入力だけを計算toolへ渡します。job artifactを最終成果物へ配置する場合は、`STRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS`配下の既存folderに限り`materialize_artifact`を使用できます。配置時にはmanifestのbytesとSHA-256を再検証し、既存ファイルの置換には`overwrite=true`が必要です。
 
 別プロジェクトからrunnerを直接呼ぶスクリプトの `.env` をAIに作成させる場合、AIは最初に `get_environment_template` を呼びます。応答には設定キー、現在の推奨絶対path、runnerが読み取り可能かどうか、およびそのまま保存できるdotenv形式の `content` が含まれます。MCPは既存の `.env` や秘密情報を読み取りません。
 
@@ -113,6 +120,7 @@ run-ground-displacement --input <file> --output-dir <empty-dir> --generate-pdf t
 | `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure/Headless/bin/Release/net10.0/SoilStructure.Headless.exe` | SoilStructure protocol v1 runner の絶対 path |
 | `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP 所有 job root |
 | `STRUCTURAL_MCP_ALLOWED_ROOTS` | `%USERPROFILE%/Documents` | 読取可能な入力 root。複数指定は Windows で `;` 区切り |
+| `STRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS` | `%USERPROFILE%/Documents` | `materialize_artifact`が書込み可能な出力 root。複数指定は Windows で `;` 区切り |
 | `STRUCTURAL_MCP_ENABLE_STEELDAN` | `false` | experimental な SteelDan を明示的に有効化 |
 | `STRUCTURAL_MCP_TIMEOUT_MS` | `180000` | runner timeout |
 | `STRUCTURAL_MCP_MAX_INPUT_BYTES` | `16777216` | 入力上限 |
@@ -131,6 +139,7 @@ codex mcp add structural-mcp `
   --env STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER=C:\path\to\SoilStructure.Headless.dll `
   --env STRUCTURAL_MCP_JOB_ROOT=C:\path\to\structural-mcp-jobs `
   --env STRUCTURAL_MCP_ALLOWED_ROOTS=C:\path\to\Documents `
+  --env STRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS=C:\path\to\output `
   --env STRUCTURAL_MCP_ENABLE_STEELDAN=true `
   -- node C:\path\to\structural-mcp\dist\src\index.js
 ```
@@ -144,6 +153,7 @@ codex mcp add structural-mcp `
 - 入力 file は realpath 解決後に allowed root 内であることを確認します。
 - AI から任意 command、cwd、出力 path を受け取る shell tool は提供しません。
 - job ID と artifact path を検証し、job root 外の読取りを拒否します。
+- artifactの配置先はrealpath解決した親folderがallowed output root内にある場合だけ許可し、staging fileから同一folder内で置換します。
 - runner の stdout・stderr、入力、artifact、timeout に上限があります。
 - 現版の timeout 停止は直接の runner process が対象です。将来の孫 process までを Windows Job Object で強制終了する処理は未実装です。
 - SteelDan は `experimental` です。構造計算結果は設計者による照査を代替しません。

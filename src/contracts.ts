@@ -53,6 +53,7 @@ export interface JobManifest {
     | "webdan_validate"
     | "webdan_compose_wdj"
     | "steeldan_calculate"
+    | "soilstructure_validate"
     | "soilstructure_calculate"
     | "soilstructure_export_sdc"
     | "soilstructure_ground_displacement";

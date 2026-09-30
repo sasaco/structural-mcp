@@ -13,6 +13,7 @@ export interface AppConfig {
   };
   jobRoot: string;
   allowedInputRoots: string[];
+  allowedOutputRoots: string[];
   steelDanEnabled: boolean;
   timeoutMs: number;
   maxInputBytes: number;
@@ -87,9 +88,14 @@ export async function loadConfig(): Promise<AppConfig> {
     ? resolve(process.env.LOCALAPPDATA, "structural-mcp/jobs")
     : resolve(sourceRoot, ".structural-mcp/jobs");
   const jobRoot = absolutePath("STRUCTURAL_MCP_JOB_ROOT", defaultJobs);
-  const configuredRoots = process.env.STRUCTURAL_MCP_ALLOWED_ROOTS?.split(delimiter).filter(Boolean) ?? [documentsRoot];
-  const allowedInputRoots = configuredRoots.map((root) => {
+  const configuredInputRoots = process.env.STRUCTURAL_MCP_ALLOWED_ROOTS?.split(delimiter).filter(Boolean) ?? [documentsRoot];
+  const configuredOutputRoots = process.env.STRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS?.split(delimiter).filter(Boolean) ?? [documentsRoot];
+  const allowedInputRoots = configuredInputRoots.map((root) => {
     if (!isAbsolute(root)) throw new Error("STRUCTURAL_MCP_ALLOWED_ROOTS must contain absolute paths");
+    return resolve(root);
+  });
+  const allowedOutputRoots = configuredOutputRoots.map((root) => {
+    if (!isAbsolute(root)) throw new Error("STRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS must contain absolute paths");
     return resolve(root);
   });
 
@@ -103,6 +109,7 @@ export async function loadConfig(): Promise<AppConfig> {
     },
     jobRoot: await realpath(jobRoot),
     allowedInputRoots: await Promise.all(allowedInputRoots.map((root) => realpath(root))),
+    allowedOutputRoots: await Promise.all(allowedOutputRoots.map((root) => realpath(root))),
     steelDanEnabled: booleanValue("STRUCTURAL_MCP_ENABLE_STEELDAN", false),
     timeoutMs: positiveInteger("STRUCTURAL_MCP_TIMEOUT_MS", 180_000),
     maxInputBytes: positiveInteger("STRUCTURAL_MCP_MAX_INPUT_BYTES", 16 * 1024 * 1024),

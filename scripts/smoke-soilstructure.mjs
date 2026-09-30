@@ -8,9 +8,24 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 const requestedInput = process.argv[2];
 const requestedOperation = process.argv[3] ?? "pile";
 if (!requestedInput) {
-  throw new Error("usage: npm run smoke:soilstructure -- <absolute .json path> [pile|sdc|ground]");
+  throw new Error("usage: npm run smoke:soilstructure -- <absolute .json path> [validate-pile|validate-sdc|validate-ground|pile|sdc|ground]");
 }
 const operations = {
+  "validate-pile": {
+    tool: "soilstructure_validate",
+    arguments: { operation: "pile" },
+    expectedArtifacts: [],
+  },
+  "validate-sdc": {
+    tool: "soilstructure_validate",
+    arguments: { operation: "sdc" },
+    expectedArtifacts: [],
+  },
+  "validate-ground": {
+    tool: "soilstructure_validate",
+    arguments: { operation: "ground" },
+    expectedArtifacts: [],
+  },
   pile: {
     tool: "soilstructure_calculate",
     arguments: { generatePdf: true },
@@ -29,7 +44,7 @@ const operations = {
 };
 const operation = operations[requestedOperation];
 if (!operation) {
-  throw new Error("SoilStructure smoke operation must be pile, sdc, or ground");
+  throw new Error("SoilStructure smoke operation must be validate-pile, validate-sdc, validate-ground, pile, sdc, or ground");
 }
 
 const inputPath = resolve(requestedInput);

@@ -15,7 +15,7 @@ const engine = ["run-rc", "inspect-rc", "validate-rc", "compose-rc"].includes(co
   ? "webdan2"
   : command === "run-steel"
     ? "steeldan"
-    : ["run", "export-sdc", "run-ground-displacement"].includes(command)
+    : ["validate", "run", "export-sdc", "run-ground-displacement"].includes(command)
       ? "soilstructure"
       : null;
 if (engine === null) throw new Error(`unsupported command: ${command}`);
@@ -24,6 +24,9 @@ if (["run-steel", "run", "run-ground-displacement"].includes(command) && !option
   throw new Error("missing --generate-pdf");
 }
 if (command === "run-ground-displacement" && !options.has("--generate-jot")) throw new Error("missing --generate-jot");
+if (command === "validate" && !["pile", "sdc", "ground"].includes(options.get("--operation"))) {
+  throw new Error("missing or invalid --operation");
+}
 
 const source = await readFile(inputPath, "utf8");
 if (engine === "soilstructure") JSON.parse(source);
@@ -48,8 +51,12 @@ async function artifact(kind, name, mediaType, contents) {
   });
 }
 
-await artifact("result", "result.json", "application/json", `${JSON.stringify({ engine, input: basename(inputPath), command })}\n`);
-if (command === "compose-rc") {
+if (command !== "validate") {
+  await artifact("result", "result.json", "application/json", `${JSON.stringify({ engine, input: basename(inputPath), command })}\n`);
+}
+if (command === "validate") {
+  // Validation intentionally publishes no artifacts.
+} else if (command === "compose-rc") {
   await artifact("wdj", "generated.wdj", "application/json; charset=utf-8", composeInput.baseDocument);
 } else if (command === "export-sdc") {
   await artifact("sdc", "report.sdc", "text/plain; charset=shift_jis", "fake sdc\r\n");
