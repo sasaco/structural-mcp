@@ -6,7 +6,6 @@ import type { JobManifest } from "./contracts.js";
 import {
   createJob,
   loadManifest,
-  materializeArtifact,
   readTextArtifact,
   resolveInputPath,
   saveManifest,
@@ -217,7 +216,7 @@ export function createServer(config: AppConfig): McpServer {
   const server = new McpServer(
     { name: "structural-mcp", version: "0.2.0" },
     {
-      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateで対象operationごとに検証できます。executionStatusとengineeringStatusは別々に確認し、成果物はjob単位で扱ってください。指定先への配置にはmaterialize_artifactを使用できます。",
+      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateへinlineで渡して対象operationごとに検証できます。standalone scriptはrunnerを直接呼び、artifactを検証して指定先へ配置します。executionStatusとengineeringStatusは別々に確認し、MCP計算の成果物はjob単位で扱ってください。",
     },
   );
 
@@ -284,10 +283,8 @@ export function createServer(config: AppConfig): McpServer {
       },
     },
     configurationTool: "get_environment_template",
-    artifactMaterializationTool: "materialize_artifact",
     pathPolicy: {
       allowedInputRoots: config.allowedInputRoots,
-      allowedOutputRoots: config.allowedOutputRoots,
     },
     limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxArtifactBytes: config.maxArtifactBytes },
   }, `Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}です。`));
@@ -545,29 +542,6 @@ export function createServer(config: AppConfig): McpServer {
       return textResponse(result, `${artifactId}を${result.offsetBytes} byteから読み取りました。`);
     } catch (error) {
       return textResponse({ ok: false, category: "input_access", errors: [{ code: "artifact_read_failed", message: error instanceof Error ? error.message : String(error) }] }, "成果物を読み取れませんでした。", true);
-    }
-  });
-
-  server.registerTool("materialize_artifact", {
-    title: "Materialize a job artifact",
-    description: "job artifactをSTRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS配下の既存フォルダーへhash検証後に原子的に配置します。既存ファイルの置換にはoverwrite=trueが必要です。",
-    inputSchema: {
-      jobId: z.string().min(1),
-      artifactId: z.string().min(1),
-      destinationPath: z.string().min(1).describe("許可されたoutput root配下の絶対ファイルパス"),
-      overwrite: z.boolean().default(false),
-    },
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-  }, async ({ jobId, artifactId, destinationPath, overwrite }) => {
-    try {
-      const result = await materializeArtifact(jobId, artifactId, destinationPath, overwrite, config);
-      return textResponse({ ok: true, jobId, artifactId, ...result }, `${artifactId}を${result.destinationPath}へ配置しました。`);
-    } catch (error) {
-      return textResponse({
-        ok: false,
-        category: "artifact_materialization",
-        errors: [{ code: "artifact_materialization_failed", message: error instanceof Error ? error.message : String(error) }],
-      }, "成果物を配置できませんでした。", true);
     }
   });
 

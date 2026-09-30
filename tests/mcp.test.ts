@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, before, test } from "node:test";
@@ -23,7 +23,6 @@ async function connect(overrides: Record<string, string> = {}): Promise<Client> 
       STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER: fakeRunner,
       STRUCTURAL_MCP_JOB_ROOT: jobRoot,
       STRUCTURAL_MCP_ALLOWED_ROOTS: fixtureRoot,
-      STRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS: jobRoot,
       STRUCTURAL_MCP_ENABLE_STEELDAN: "true",
       ...overrides,
     },
@@ -48,7 +47,6 @@ test("lists all tools and reports independently available runners", async () => 
     "get_capabilities",
     "get_environment_template",
     "get_job",
-    "materialize_artifact",
     "read_text_artifact",
     "soilstructure_calculate",
     "soilstructure_export_sdc",
@@ -287,59 +285,6 @@ test("validates SoilStructure operation input without publishing artifacts", asy
   assert.equal(structured.ok, true);
   assert.equal(structured.summary.command, "validate");
   assert.deepEqual(structured.artifacts, []);
-});
-
-test("materializes verified artifacts only inside allowed output roots", async () => {
-  const calculated = await client.callTool({
-    name: "soilstructure_calculate",
-    arguments: { inputPath: resolve(fixtureRoot, "soilstructure.json"), generatePdf: true },
-  });
-  assert.equal(calculated.isError, undefined);
-  const calculation = calculated.structuredContent as {
-    jobId: string;
-    artifacts: Array<{ artifactId: string; name: string; bytes: number; sha256: string }>;
-  };
-  const report = calculation.artifacts.find((artifact) => artifact.name === "report.pdf");
-  assert.ok(report);
-  const exportDirectory = resolve(jobRoot, "materialized");
-  await mkdir(exportDirectory);
-  const destinationPath = resolve(exportDirectory, "04_地盤のモデル化.pdf");
-
-  const first = await client.callTool({
-    name: "materialize_artifact",
-    arguments: { jobId: calculation.jobId, artifactId: report.artifactId, destinationPath },
-  });
-  assert.equal(first.isError, undefined);
-  assert.equal((await readFile(destinationPath)).length, report.bytes);
-
-  const conflict = await client.callTool({
-    name: "materialize_artifact",
-    arguments: { jobId: calculation.jobId, artifactId: report.artifactId, destinationPath },
-  });
-  assert.equal(conflict.isError, true);
-  assert.match(JSON.stringify(conflict.structuredContent), /overwrite=true/);
-
-  await writeFile(destinationPath, "stale", "utf8");
-  const replaced = await client.callTool({
-    name: "materialize_artifact",
-    arguments: { jobId: calculation.jobId, artifactId: report.artifactId, destinationPath, overwrite: true },
-  });
-  assert.equal(replaced.isError, undefined);
-  const replacement = replaced.structuredContent as { overwritten: boolean; sha256: string };
-  assert.equal(replacement.overwritten, true);
-  assert.equal(replacement.sha256, report.sha256);
-  assert.equal((await readFile(destinationPath)).length, report.bytes);
-
-  const outside = await client.callTool({
-    name: "materialize_artifact",
-    arguments: {
-      jobId: calculation.jobId,
-      artifactId: report.artifactId,
-      destinationPath: resolve(fixtureRoot, "must-not-be-created.pdf"),
-    },
-  });
-  assert.equal(outside.isError, true);
-  assert.match(JSON.stringify(outside.structuredContent), /ALLOWED_OUTPUT_ROOTS/);
 });
 
 test("exports SoilStructure SDC artifacts", async () => {

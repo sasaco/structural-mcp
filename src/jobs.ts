@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { copyFile, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import type { AppConfig } from "./config.js";
 import type { ArtifactRecord, JobManifest, RunnerEnvelope } from "./contracts.js";
 
@@ -44,22 +43,6 @@ export async function createJob(
 
 async function sha256(path: string): Promise<string> {
   return createHash("sha256").update(await readFile(path)).digest("hex");
-}
-
-function errorCode(error: unknown): string | undefined {
-  return typeof error === "object" && error !== null && "code" in error
-    ? String((error as { code?: unknown }).code)
-    : undefined;
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") return false;
-    throw error;
-  }
 }
 
 export async function verifyArtifacts(
@@ -137,55 +120,4 @@ export async function readTextArtifact(
   let end = Math.min(start + limit, bytes.length);
   while (end > start && end < bytes.length && (bytes[end]! & 0xc0) === 0x80) end -= 1;
   return { text: bytes.subarray(start, end).toString("utf8"), offsetBytes: start, nextOffsetBytes: end, eof: end >= bytes.length };
-}
-
-export async function materializeArtifact(
-  jobId: string,
-  artifactId: string,
-  destinationPath: string,
-  overwrite: boolean,
-  config: AppConfig,
-): Promise<{ destinationPath: string; bytes: number; sha256: string; overwritten: boolean }> {
-  if (!isAbsolute(destinationPath)) throw new Error("destinationPath must be an absolute path");
-  const destination = resolve(destinationPath);
-  const destinationParent = await realpath(dirname(destination));
-  if (!config.allowedOutputRoots.some((root) => isInside(root, destinationParent))) {
-    throw new Error("destination path is outside STRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS");
-  }
-
-  const manifest = await loadManifest(jobId, config);
-  const artifact = manifest.artifacts.find((item) => item.artifactId === artifactId);
-  if (!artifact) throw new Error("artifactId was not found in this job");
-  const jobRoot = await realpath(jobDirectory(jobId, config));
-  const source = await realpath(resolve(jobRoot, artifact.relativePath));
-  if (!isInside(jobRoot, source)) throw new Error("artifact path escaped the job directory");
-  const sourceInfo = await stat(source);
-  if (!sourceInfo.isFile() || sourceInfo.size !== artifact.bytes || await sha256(source) !== artifact.sha256) {
-    throw new Error("artifact no longer matches its manifest");
-  }
-
-  const destinationExisted = await exists(destination);
-  if (destinationExisted && !(await stat(destination)).isFile()) {
-    throw new Error("destination exists and is not a file");
-  }
-  if (destinationExisted && !overwrite) throw new Error("destination already exists; set overwrite=true to replace it");
-  const temporary = resolve(destinationParent, `.${basename(destination)}.${randomUUID()}.tmp`);
-  try {
-    await copyFile(source, temporary, constants.COPYFILE_EXCL);
-    const temporaryInfo = await stat(temporary);
-    if (temporaryInfo.size !== artifact.bytes || await sha256(temporary) !== artifact.sha256) {
-      throw new Error("staged artifact verification failed");
-    }
-    if (!overwrite && await exists(destination)) {
-      throw new Error("destination was created while the artifact was being staged");
-    }
-    await rename(temporary, destination);
-  } finally {
-    try {
-      await unlink(temporary);
-    } catch (error) {
-      if (errorCode(error) !== "ENOENT") throw error;
-    }
-  }
-  return { destinationPath: destination, bytes: artifact.bytes, sha256: artifact.sha256, overwritten: destinationExisted };
 }

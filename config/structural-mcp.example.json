@@ -4,7 +4,6 @@
   "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER": "C:/path/to/SoilStructure.Headless.exe",
   "STRUCTURAL_MCP_JOB_ROOT": "C:/Users/example/AppData/Local/structural-mcp/jobs",
   "STRUCTURAL_MCP_ALLOWED_ROOTS": "C:/Users/example/Documents",
-  "STRUCTURAL_MCP_ALLOWED_OUTPUT_ROOTS": "C:/Users/example/Documents",
   "STRUCTURAL_MCP_ENABLE_STEELDAN": "false",
   "STRUCTURAL_MCP_TIMEOUT_MS": "180000"
 }
