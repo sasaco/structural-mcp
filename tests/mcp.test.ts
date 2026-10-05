@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -77,7 +78,7 @@ test("lists all tools and reports independently available runners", async () => 
     "webdan_calculate",
   ]);
   assert.equal(engines.soilstructure.enabled, true);
-  assert.deepEqual(engines.soilstructure.outputFormats, ["json", "pdf", "sdc", "jot"]);
+  assert.deepEqual(engines.soilstructure.outputFormats, ["json", "pdf", "xlsx", "sdc", "jot"]);
   assert.deepEqual(engines.soilstructure.tools, [
     "soilstructure_get_schema",
     "soilstructure_get_runner_contract",
@@ -139,18 +140,27 @@ test("publishes the SoilStructure schema and standalone runner contract", async 
   assert.equal(contractResult.isError, undefined);
   const contract = contractResult.structuredContent as {
     runner: { readable: boolean; path: string };
-    contract: { commands: { validate: { arguments: string[] }; sdc: { artifacts: string[]; restrictions: string[] } } };
+    contract: { commands: {
+      validate: { arguments: string[] };
+      pile: { optionalArguments: string[]; artifacts: string[]; restrictions: string[] };
+      sdc: { artifacts: string[]; restrictions: string[] };
+    } };
     pythonTemplate: string;
   };
   assert.equal(contract.runner.readable, true);
   assert.equal(contract.runner.path, fakeRunner);
   assert.ok(contract.contract.commands.validate.arguments.includes("--operation"));
+  assert.ok(contract.contract.commands.pile.optionalArguments.includes("--xlsx-output"));
+  assert.ok(contract.contract.commands.pile.artifacts.includes("report.xlsx (optional)"));
+  assert.match(contract.contract.commands.pile.restrictions.join("\n"), /Microsoft Excel/);
   assert.ok(contract.contract.commands.sdc.artifacts.includes("report.sdc"));
   assert.match(contract.contract.commands.sdc.restrictions.join("\n"), /steelPipeDiameterM.*pile\.diameterM/);
   assert.match(contract.contract.commands.sdc.restrictions.join("\n"), /steelPipeThicknessMm.*corrosionAllowanceMm/);
   assert.match(contract.contract.commands.sdc.restrictions.join("\n"), /引抜き側.*f\/g/);
   assert.match(contract.pythonTemplate, /sha256/);
   assert.match(contract.pythonTemplate, /os\.replace/);
+  assert.match(contract.pythonTemplate, /generate_excel: bool = False/);
+  assert.match(contract.pythonTemplate, /--xlsx-output/);
 });
 
 test("calls Capacita through the generalized runner and reads an artifact", async () => {
@@ -237,6 +247,7 @@ test("runs SoilStructure from a JSON path with PDF enabled by default", async ()
   assert.equal(structured.tool, "soilstructure_calculate");
   assert.equal(structured.engine, "soilstructure");
   assert.equal(structured.ok, true);
+  assert.ok(!structured.artifacts.some((item) => item.name === "report.xlsx"));
   assert.ok(structured.artifacts.some((item) => item.name === "result.json"));
   assert.ok(structured.artifacts.some((item) => item.name === "report.pdf"));
   const read = await client.callTool({ name: "read_text_artifact", arguments: { jobId: structured.jobId, artifactId: "result" } });
@@ -267,6 +278,43 @@ test("accepts inline SoilStructure JSON and enforces exactly one source", async 
   const invalid = await client.callTool({ name: "soilstructure_calculate", arguments: { input: "not json" } });
   assert.equal(invalid.isError, true);
   assert.match(JSON.stringify(invalid.structuredContent), /有効なJSON/);
+});
+
+test("generates SoilStructure Excel with and without PDF as verified job artifacts", async () => {
+  const inline = await readFile(resolve(fixtureRoot, "soilstructure.json"), "utf8");
+  const jobs = new Set<string>();
+  for (const generatePdf of [true, false]) {
+    const result = await client.callTool({
+      name: "soilstructure_calculate",
+      arguments: {
+        ...(generatePdf ? { inputPath: resolve(fixtureRoot, "soilstructure.json") } : { input: inline }),
+        generateExcel: true,
+        generatePdf,
+      },
+    });
+    assert.equal(result.isError, undefined);
+    const value = result.structuredContent as {
+      jobId: string;
+      ok: boolean;
+      artifacts: Array<{ artifactId: string; name: string; relativePath: string; mediaType: string; bytes: number; sha256: string }>;
+    };
+    assert.equal(value.ok, true);
+    assert.ok(!jobs.has(value.jobId));
+    jobs.add(value.jobId);
+    assert.deepEqual(value.artifacts.map((item) => item.name).sort(),
+      ["result.json", "report.xlsx", ...(generatePdf ? ["report.pdf"] : [])].sort());
+    const workbook = value.artifacts.find((item) => item.name === "report.xlsx")!;
+    assert.equal(workbook.relativePath, "output/report.xlsx");
+    assert.equal(workbook.mediaType, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    const bytes = await readFile(resolve(jobRoot, value.jobId.slice(0, 10), value.jobId, workbook.relativePath));
+    assert.equal(bytes.length, workbook.bytes);
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), workbook.sha256);
+    const job = await client.callTool({ name: "get_job", arguments: { jobId: value.jobId } });
+    assert.deepEqual((job.structuredContent as { artifacts: unknown[] }).artifacts, value.artifacts);
+    const read = await client.callTool({ name: "read_text_artifact", arguments: { jobId: value.jobId, artifactId: workbook.artifactId } });
+    assert.equal(read.isError, true);
+    assert.match(JSON.stringify(read.structuredContent), /UTF-8 text/);
+  }
 });
 
 test("validates SoilStructure operation input without publishing artifacts", async () => {

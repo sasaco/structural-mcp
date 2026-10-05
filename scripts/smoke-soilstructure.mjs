@@ -8,7 +8,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 const requestedInput = process.argv[2];
 const requestedOperation = process.argv[3] ?? "pile";
 if (!requestedInput) {
-  throw new Error("usage: npm run smoke:soilstructure -- <absolute .json path> [validate-pile|validate-sdc|validate-ground|pile|sdc|ground]");
+  throw new Error("usage: npm run smoke:soilstructure -- <absolute .json path> [validate-pile|validate-sdc|validate-ground|pile|pile-excel|sdc|ground]");
 }
 const operations = {
   "validate-pile": {
@@ -31,6 +31,11 @@ const operations = {
     arguments: { generatePdf: true },
     expectedArtifacts: ["result.json", "report.pdf"],
   },
+  "pile-excel": {
+    tool: "soilstructure_calculate",
+    arguments: { generatePdf: true, generateExcel: true },
+    expectedArtifacts: ["result.json", "report.xlsx", "report.pdf"],
+  },
   sdc: {
     tool: "soilstructure_export_sdc",
     arguments: {},
@@ -44,7 +49,7 @@ const operations = {
 };
 const operation = operations[requestedOperation];
 if (!operation) {
-  throw new Error("SoilStructure smoke operation must be validate-pile, validate-sdc, validate-ground, pile, sdc, or ground");
+  throw new Error("SoilStructure smoke operation must be validate-pile, validate-sdc, validate-ground, pile, pile-excel, sdc, or ground");
 }
 
 const inputPath = resolve(requestedInput);
@@ -70,7 +75,7 @@ try {
   const result = await client.callTool({
     name: operation.tool,
     arguments: { inputPath, ...operation.arguments },
-  });
+  }, undefined, { timeout: 240_000 });
   if (result.isError) {
     throw new Error(`SoilStructure MCP smoke failed: ${JSON.stringify(result.structuredContent)}`);
   }

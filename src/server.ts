@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
@@ -88,7 +89,7 @@ interface CalculationSpec {
   command: "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel" | "validate" | "run" | "export-sdc" | "run-ground-displacement";
   extensions: readonly string[];
   jobExtension: ".wdj" | ".wsj" | ".json" | ".soilstructure.json";
-  runnerOptions: readonly string[];
+  runnerOptions: readonly string[] | ((outputDirectory: string) => readonly string[]);
   jsonInput?: boolean;
   label: string;
 }
@@ -156,7 +157,7 @@ async function calculate(
     spec.engine,
     job.inputPath,
     job.outputDirectory,
-    spec.runnerOptions,
+    typeof spec.runnerOptions === "function" ? spec.runnerOptions(job.outputDirectory) : spec.runnerOptions,
     config,
   );
   const artifacts = await verifyArtifacts(job.outputDirectory, envelope, config);
@@ -271,7 +272,8 @@ export function createServer(config: AppConfig): McpServer {
         enabled: soilStructureEnabled,
         readiness: soilStructureEnabled ? "production" : "unavailable",
         inputFormats: [".soilstructure.json", ".json", "inline-json"],
-        outputFormats: ["json", "pdf", "sdc", "jot"],
+        outputFormats: ["json", "pdf", "xlsx", "sdc", "jot"],
+        excelRequirements: "Windows、Microsoft Excel、--xlsx-output対応のSoilStructure runnerが必要です。",
         tools: [
           "soilstructure_get_schema",
           "soilstructure_get_runner_contract",
@@ -449,10 +451,14 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("soilstructure_calculate", {
     title: "Run SoilStructure pile calculation",
-    description: "SoilStructure document JSONを計算し、構造化結果と任意のPDF帳票を作成します。inputPathまたはinputのどちらか一方だけを指定してください。",
-    inputSchema: { ...sourceShape, generatePdf: z.boolean().default(true) },
+    description: "SoilStructure document JSONを計算し、構造化結果と任意のPDF・Excel帳票をjob内に作成します。generateExcel=trueとgeneratePdf=trueで同じ計算済みExcelシートから両方を生成します。Excel生成にはWindowsとMicrosoft Excelが必要です。指定先への配置はclient側で行います。inputPathまたはinputのどちらか一方だけを指定してください。",
+    inputSchema: {
+      ...sourceShape,
+      generatePdf: z.boolean().default(true),
+      generateExcel: z.boolean().default(false).describe("Excel帳票report.xlsxを生成する（WindowsとMicrosoft Excelが必要）"),
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ inputPath, input, generatePdf }) => {
+  }, async ({ inputPath, input, generatePdf, generateExcel }) => {
     const sourceError = invalidSourceSelection(inputPath, input);
     if (sourceError) return sourceError;
     if (config.soilStructureRunner === null) return unavailable("soilstructure", "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER");
@@ -460,7 +466,10 @@ export function createServer(config: AppConfig): McpServer {
       return await calculate({
         tool: "soilstructure_calculate", engine: "soilstructure", runnerPath: config.soilStructureRunner,
         command: "run", extensions: [".soilstructure.json", ".json"], jobExtension: ".soilstructure.json",
-        runnerOptions: ["--generate-pdf", String(generatePdf)], jsonInput: true, label: "SoilStructure 杭計算",
+        runnerOptions: (outputDirectory) => [
+          "--generate-pdf", String(generatePdf),
+          ...(generateExcel ? ["--xlsx-output", resolve(outputDirectory, "report.xlsx")] : []),
+        ], jsonInput: true, label: "SoilStructure 杭計算",
       }, inputPath, input, config);
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));

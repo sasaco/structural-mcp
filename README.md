@@ -8,7 +8,7 @@
 |---|---|---|---|
 | [`FEMPython`](./FEMPython/) | 骨組・有限要素解析 | 解析結果 JSON | submodule 追加済み、MCP adapter は未実装 |
 | [`Capacita`](./Capacita/) | RC・鋼部材の断面照査 | 結果 JSON、PDF、Markdown、Excel | 既存 adapter あり。旧 runner path から submodule への移行中 |
-| [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算、SNAP連携、地盤応答変位 | 中間結果 JSON、PDF、SDC、JOT | MCP adapter 接続済み。headless runner を個別設定して利用 |
+| [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算、SNAP連携、地盤応答変位 | 中間結果 JSON、Excel、PDF、SDC、JOT | MCP adapter 接続済み。headless runner を個別設定して利用 |
 
 > [!NOTE]
 > `WebDan2` は旧リポジトリ名です。現在の正式なリポジトリ名は `Capacita` で、RC 計算コアは `RcDan`、鋼部材計算コアは `SteelDan`、統合アプリケーションは `WebDanforCS` に整理されています。互換性維持のため、現行 MCP の tool ID と環境変数には `webdan` という旧名称が残っています。
@@ -29,7 +29,7 @@
 | `soilstructure_get_schema` | document schemaVersion 1、単位、operation別必須sectionを取得 | JSON Schema、入力例 |
 | `soilstructure_get_runner_contract` | standalone script用のrunner契約を取得 | command、artifact、文字コード、Python雛形 |
 | `soilstructure_validate` | 対象operationの入力をSoilStructure本体で事前検証 | path付き診断、artifactなしのjob |
-| `soilstructure_calculate` | SoilStructure document JSON から杭計算を実行 | 計算要約、`result.json`、任意 PDF |
+| `soilstructure_calculate` | SoilStructure document JSON から杭計算を実行 | 計算要約、`result.json`、任意 PDF・XLSX |
 | `soilstructure_export_sdc` | 杭計算と `sdcExport` 設定からSNAP連携データを生成 | `result.json`、通常・液状化L1/L2 SDC |
 | `soilstructure_ground_displacement` | `groundDisplacement` 設定からL1/L2地盤応答変位を計算 | `result.json`、任意 PDF、任意 L1/L2 JOT |
 | `get_job` | 過去の job を取得 | manifest と artifact metadata |
@@ -99,6 +99,7 @@ SoilStructure adapter は `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` の runner に�
 ```text
 validate --input <file> --output-dir <empty-dir> --operation pile|sdc|ground
 run --input <file> --output-dir <empty-dir> --generate-pdf true|false
+run --input <file> --output-dir <empty-dir> --generate-pdf true|false --xlsx-output <empty-dir>/report.xlsx
 export-sdc --input <file> --output-dir <empty-dir>
 run-ground-displacement --input <file> --output-dir <empty-dir> --generate-pdf true|false --generate-jot true|false
 ```
@@ -108,6 +109,24 @@ run-ground-displacement --input <file> --output-dir <empty-dir> --generate-pdf t
 client AIは、入力作成前に`soilstructure_get_schema`、standalone Python作成前に`soilstructure_get_runner_contract`を呼びます。設計条件が不足している場合は推測せず、不足fieldをユーザーへ確認します。作成後はJSONをinlineで`soilstructure_validate`へ渡して検証できます。standalone PythonはSoilStructure runnerを直接呼び、runnerが返すartifactのbytesとSHA-256を検証してから、指定されたSDC/PDFへ原子的に配置します。この経路では、MCP serverに対象プロジェクトのドライブをallowed rootとして登録する必要はありません。
 
 別プロジェクトからrunnerを直接呼ぶスクリプトの `.env` をAIに作成させる場合、AIは最初に `get_environment_template` を呼びます。応答には設定キー、現在の推奨絶対path、runnerが読み取り可能かどうか、およびそのまま保存できるdotenv形式の `content` が含まれます。MCPは既存の `.env` や秘密情報を読み取りません。
+
+### 杭計算のExcel・PDF・SDC出力
+
+`soilstructure_calculate` の `generateExcel` は既定で `false`、`generatePdf` は既定で `true` です。両方を `true` にすると、同じ計算済みExcelシートから `report.xlsx` と `report.pdf` を生成します。Excelだけを生成する場合は `generatePdf: false` を指定します。Excel生成は杭種4/5/6に対応し、Windows、Microsoft Excel、`--xlsx-output` 対応のSoilStructure runnerが必要です。
+
+```json
+{
+  "inputPath": "K:\\レールウェイコンサルタント\\26_ピット\\計算書\\02_pre\\04_地盤のモデル化\\04_地盤のモデル化.soilstructure.json",
+  "generateExcel": true,
+  "generatePdf": true
+}
+```
+
+SDCは同じ入力で `soilstructure_export_sdc` を呼び出します。成果物はMCPのjob directoryに保存し、応答には相対パス・byte数・SHA-256を返します。クライアントは検証済み成果物を指定されたExcel・PDF・SDCの保存先へ配置します。MCP自体は任意の出力先パスを受け取りません。Kドライブの入力を `inputPath` で渡す場合は `STRUCTURAL_MCP_ALLOWED_ROOTS` に対象フォルダーを追加するか、クライアントで読み取ったJSONを `input` へinlineで渡してください。
+
+standalone Python雛形では `run_soilstructure(..., generate_excel=True)` により一時ディレクトリへExcelを生成し、`destinations` の `report.xlsx` / `report.pdf` に指定したパスへ検証後に配置できます。
+
+実runnerでの接続確認は `npm run smoke:soilstructure -- <入力JSONの絶対パス> pile-excel` で行います。
 
 ## 設定
 

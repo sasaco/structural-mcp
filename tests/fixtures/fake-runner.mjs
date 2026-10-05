@@ -54,6 +54,12 @@ async function artifact(kind, name, mediaType, contents) {
 if (command !== "validate") {
   await artifact("result", "result.json", "application/json", `${JSON.stringify({ engine, input: basename(inputPath), command })}\n`);
 }
+if (command === "run" && options.has("--xlsx-output")) {
+  if (options.get("--xlsx-output") !== resolve(outputDirectory, "report.xlsx")) {
+    throw new Error("Excel output must stay in the job output directory");
+  }
+  await artifact("workbook", "report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Buffer.from("PK\u0003\u0004fake workbook"));
+}
 if (command === "validate") {
   // Validation intentionally publishes no artifacts.
 } else if (command === "compose-rc") {

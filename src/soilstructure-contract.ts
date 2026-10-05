@@ -238,7 +238,14 @@ export const soilStructureRunnerContract = {
     },
     pile: {
       arguments: ["run", "--input", "<file>", "--output-dir", "<empty-dir>", "--generate-pdf", "true|false"],
-      artifacts: ["result.json", "report.pdf (optional)"],
+      optionalArguments: ["--xlsx-output", "<xlsx-file>", "--pdf-output", "<pdf-file>"],
+      artifacts: ["result.json", "report.xlsx (optional)", "report.pdf (optional)"],
+      restrictions: [
+        "Excel生成はWindowsとMicrosoft Excel、および--xlsx-output対応runnerが必要です。pileType 4/5/6に対応します。",
+        "--xlsx-outputと--generate-pdf trueを併用すると同じ計算済みExcelシートからXLSXとPDFを生成します。",
+        "保存先はファイル名まで指定します。既存ファイルは上書きしません。--pdf-outputと--generate-pdf falseは併用できません。",
+        "MCPではgenerateExcel=trueを指定するとjob内のreport.xlsxへ出力します。任意の保存先への配置はclientが担当します。",
+      ],
     },
     sdc: {
       arguments: ["export-sdc", "--input", "<file>", "--output-dir", "<empty-dir>"],
@@ -260,6 +267,7 @@ export const soilStructureRunnerContract = {
   artifactEncoding: {
     json: "UTF-8 without BOM",
     pdf: "binary application/pdf",
+    xlsx: "binary application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     sdc: "CP932 with CRLF",
     jot: "CP932 with CRLF",
   },
@@ -283,12 +291,17 @@ import tempfile
 from pathlib import Path
 
 
-def run_soilstructure(input_path: Path, command: list[str], destinations: dict[str, Path]) -> None:
+def run_soilstructure(input_path: Path, command: list[str], destinations: dict[str, Path], *, generate_excel: bool = False) -> None:
     runner = Path(os.environ["STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER"]).resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="soilstructure-") as temporary:
         output_dir = Path(temporary)
+        report_options = []
+        if generate_excel:
+            if not command or command[0] != "run":
+                raise ValueError("generate_excel is only supported for run")
+            report_options = ["--xlsx-output", str(output_dir / "report.xlsx")]
         completed = subprocess.run(
-            [str(runner), *command, "--input", str(input_path.resolve(strict=True)), "--output-dir", str(output_dir)],
+            [str(runner), *command, "--input", str(input_path.resolve(strict=True)), "--output-dir", str(output_dir), *report_options],
             check=False, capture_output=True, text=True, encoding="utf-8",
         )
         envelope = json.loads(completed.stdout)
