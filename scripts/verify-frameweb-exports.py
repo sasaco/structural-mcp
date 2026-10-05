@@ -14,7 +14,7 @@ def verify(directory: Path, render: bool) -> dict:
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["ok"] and manifest["executionStatus"] == "success"
     for artifact in manifest["artifacts"]:
-        assert artifact["name"] in {"result.json", "pickup.pik", "report.pdf"}
+        assert artifact["name"] in {"result.json", "pickup.pik", "report.pdf", "pickup-displacement.csv", "pickup-reaction.csv"}
         data = (directory / artifact["name"]).read_bytes()
         assert len(data) == artifact["bytes"]
         assert hashlib.sha256(data).hexdigest() == artifact["sha256"]

@@ -15,13 +15,38 @@ export const femPythonRunnerContract = {
   optionalArguments: {
     "--generate-pdf": { values: ["true", "false"], default: "true" },
     "--generate-pik": { values: ["true", "false"], default: "true" },
+    "--generate-pickup-displacement-csv": { values: ["true", "false"], default: "false" },
+    "--generate-pickup-reaction-csv": { values: ["true", "false"], default: "false" },
     "--pdf-sections": { format: "comma-separated", values: femPythonPdfSections, default: femPythonPdfSections.join(",") },
   },
   artifacts: [
     { name: "result.json", mediaType: "application/json", required: true },
     { name: "pickup.pik", mediaType: "text/plain; charset=utf-8", when: "generatePik=true (2D only)" },
     { name: "report.pdf", mediaType: "application/pdf", when: "generatePdf=true" },
+    { name: "pickup-displacement.csv", mediaType: "text/csv; charset=utf-8", when: "generatePickupDisplacementCsv=true (2D/3D)" },
+    { name: "pickup-reaction.csv", mediaType: "text/csv; charset=utf-8", when: "generatePickupReactionCsv=true (2D/3D)" },
   ],
+  pickupNodeCsv: {
+    encoding: "UTF-8 without BOM",
+    identityColumns: ["pickup_id", "focus_component", "node_id", "max_combine_id", "min_combine_id"],
+    valueColumns: "max_<component> (<unit>) for all six components, then min_<component> (<unit>) for all six components",
+    displacement: {
+      components: ["dx", "dy", "dz", "rx", "ry", "rz"],
+      units: ["length", "length", "length", "rad", "rad", "rad"],
+      focus2D: ["dx", "dy", "rz"],
+    },
+    reaction: {
+      components: ["fx", "fy", "fz", "mx", "my", "mz"],
+      units: ["force", "force", "force", "force*length", "force*length", "force*length"],
+      focus2D: ["fx", "fy", "mz"],
+    },
+    focus3D: "All six components in component order",
+    rowOrder: ["PICKUP definition order", "focus component order", "topology node order"],
+    unitSource: "Substitute analysisResultSet.units.length/force; retain unspecified if the analysis metadata does not name a unit",
+    values: "Unrounded analysis values in the units stated in the headers; rotations in rad",
+    selection: "Signed max/min with their source COMBINE IDs and all six correlated components; reactions contain support nodes only",
+    csvOnly: "Set generatePik=false and generatePdf=false; each CSV flag is independent and defaults to false",
+  },
   runtime: [
     "Windows x64 / .NET 10 Desktop Runtime; build FrameWebforCS/Headless/FrameWebforCS.Headless.csproj in Release",
     "Keep runner under the FEMPython checkout with FrameWeb/src and the uv-managed FrameWeb/.venv",

@@ -280,10 +280,15 @@ export function createServer(config: AppConfig): McpServer {
         enabled: femPythonEnabled,
         readiness: femPythonEnabled ? "experimental" : "unavailable",
         inputFormats: [".json", "inline-json"],
-        outputFormats: ["json", "pik", "pdf"],
+        outputFormats: ["json", "pik", "pdf", "csv"],
         tools: ["fempython_calculate", "fempython_get_runner_contract"],
         defaultPdfSections: femPythonPdfSections,
         pikRequirements: "2次元モデルと計算可能なPICKUP定義が必要です。",
+        pickupNodeCsv: {
+          displacement: { option: "generatePickupDisplacementCsv", artifact: "pickup-displacement.csv", default: false },
+          reaction: { option: "generatePickupReactionCsv", artifact: "pickup-reaction.csv", default: false },
+          dimensions: [2, 3],
+        },
       },
       capacita: {
         enabled: capacitaEnabled,
@@ -320,7 +325,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("fempython_get_runner_contract", {
     title: "Get FrameWebforCS runner contract",
-    description: "FrameWebforCSの非対話runnerのパス、起動引数、PDF項目、PIK形式、成果物の検証とclient側保存の手順を返します。",
+    description: "FrameWebforCSの非対話runnerのパス、起動引数、PDF項目、PIK形式、変位・反力のPICKUP CSV、成果物の検証とclient側保存の手順を返します。",
     inputSchema: {},
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => {
@@ -338,18 +343,20 @@ export function createServer(config: AppConfig): McpServer {
   });
 
   server.registerTool("fempython_calculate", {
-    title: "Calculate FrameWebforCS model and export PIK/PDF",
-    description: "FrameWebforCSの保存JSONを再計算し、result.json、任意の2次元PIKとPDFをjob成果物として返します。PDF既定項目は入力データ・断面力・pickup断面力・変位・pickup変位です。clientが読み取ったJSONをinputへ文字列で渡し、read_artifactで取得した成果物をclientの指定先へ保存できます。inputPathまたはinputの一方だけを指定してください。",
+    title: "Calculate FrameWebforCS model and export PIK/PDF/CSV",
+    description: "FrameWebforCSの保存JSONを再計算し、result.json、任意の2次元PIK・PDF・変位PICKUP CSV・反力PICKUP CSVをjob成果物として返します。CSVは2D/3D対応で個別に指定できます。CSVのみ必要な場合はgeneratePik=false、generatePdf=falseを指定します。PDF既定項目は入力データ・断面力・pickup断面力・変位・pickup変位です。clientが読み取ったJSONをinputへ文字列で渡し、read_artifactで取得した成果物をclientの指定先へ保存できます。inputPathまたはinputの一方だけを指定してください。",
     inputSchema: {
       ...sourceShape,
       generatePdf: z.boolean().default(true),
       generatePik: z.boolean().default(true).describe("2次元PICKUP断面力のpickup.pikを生成する"),
+      generatePickupDisplacementCsv: z.boolean().default(false).describe("変位のPICKUP CSV（pickup-displacement.csv、2D/3D、解析単位の未丸め値）を生成する"),
+      generatePickupReactionCsv: z.boolean().default(false).describe("反力のPICKUP CSV（pickup-reaction.csv、2D/3D、解析単位の未丸め値）を生成する"),
       pdfSections: z.array(z.enum(femPythonPdfSections)).min(1).max(femPythonPdfSections.length)
         .refine((sections) => new Set(sections).size === sections.length, "pdfSections must not contain duplicates")
         .default([...femPythonPdfSections]),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ inputPath, input, generatePdf, generatePik, pdfSections }) => {
+  }, async ({ inputPath, input, generatePdf, generatePik, generatePickupDisplacementCsv, generatePickupReactionCsv, pdfSections }) => {
     const sourceError = invalidSourceSelection(inputPath, input);
     if (sourceError) return sourceError;
     if (config.femPythonRunner === null) return unavailable("fempython", "STRUCTURAL_MCP_FEMPYTHON_RUNNER");
@@ -358,11 +365,15 @@ export function createServer(config: AppConfig): McpServer {
         tool: "fempython_calculate", engine: "fempython", runnerPath: config.femPythonRunner,
         command: "run", extensions: [".json"], jobExtension: ".json",
         runnerOptions: ["--generate-pdf", String(generatePdf), "--generate-pik", String(generatePik),
-          "--pdf-sections", pdfSections.join(",")],
+          "--pdf-sections", pdfSections.join(","),
+          ...(generatePickupDisplacementCsv ? ["--generate-pickup-displacement-csv", "true"] : []),
+          ...(generatePickupReactionCsv ? ["--generate-pickup-reaction-csv", "true"] : [])],
         requiredArtifacts: [
           { relativePath: "result.json", mediaType: "application/json" },
           ...(generatePik ? [{ relativePath: "pickup.pik", mediaType: "text/plain" }] : []),
           ...(generatePdf ? [{ relativePath: "report.pdf", mediaType: "application/pdf" }] : []),
+          ...(generatePickupDisplacementCsv ? [{ relativePath: "pickup-displacement.csv", mediaType: "text/csv" }] : []),
+          ...(generatePickupReactionCsv ? [{ relativePath: "pickup-reaction.csv", mediaType: "text/csv" }] : []),
         ],
         jsonInput: true, label: "FrameWebforCS 計算・出力",
       }, inputPath, input, config);

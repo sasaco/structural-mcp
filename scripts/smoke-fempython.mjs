@@ -2,17 +2,28 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { parseArgs } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-if (!process.argv[2]) throw new Error("usage: npm run smoke:fempython -- <input.json> [new client output directory]");
+const { values, positionals } = parseArgs({ allowPositionals: true,
+  options: { exports: { type: "string", default: "standard" } } });
+if (!positionals[0] || positionals.length > 2 || !["standard", "displacement", "reaction", "node-csv", "all"].includes(values.exports)) {
+  throw new Error("usage: npm run smoke:fempython -- <input.json> [new client output directory] [--exports standard|displacement|reaction|node-csv|all]");
+}
+const outputOptions = {
+  generatePdf: ["standard", "all"].includes(values.exports),
+  generatePik: ["standard", "all"].includes(values.exports),
+  generatePickupDisplacementCsv: ["displacement", "node-csv", "all"].includes(values.exports),
+  generatePickupReactionCsv: ["reaction", "node-csv", "all"].includes(values.exports),
+};
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const inputPath = resolve(process.argv[2]);
+const inputPath = resolve(positionals[0]);
 const input = await readFile(inputPath, "utf8");
 const scratch = resolve(repositoryRoot, ".structural-mcp");
 await mkdir(scratch, { recursive: true });
 const jobRoot = await mkdtemp(resolve(scratch, "frame-smoke-"));
-const outputDirectory = process.argv[3] ? resolve(process.argv[3]) : resolve(jobRoot, "client-output");
+const outputDirectory = positionals[1] ? resolve(positionals[1]) : resolve(jobRoot, "client-output");
 // Require a new directory so validation never overwrites existing client results.
 await mkdir(outputDirectory);
 const client = new Client({ name: "structural-mcp-frame-smoke", version: "0.1.0" });
@@ -40,13 +51,17 @@ try {
   const capabilities = await call("get_capabilities");
   if (!capabilities.engines.fempython.enabled) throw new Error("Build/configure the FrameWebforCS headless runner first");
   const manifest = await call("fempython_calculate", {
-    input, generatePdf: true, generatePik: true,
+    input, ...outputOptions,
     pdfSections: ["input", "section_force", "pickup_section_force", "displacement", "pickup_displacement"],
   });
   if (!manifest.ok || manifest.engine !== "fempython" || manifest.executionStatus !== "success") {
     throw new Error("Unexpected calculation status");
   }
-  const expected = new Set(["result.json", "pickup.pik", "report.pdf"]);
+  const expected = new Set(["result.json",
+    ...(outputOptions.generatePik ? ["pickup.pik"] : []),
+    ...(outputOptions.generatePdf ? ["report.pdf"] : []),
+    ...(outputOptions.generatePickupDisplacementCsv ? ["pickup-displacement.csv"] : []),
+    ...(outputOptions.generatePickupReactionCsv ? ["pickup-reaction.csv"] : [])]);
   const downloads = [];
   for (const artifact of manifest.artifacts) {
     if (!expected.delete(artifact.name)) throw new Error("Unexpected/duplicate artifact name");
@@ -69,6 +84,10 @@ try {
     }
     if (artifact.name === "report.pdf" && contents.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error("Invalid PDF");
     if (artifact.name === "pickup.pik" && contents.toString("utf8").trim().split(/\r?\n/).length < 2) throw new Error("Empty PIK");
+    if (artifact.name.endsWith(".csv")) {
+      if (artifact.mediaType !== "text/csv; charset=utf-8" || contents.subarray(0, 3).toString("hex") === "efbbbf") throw new Error("Invalid CSV encoding/media type");
+      if (!contents.toString("utf8").startsWith("pickup_id,focus_component,node_id,max_combine_id,min_combine_id,")) throw new Error("Invalid PICKUP CSV header");
+    }
     if (artifact.name === "result.json") JSON.parse(contents.toString("utf8"));
     downloads.push({ name: artifact.name, contents });
   }

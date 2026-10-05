@@ -21,8 +21,8 @@
 |---|---|---|
 | `get_capabilities` | engine の利用可否、readiness、制限を確認 | capability 一覧 |
 | `get_environment_template` | AIが `.env` を作成するときのrunner設定名と推奨絶対パスを取得 | dotenv template、pathの読取可否 |
-| `fempython_get_runner_contract` | FrameWebforCS runnerの起動方法・PDF項目・成果物取得手順を取得 | runner path、command、artifact仕様 |
-| `fempython_calculate` | FrameWebforCS保存JSONを再計算 | `result.json`、任意 `pickup.pik`、任意 `report.pdf` |
+| `fempython_get_runner_contract` | FrameWebforCS runnerの起動方法・PDF項目・PICKUP CSV・成果物取得手順を取得 | runner path、command、artifact仕様 |
+| `fempython_calculate` | FrameWebforCS保存JSONを再計算 | `result.json`、任意 `pickup.pik`、`report.pdf`、`pickup-displacement.csv`、`pickup-reaction.csv` |
 | `webdan_inspect` | WDJをCapacitaのdomain modelで読取り、入力を正規化 | 部材・算出点・配筋・材料・断面力・計算条件、診断 |
 | `webdan_validate` | WDJの構造・参照・選択・主要な重複fieldを検証 | 検証結果、診断 |
 | `webdan_compose_wdj` | 既存WDJへ明示された意味変更を適用 | 新しいWDJ、変更差分、検証結果 |
@@ -115,7 +115,7 @@ client AIは、入力作成前に`soilstructure_get_schema`、standalone Python�
 
 別プロジェクトからrunnerを直接呼ぶスクリプトの `.env` をAIに作成させる場合、AIは最初に `get_environment_template` を呼びます。応答には設定キー、現在の推奨絶対path、runnerが読み取り可能かどうか、およびそのまま保存できるdotenv形式の `content` が含まれます。MCPは既存の `.env` や秘密情報を読み取りません。
 
-### FrameWebforCSの計算・PIK・PDF出力
+### FrameWebforCSの計算・PIK・PDF・PICKUP CSV出力
 
 `fempython_calculate` はFrameWebforCSで保存したJSONを受け取り、保存済み結果を使わず再計算します。`generatePik`、`generatePdf` は既定で `true` です。PIKには2次元モデルとPICKUP定義が必要です。PDFの既定項目は、入力データ・断面力・pickup断面力・変位・pickup変位です。`pdfSections` に次のIDの部分集合を指定すると掲載項目を変更できます。
 
@@ -130,14 +130,44 @@ client AIは、入力作成前に`soilstructure_get_schema`、standalone Python�
 
 入力・最終出力のファイル操作はクライアントが担当できます。例えばKドライブのJSONをクライアントが読み取り、`input` に文字列として渡します。この経路では、クライアントの作業フォルダをMCPのallowed rootに登録する必要はありません。
 
+変位・反力のPICKUP CSVは2D/3Dに対応し、次のフラグで個別に追加できます。どちらも既定値は `false` です。CSVのみ必要な場合は `generatePik` と `generatePdf` を `false` にします（PIKは2D専用）。
+
+```json
+{
+  "input": "<クライアントが読み取ったFrameWebforCS JSONの文字列>",
+  "generatePik": false,
+  "generatePdf": false,
+  "generatePickupDisplacementCsv": true,
+  "generatePickupReactionCsv": true
+}
+```
+
+`generatePickupDisplacementCsv` は `pickup-displacement.csv`、`generatePickupReactionCsv` は `pickup-reaction.csv` を生成します。片方だけ必要な場合は、そのフラグだけ `true` にします。どちらも `text/csv; charset=utf-8`、BOMなしUTF-8です。17列にPICKUP番号・着目成分・節点番号・最大/最小の出典COMBINE番号と、それぞれに連動する6成分を保持します。数値は表示用に丸めたりmmへ変換したりせず、ヘッダーに記載された解析単位（回転はrad）のまま出力します。解析結果の単位が未指定ならヘッダーも `unspecified` です。反力CSVの対象は解析結果に反力がある節点です。
+
 応答の `jobId` と各 `artifactId` を `read_artifact` に渡し、返された `base64` を復号して `offsetBytes` 順に連結します。`nextOffsetBytes` を次の読取位置にし、`eof: true` まで取得します。総byte数とSHA-256を計算応答のmetadataと照合した後、`pickup.pik` を依頼されたPIKパス、`report.pdf` を依頼されたPDFパスへクライアント側で保存します。MCPはクライアントの保存先パスを受け取りません。`read_artifact` は成果物の改変・job外への参照を拒否します。
 
+CSVも同じ手順で取得し、クライアントが指定されたCSVパスへ保存します。要求した成果物が欠落した場合は計算成功として返しません。
+
 runnerは `FrameWeb/src` と `FrameWeb/.venv` を探索するため、FEMPythonチェックアウト内の標準build先に配置してください。Windows x64、.NET 10 Desktop Runtimeと `uv sync --project FEMPython/FrameWeb --locked` で準備したPython環境が必要です。既定以外のrunnerは `STRUCTURAL_MCP_FEMPYTHON_RUNNER` で指定できます。単体起動の詳細は `fempython_get_runner_contract` と [headless README](./FEMPython/FrameWebforCS/Headless/README.md) を参照してください。
+
+CSV対応を反映するにはrunnerとMCPをbuildし、接続中のMCPサーバーを再起動します。
+
+```powershell
+dotnet build FEMPython/FrameWebforCS/Headless/FrameWebforCS.Headless.csproj -c Release
+npm run build
+```
 
 実runnerとMCPの接続確認は次のコマンドで行います。クライアントが入力をinlineで渡し、3成果物をMCPから分割取得して検証します。入力元や既存出力は上書きせず、検証ファイルは `.structural-mcp/frame-smoke-*/client-output/` に残します。計算toolのclient timeoutはrunnerのtimeoutより長く設定してください（このスクリプトは240秒）。
 
 ```powershell
 npm run smoke:fempython -- 'K:\レールウェイコンサルタント\26_ピット\計算書\02_pre\05_線路直角方向の計算\線路直角方向.json'
+```
+
+`--exports displacement` または `--exports reaction` で一方のCSVのみ、`--exports node-csv` で両CSV、`--exports all` でPIK・PDF・両CSVを取得します（いずれも `result.json` を含みます）。CSV全行と出典COMBINE番号・連動する6成分の照合には、追加ライブラリ不要の検証スクリプトを使います。
+
+```powershell
+npm run smoke:fempython -- '<input.json>' --exports node-csv
+uv run --project FEMPython/FrameWeb --locked python -B scripts/verify-frameweb-node-csv.py '<outputDirectory>'
 ```
 
 返された `outputDirectory` を次の検証スクリプトへ渡すと、PIK全行の着目位置・出典ケース・連動する断面力を結果JSONと照合し、PDFの5項目と内部節点名の欠落を検査します。`--render` は全ページの一覧画像と代表ページを `qa/` に生成します。検証用依存は `uv` の一時環境へ導入され、計算プロジェクトの依存は変更しません。

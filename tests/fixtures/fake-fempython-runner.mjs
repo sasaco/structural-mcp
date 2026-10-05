@@ -14,6 +14,8 @@ const summary = {
   command,
   generatePdf: options.get("--generate-pdf") === "true",
   generatePik: options.get("--generate-pik") === "true",
+  generatePickupDisplacementCsv: options.get("--generate-pickup-displacement-csv") === "true",
+  generatePickupReactionCsv: options.get("--generate-pickup-reaction-csv") === "true",
   pdfSections: options.get("--pdf-sections").split(","),
 };
 const failed = input.simulate === "failure";
@@ -29,6 +31,16 @@ if (!failed) {
   await artifact("result", "result.json", "application/json", JSON.stringify(summary));
   if (summary.generatePik) await artifact("pik", "pickup.pik", "text/plain; charset=utf-8", "PickUpNo,着目力,部材No\n    1    M    1\n");
   if (summary.generatePdf) await artifact("report", "report.pdf", "application/pdf", "%PDF-1.4\n% MCP transport fixture\n");
+  for (const [enabled, kind, components, units] of [
+    [summary.generatePickupDisplacementCsv, "pickup-displacement", ["dx", "dy", "dz", "rx", "ry", "rz"], ["m", "m", "m", "rad", "rad", "rad"]],
+    [summary.generatePickupReactionCsv, "pickup-reaction", ["fx", "fy", "fz", "mx", "my", "mz"], ["kN", "kN", "kN", "kN*m", "kN*m", "kN*m"]],
+  ]) {
+    if (!enabled) continue;
+    const header = ["pickup_id", "focus_component", "node_id", "max_combine_id", "min_combine_id",
+      ...["max", "min"].flatMap(side => components.map((component, index) => `${side}_${component} (${units[index]})`))];
+    const row = ["1", components[0], "節点1", "2", "3", "0.00012345678901234567", "2", "3", "4", "5", "6", "-0.0002", "-2", "-3", "-4", "-5", "-6"];
+    await artifact(kind, `${kind}.csv`, "text/csv; charset=utf-8", `${header.join(",")}\n${row.join(",")}\n`);
+  }
 }
 process.stdout.write(JSON.stringify({
   protocolVersion: 1, engine: "fempython", engineVersion: "test-1.0", readiness: "experimental",

@@ -78,7 +78,7 @@ test("lists all tools and reports independently available runners", async () => 
   }).engines;
   assert.equal(engines.fempython.enabled, true);
   assert.equal(engines.fempython.readiness, "experimental");
-  assert.deepEqual(engines.fempython.outputFormats, ["json", "pik", "pdf"]);
+  assert.deepEqual(engines.fempython.outputFormats, ["json", "pik", "pdf", "csv"]);
   assert.equal(engines.capacita.enabled, true);
   assert.deepEqual(engines.capacita.tools, [
     "webdan_inspect",
@@ -444,6 +444,8 @@ test("publishes the FrameWebforCS runner path and five-section contract", async 
   assert.equal(value.contract.engine, "fempython");
   assert.equal(value.contract.optionalArguments["--pdf-sections"]?.default,
     "input,section_force,pickup_section_force,displacement,pickup_displacement");
+  assert.equal(value.contract.optionalArguments["--generate-pickup-displacement-csv"]?.default, "false");
+  assert.equal(value.contract.optionalArguments["--generate-pickup-reaction-csv"]?.default, "false");
   const template = await client.callTool({ name: "get_environment_template", arguments: { engine: "fempython" } });
   assert.match(JSON.stringify(template.structuredContent), /STRUCTURAL_MCP_FEMPYTHON_RUNNER/);
 });
@@ -499,7 +501,74 @@ test("FrameWeb forwards optional output flags and selected report sections", asy
   assert.equal(result.isError, undefined);
   const value = result.structuredContent as { summary: { generatePdf: boolean; generatePik: boolean; pdfSections: string[] }; artifacts: Array<{ name: string }> };
   assert.deepEqual(value.artifacts.map((artifact) => artifact.name), ["result.json"]);
-  assert.deepEqual(value.summary, { command: "run", generatePdf: false, generatePik: false, pdfSections: ["input"] });
+  assert.deepEqual(value.summary, { command: "run", generatePdf: false, generatePik: false,
+    generatePickupDisplacementCsv: false, generatePickupReactionCsv: false, pdfSections: ["input"] });
+});
+
+test("FrameWeb exposes independent PICKUP CSV options and downloads exact UTF-8 bytes", async () => {
+  const tools = await client.listTools();
+  const schema = tools.tools.find((tool) => tool.name === "fempython_calculate")!.inputSchema;
+  for (const option of ["generatePickupDisplacementCsv", "generatePickupReactionCsv"]) {
+    assert.deepEqual((schema.properties![option] as { type: string; default: boolean }).type, "boolean");
+    assert.equal((schema.properties![option] as { default: boolean }).default, false);
+  }
+  for (const [generatePickupDisplacementCsv, generatePickupReactionCsv, dimension] of [
+    [true, false, 2], [false, true, 2], [true, true, 3], [false, false, 3],
+  ] as const) {
+    const result = await client.callTool({ name: "fempython_calculate", arguments: {
+      input: JSON.stringify({ dimension }), generatePdf: false, generatePik: false,
+      generatePickupDisplacementCsv, generatePickupReactionCsv,
+    } });
+    assert.equal(result.isError, undefined);
+    const manifest = result.structuredContent as {
+      jobId: string; summary: Record<string, unknown>;
+      artifacts: Array<{ artifactId: string; name: string; mediaType: string; bytes: number; sha256: string }>;
+    };
+    assert.equal(manifest.summary.generatePickupDisplacementCsv, generatePickupDisplacementCsv);
+    assert.equal(manifest.summary.generatePickupReactionCsv, generatePickupReactionCsv);
+    assert.deepEqual(manifest.artifacts.map((artifact) => artifact.name), ["result.json",
+      ...(generatePickupDisplacementCsv ? ["pickup-displacement.csv"] : []),
+      ...(generatePickupReactionCsv ? ["pickup-reaction.csv"] : [])]);
+    const job = await client.callTool({ name: "get_job", arguments: { jobId: manifest.jobId } });
+    assert.deepEqual((job.structuredContent as { artifacts: unknown[] }).artifacts, manifest.artifacts);
+    for (const artifact of manifest.artifacts.filter((item) => item.name.endsWith(".csv"))) {
+      assert.equal(artifact.mediaType, "text/csv; charset=utf-8");
+      assert.equal(artifact.artifactId, artifact.name.slice(0, -4));
+      const chunks: Buffer[] = [];
+      let offset = 0;
+      while (true) {
+        const read = await client.callTool({ name: "read_artifact", arguments: {
+          jobId: manifest.jobId, artifactId: artifact.artifactId, offsetBytes: offset, maxBytes: 31,
+        } });
+        assert.equal(read.isError, undefined);
+        const chunk = read.structuredContent as { base64: string; offsetBytes: number; nextOffsetBytes: number; eof: boolean; totalBytes: number };
+        const bytes = Buffer.from(chunk.base64, "base64");
+        assert.equal(chunk.offsetBytes, offset);
+        assert.equal(chunk.totalBytes, artifact.bytes);
+        assert.equal(chunk.nextOffsetBytes, offset + bytes.length);
+        chunks.push(bytes);
+        offset = chunk.nextOffsetBytes;
+        if (chunk.eof) break;
+        assert.ok(bytes.length > 0 && offset < artifact.bytes);
+      }
+      const bytes = Buffer.concat(chunks);
+      assert.equal(bytes.length, artifact.bytes);
+      assert.equal(createHash("sha256").update(bytes).digest("hex"), artifact.sha256);
+      assert.notEqual(bytes.subarray(0, 3).toString("hex"), "efbbbf");
+      const lines = bytes.toString("utf8").trim().split(/\r?\n/);
+      assert.equal(lines[0]!.split(",").length, 17);
+      assert.match(lines[1]!, /節点1,2,3,0\.00012345678901234567/);
+    }
+  }
+});
+
+test("FrameWeb can add both CSVs alongside the default PIK/PDF outputs", async () => {
+  const result = await client.callTool({ name: "fempython_calculate", arguments: {
+    input: "{}", generatePickupDisplacementCsv: true, generatePickupReactionCsv: true,
+  } });
+  assert.equal(result.isError, undefined);
+  assert.deepEqual((result.structuredContent as { artifacts: Array<{ name: string }> }).artifacts.map((artifact) => artifact.name),
+    ["result.json", "pickup.pik", "report.pdf", "pickup-displacement.csv", "pickup-reaction.csv"]);
 });
 
 test("FrameWeb accepts BOM-prefixed UTF-8 JSON from a Windows client", async () => {
@@ -510,7 +579,8 @@ test("FrameWeb accepts BOM-prefixed UTF-8 JSON from a Windows client", async () 
 
 test("FrameWeb rejects invalid sources and report selections", async () => {
   for (const args of [{}, { input: "{}", inputPath: "unused.json" }, { input: "[]" }, { input: "{" },
-    { input: "{}", pdfSections: [] }, { input: "{}", pdfSections: ["unknown"] }, { input: "{}", pdfSections: ["input", "input"] }]) {
+    { input: "{}", pdfSections: [] }, { input: "{}", pdfSections: ["unknown"] }, { input: "{}", pdfSections: ["input", "input"] },
+    { input: "{}", generatePickupDisplacementCsv: "true" }, { input: "{}", generatePickupReactionCsv: 1 }]) {
     const result = await client.callTool({ name: "fempython_calculate", arguments: args });
     assert.equal(result.isError, true, JSON.stringify(args));
   }
@@ -525,6 +595,23 @@ test("FrameWeb failures publish no artifacts and missing requested outputs fail 
     assert.equal(missing.isError, true);
     assert.match(JSON.stringify(missing.structuredContent), /required artifact/);
   }
+});
+
+test("FrameWeb requires each requested CSV and publishes no artifacts on failure", async () => {
+  const flags = { generatePik: false, generatePdf: false, generatePickupDisplacementCsv: true, generatePickupReactionCsv: true };
+  for (const name of ["pickup-displacement.csv", "pickup-reaction.csv"]) {
+    const result = await client.callTool({ name: "fempython_calculate", arguments: {
+      input: JSON.stringify({ omit: name }), ...flags,
+    } });
+    assert.equal(result.isError, true);
+    assert.match(JSON.stringify(result.structuredContent), /required artifact/);
+    assert.deepEqual((result.structuredContent as { artifacts?: unknown[] } | undefined)?.artifacts ?? [], []);
+  }
+  const result = await client.callTool({ name: "fempython_calculate", arguments: {
+    input: '{"simulate":"failure"}', ...flags,
+  } });
+  assert.equal(result.isError, true);
+  assert.deepEqual((result.structuredContent as { artifacts: unknown[] }).artifacts, []);
 });
 
 test("a missing FrameWeb runner does not disable other engines", async () => {
