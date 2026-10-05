@@ -5,9 +5,11 @@ import { delimiter, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface AppConfig {
+  femPythonRunner: string | null;
   capacitaRunner: string | null;
   soilStructureRunner: string | null;
   runnerConfigurations: {
+    femPython: RunnerConfiguration;
     capacita: RunnerConfiguration;
     soilStructure: RunnerConfiguration;
   };
@@ -75,6 +77,10 @@ async function runnerConfiguration(name: string, fallback: string): Promise<Runn
 }
 
 export async function loadConfig(): Promise<AppConfig> {
+  const femPythonConfiguration = await runnerConfiguration(
+    "STRUCTURAL_MCP_FEMPYTHON_RUNNER",
+    resolve(sourceRoot, "FEMPython/FrameWebforCS/Headless/bin/Release/net10.0-windows/FrameWebforCS.Headless.exe"),
+  );
   const capacitaConfiguration = await runnerConfiguration(
     "STRUCTURAL_MCP_WEBDAN_RUNNER",
     resolve(sourceRoot, "Capacita/WebDanforCS/Headless/bin/Release/net8.0/WebDanforCS.Headless.dll"),
@@ -95,9 +101,11 @@ export async function loadConfig(): Promise<AppConfig> {
 
   await mkdir(jobRoot, { recursive: true });
   return {
+    femPythonRunner: femPythonConfiguration.resolvedPath,
     capacitaRunner: capacitaConfiguration.resolvedPath,
     soilStructureRunner: soilStructureConfiguration.resolvedPath,
     runnerConfigurations: {
+      femPython: femPythonConfiguration,
       capacita: capacitaConfiguration,
       soilStructure: soilStructureConfiguration,
     },

@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { z } from "zod";
 import type { AppConfig } from "./config.js";
+import { runnerEnvelopeSchema } from "./contracts.js";
 import type { ArtifactRecord, JobManifest, RunnerEnvelope } from "./contracts.js";
 
 const jobIdPattern = /^(\d{4}-\d{2}-\d{2})_([0-9a-f-]{36})$/;
@@ -91,6 +93,97 @@ export async function loadManifest(jobId: string, config: AppConfig): Promise<Jo
   const manifestPath = await realpath(resolve(directory, "manifest.json"));
   if (!isInside(config.jobRoot, manifestPath)) throw new Error("job path escaped the job root");
   return JSON.parse(await readFile(manifestPath, "utf8")) as JobManifest;
+}
+
+const storedManifestSchema = runnerEnvelopeSchema.omit({ protocolVersion: true, artifacts: true }).extend({
+  schemaVersion: z.literal(1),
+  jobId: z.string(),
+  tool: z.string().min(1),
+  createdAt: z.string(),
+  completedAt: z.string(),
+  artifacts: z.array(z.object({
+    artifactId: z.string().regex(/^[a-zA-Z0-9_-]+$/),
+    name: z.string().min(1),
+    mediaType: z.string().min(1),
+    relativePath: z.string().min(1),
+    bytes: z.number().int().nonnegative(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  })),
+});
+
+/** Return exact artifact bytes; clients decode base64 and save them on their own filesystem. */
+export async function readArtifact(
+  jobId: string,
+  artifactId: string,
+  offsetBytes: number,
+  maxBytes: number,
+  config: AppConfig,
+): Promise<{ base64: string; offsetBytes: number; nextOffsetBytes: number; eof: boolean; totalBytes: number }> {
+  if (!Number.isSafeInteger(offsetBytes) || offsetBytes < 0) {
+    throw new Error("offsetBytes must be a nonnegative safe integer");
+  }
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+    throw new Error("maxBytes must be a positive safe integer");
+  }
+  if (typeof artifactId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(artifactId)) {
+    throw new Error("invalid artifactId");
+  }
+  if (!Number.isSafeInteger(config.maxTextReadBytes) || config.maxTextReadBytes <= 0 ||
+      !Number.isSafeInteger(config.maxArtifactBytes) || config.maxArtifactBytes <= 0) {
+    throw new Error("artifact read limits must be positive safe integers");
+  }
+
+  const directory = await realpath(jobDirectory(jobId, config));
+  const root = await realpath(config.jobRoot);
+  if (!isInside(root, directory) || relative(root, directory) === "") {
+    throw new Error("job path escaped the job root");
+  }
+  const manifestPath = await realpath(resolve(directory, "manifest.json"));
+  if (!isInside(directory, manifestPath)) throw new Error("manifest path escaped the job directory");
+  const parsed = storedManifestSchema.safeParse(JSON.parse(await readFile(manifestPath, "utf8")));
+  if (!parsed.success || parsed.data.jobId !== jobId) throw new Error("invalid job manifest");
+  const manifest = parsed.data;
+  if (new Set(manifest.artifacts.map((item) => item.artifactId)).size !== manifest.artifacts.length) {
+    throw new Error("invalid job manifest: duplicate artifactId");
+  }
+  const artifact = manifest.artifacts.find((item) => item.artifactId === artifactId);
+  if (!artifact) throw new Error("artifactId was not found in this job");
+  if (isAbsolute(artifact.relativePath)) throw new Error("artifact path must be relative");
+  const expectedOutput = resolve(directory, "output");
+  const output = await realpath(expectedOutput);
+  if (!isInside(expectedOutput, output)) throw new Error("output path escaped the output directory");
+  const candidate = resolve(directory, artifact.relativePath);
+  if (!isInside(expectedOutput, candidate)) throw new Error("artifact path escaped the output directory");
+  const path = await realpath(candidate);
+  if (!isInside(output, path) || path === manifestPath) throw new Error("artifact path escaped the output directory");
+
+  const file = await open(path, "r");
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.size !== artifact.bytes) throw new Error("artifact size mismatch");
+    if (info.size > config.maxArtifactBytes) throw new Error("artifact exceeds the configured size limit");
+    const start = Math.min(offsetBytes, info.size);
+    const end = start + Math.min(maxBytes, config.maxTextReadBytes, info.size - start);
+    const chunk = Buffer.alloc(end - start);
+    const buffer = Buffer.alloc(64 * 1024);
+    const hash = createHash("sha256");
+    let position = 0;
+    // Capture the returned chunk from the same bytes used for integrity verification.
+    while (position < info.size) {
+      const { bytesRead } = await file.read(buffer, 0, Math.min(buffer.length, info.size - position), position);
+      if (bytesRead === 0) throw new Error("artifact size mismatch");
+      hash.update(buffer.subarray(0, bytesRead));
+      const from = Math.max(start, position);
+      const to = Math.min(end, position + bytesRead);
+      if (to > from) buffer.copy(chunk, from - start, from - position, to - position);
+      position += bytesRead;
+    }
+    if ((await file.stat()).size !== info.size) throw new Error("artifact size mismatch");
+    if (hash.digest("hex") !== artifact.sha256) throw new Error("artifact hash mismatch");
+    return { base64: chunk.toString("base64"), offsetBytes: start, nextOffsetBytes: end, eof: end === info.size, totalBytes: info.size };
+  } finally {
+    await file.close();
+  }
 }
 
 export async function readTextArtifact(

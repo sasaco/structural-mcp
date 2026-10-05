@@ -48,6 +48,7 @@ export interface JobManifest {
   schemaVersion: 1;
   jobId: string;
   tool:
+    | "fempython_calculate"
     | "webdan_calculate"
     | "webdan_inspect"
     | "webdan_validate"
@@ -57,7 +58,7 @@ export interface JobManifest {
     | "soilstructure_calculate"
     | "soilstructure_export_sdc"
     | "soilstructure_ground_displacement";
-  engine: "webdan2" | "steeldan" | "soilstructure";
+  engine: "fempython" | "webdan2" | "steeldan" | "soilstructure";
   engineVersion: string;
   readiness: string;
   createdAt: string;

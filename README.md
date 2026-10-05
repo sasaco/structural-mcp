@@ -6,7 +6,7 @@
 
 | Submodule | MCP で扱う領域 | 主な成果物 | 現在の状態 |
 |---|---|---|---|
-| [`FEMPython`](./FEMPython/) | 骨組・有限要素解析 | 解析結果 JSON | submodule 追加済み、MCP adapter は未実装 |
+| [`FEMPython`](./FEMPython/) | 骨組・有限要素解析 | 解析結果 JSON、PIK、PDF | FrameWebforCS非対話runner接続済み（experimental） |
 | [`Capacita`](./Capacita/) | RC・鋼部材の断面照査 | 結果 JSON、PDF、Markdown、Excel | 既存 adapter あり。旧 runner path から submodule への移行中 |
 | [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算、SNAP連携、地盤応答変位 | 中間結果 JSON、Excel、PDF、SDC、JOT | MCP adapter 接続済み。headless runner を個別設定して利用 |
 
@@ -15,12 +15,14 @@
 
 ## 現在の MCP interface
 
-ルートの TypeScript server には、Capacita と SoilStructure の protocol v1 runner を接続できます。
+ルートの TypeScript server には、FEMPython、Capacita、SoilStructure の protocol v1 runner を接続できます。
 
 | Tool | Purpose | Output |
 |---|---|---|
 | `get_capabilities` | engine の利用可否、readiness、制限を確認 | capability 一覧 |
 | `get_environment_template` | AIが `.env` を作成するときのrunner設定名と推奨絶対パスを取得 | dotenv template、pathの読取可否 |
+| `fempython_get_runner_contract` | FrameWebforCS runnerの起動方法・PDF項目・成果物取得手順を取得 | runner path、command、artifact仕様 |
+| `fempython_calculate` | FrameWebforCS保存JSONを再計算 | `result.json`、任意 `pickup.pik`、任意 `report.pdf` |
 | `webdan_inspect` | WDJをCapacitaのdomain modelで読取り、入力を正規化 | 部材・算出点・配筋・材料・断面力・計算条件、診断 |
 | `webdan_validate` | WDJの構造・参照・選択・主要な重複fieldを検証 | 検証結果、診断 |
 | `webdan_compose_wdj` | 既存WDJへ明示された意味変更を適用 | 新しいWDJ、変更差分、検証結果 |
@@ -33,9 +35,10 @@
 | `soilstructure_export_sdc` | 杭計算と `sdcExport` 設定からSNAP連携データを生成 | `result.json`、通常・液状化L1/L2 SDC |
 | `soilstructure_ground_displacement` | `groundDisplacement` 設定からL1/L2地盤応答変位を計算 | `result.json`、任意 PDF、任意 L1/L2 JOT |
 | `get_job` | 過去の job を取得 | manifest と artifact metadata |
+| `read_artifact` | PDF・PIK等の検証済み成果物をbyte範囲で取得 | Base64、offset、EOF、総byte数 |
 | `read_text_artifact` | JSON・Markdown・text 成果物を範囲読取 | UTF-8 text fragment |
 
-FEMPython はリポジトリへの組込みまで完了していますが、tool と runner の接続は今後の実装対象です。Capacita と SoilStructure の runner は独立して検出されるため、一方が未導入でも MCP server と他方の engine は利用できます。
+各 runner は独立して検出されるため、一つが未導入でも MCP server と他の engine は利用できます。FEMPythonはWindows上のFrameWebforCSと同じ計算・PICKUP・印刷処理を使います。
 
 計算 tool は PDF や巨大な結果を MCP 応答へ埋め込みません。短い summary と artifact metadata を返し、完全な結果は job directory へ保存します。`executionStatus` と `engineeringStatus` は別項目です。process が正常終了しても、照査結果が `not_ok` になることがあります。
 
@@ -48,7 +51,7 @@ Codex / MCP client
         v
 structural-mcp (Node.js 24 / TypeScript)
         |
-        +-- FEMPython adapter ------> FEMPython        （未実装）
+        +-- FEMPython adapter ------> FrameWebforCS.Headless / FEMPython
         +-- Capacita adapter -------> RcDan / SteelDan （既存互換 tool）
         `-- SoilStructure adapter --> SoilPile / SoilDisp / headless runner
 ```
@@ -88,6 +91,8 @@ submodule はそれぞれ検証済み commit に固定されています。各 s
 npm ci
 npm run build
 dotnet build .\Capacita\WebDanforCS\Headless\WebDanforCS.Headless.csproj -c Release
+uv sync --project .\FEMPython\FrameWeb --locked
+dotnet build .\FEMPython\FrameWebforCS\Headless\FrameWebforCS.Headless.csproj -c Release
 ```
 
 現行の Capacita adapter は、protocol v1 互換の `WebDanforCS.Headless` runnerを `STRUCTURAL_MCP_WEBDAN_RUNNER` で受け取ります。未指定時は、このリポジトリ内のRelease buildを使用します。
@@ -109,6 +114,37 @@ run-ground-displacement --input <file> --output-dir <empty-dir> --generate-pdf t
 client AIは、入力作成前に`soilstructure_get_schema`、standalone Python作成前に`soilstructure_get_runner_contract`を呼びます。設計条件が不足している場合は推測せず、不足fieldをユーザーへ確認します。作成後はJSONをinlineで`soilstructure_validate`へ渡して検証できます。standalone PythonはSoilStructure runnerを直接呼び、runnerが返すartifactのbytesとSHA-256を検証してから、指定されたSDC/PDFへ原子的に配置します。この経路では、MCP serverに対象プロジェクトのドライブをallowed rootとして登録する必要はありません。
 
 別プロジェクトからrunnerを直接呼ぶスクリプトの `.env` をAIに作成させる場合、AIは最初に `get_environment_template` を呼びます。応答には設定キー、現在の推奨絶対path、runnerが読み取り可能かどうか、およびそのまま保存できるdotenv形式の `content` が含まれます。MCPは既存の `.env` や秘密情報を読み取りません。
+
+### FrameWebforCSの計算・PIK・PDF出力
+
+`fempython_calculate` はFrameWebforCSで保存したJSONを受け取り、保存済み結果を使わず再計算します。`generatePik`、`generatePdf` は既定で `true` です。PIKには2次元モデルとPICKUP定義が必要です。PDFの既定項目は、入力データ・断面力・pickup断面力・変位・pickup変位です。`pdfSections` に次のIDの部分集合を指定すると掲載項目を変更できます。
+
+```json
+{
+  "input": "<クライアントが読み取ったFrameWebforCS JSONの文字列>",
+  "generatePik": true,
+  "generatePdf": true,
+  "pdfSections": ["input", "section_force", "pickup_section_force", "displacement", "pickup_displacement"]
+}
+```
+
+入力・最終出力のファイル操作はクライアントが担当できます。例えばKドライブのJSONをクライアントが読み取り、`input` に文字列として渡します。この経路では、クライアントの作業フォルダをMCPのallowed rootに登録する必要はありません。
+
+応答の `jobId` と各 `artifactId` を `read_artifact` に渡し、返された `base64` を復号して `offsetBytes` 順に連結します。`nextOffsetBytes` を次の読取位置にし、`eof: true` まで取得します。総byte数とSHA-256を計算応答のmetadataと照合した後、`pickup.pik` を依頼されたPIKパス、`report.pdf` を依頼されたPDFパスへクライアント側で保存します。MCPはクライアントの保存先パスを受け取りません。`read_artifact` は成果物の改変・job外への参照を拒否します。
+
+runnerは `FrameWeb/src` と `FrameWeb/.venv` を探索するため、FEMPythonチェックアウト内の標準build先に配置してください。Windows x64、.NET 10 Desktop Runtimeと `uv sync --project FEMPython/FrameWeb --locked` で準備したPython環境が必要です。既定以外のrunnerは `STRUCTURAL_MCP_FEMPYTHON_RUNNER` で指定できます。単体起動の詳細は `fempython_get_runner_contract` と [headless README](./FEMPython/FrameWebforCS/Headless/README.md) を参照してください。
+
+実runnerとMCPの接続確認は次のコマンドで行います。クライアントが入力をinlineで渡し、3成果物をMCPから分割取得して検証します。入力元や既存出力は上書きせず、検証ファイルは `.structural-mcp/frame-smoke-*/client-output/` に残します。計算toolのclient timeoutはrunnerのtimeoutより長く設定してください（このスクリプトは240秒）。
+
+```powershell
+npm run smoke:fempython -- 'K:\レールウェイコンサルタント\26_ピット\計算書\02_pre\05_線路直角方向の計算\線路直角方向.json'
+```
+
+返された `outputDirectory` を次の検証スクリプトへ渡すと、PIK全行の着目位置・出典ケース・連動する断面力を結果JSONと照合し、PDFの5項目と内部節点名の欠落を検査します。`--render` は全ページの一覧画像と代表ページを `qa/` に生成します。検証用依存は `uv` の一時環境へ導入され、計算プロジェクトの依存は変更しません。
+
+```powershell
+uv run --no-project --with pymupdf --with pillow python scripts/verify-frameweb-exports.py '<outputDirectory>' --render
+```
 
 ### 杭計算のExcel・PDF・SDC出力
 
@@ -134,6 +170,7 @@ standalone Python雛形では `run_soilstructure(..., generate_excel=True)` に�
 
 | Environment variable | Default | Meaning |
 |---|---|---|
+| `STRUCTURAL_MCP_FEMPYTHON_RUNNER` | `./FEMPython/FrameWebforCS/Headless/bin/Release/net10.0-windows/FrameWebforCS.Headless.exe` | FrameWebforCS protocol v1 runner（Windows / .NET 10 / Python環境が必要） |
 | `STRUCTURAL_MCP_WEBDAN_RUNNER` | `./Capacita/WebDanforCS/Headless/bin/Release/net8.0/WebDanforCS.Headless.dll` | Capacita protocol v1 互換 runner DLL の絶対 path。変数名は後方互換のため維持 |
 | `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure/Headless/bin/Release/net10.0/SoilStructure.Headless.exe` | SoilStructure protocol v1 runner の絶対 path |
 | `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP 所有 job root |
@@ -152,6 +189,7 @@ runner と MCP server を build した後、互換 runner の実際の配置を�
 
 ```powershell
 codex mcp add structural-mcp `
+  --env STRUCTURAL_MCP_FEMPYTHON_RUNNER=C:\path\to\FEMPython\FrameWebforCS\Headless\bin\Release\net10.0-windows\FrameWebforCS.Headless.exe `
   --env STRUCTURAL_MCP_WEBDAN_RUNNER=C:\path\to\capacita-headless.dll `
   --env STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER=C:\path\to\SoilStructure.Headless.dll `
   --env STRUCTURAL_MCP_JOB_ROOT=C:\path\to\structural-mcp-jobs `

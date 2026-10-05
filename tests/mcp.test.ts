@@ -10,6 +10,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const fixtureRoot = resolve(repositoryRoot, "tests/fixtures");
 const fakeRunner = resolve(fixtureRoot, "fake-runner.mjs");
+const fakeFemRunner = resolve(fixtureRoot, "fake-fempython-runner.mjs");
 let jobRoot: string;
 let client: Client;
 
@@ -22,6 +23,7 @@ async function connect(overrides: Record<string, string> = {}): Promise<Client> 
       ...process.env,
       STRUCTURAL_MCP_WEBDAN_RUNNER: fakeRunner,
       STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER: fakeRunner,
+      STRUCTURAL_MCP_FEMPYTHON_RUNNER: fakeFemRunner,
       STRUCTURAL_MCP_JOB_ROOT: jobRoot,
       STRUCTURAL_MCP_ALLOWED_ROOTS: fixtureRoot,
       STRUCTURAL_MCP_ENABLE_STEELDAN: "true",
@@ -45,9 +47,12 @@ after(async () => {
 test("lists all tools and reports independently available runners", async () => {
   const result = await client.listTools();
   assert.deepEqual(result.tools.map((tool) => tool.name).sort(), [
+    "fempython_calculate",
+    "fempython_get_runner_contract",
     "get_capabilities",
     "get_environment_template",
     "get_job",
+    "read_artifact",
     "read_text_artifact",
     "soilstructure_calculate",
     "soilstructure_export_sdc",
@@ -65,11 +70,15 @@ test("lists all tools and reports independently available runners", async () => 
   assert.equal(capabilities.isError, undefined);
   const engines = (capabilities.structuredContent as {
     engines: {
+      fempython: { enabled: boolean; readiness: string; outputFormats: string[] };
       capacita: { enabled: boolean; tools: string[] };
       soilstructure: { enabled: boolean; outputFormats: string[]; tools: string[] };
       steeldan: { enabled: boolean; readiness: string };
     };
   }).engines;
+  assert.equal(engines.fempython.enabled, true);
+  assert.equal(engines.fempython.readiness, "experimental");
+  assert.deepEqual(engines.fempython.outputFormats, ["json", "pik", "pdf"]);
   assert.equal(engines.capacita.enabled, true);
   assert.deepEqual(engines.capacita.tools, [
     "webdan_inspect",
@@ -421,4 +430,113 @@ test("rejects an input path outside allowed roots", async () => {
   } finally {
     await rm(external, { recursive: true, force: true });
   }
+});
+
+test("publishes the FrameWebforCS runner path and five-section contract", async () => {
+  const contract = await client.callTool({ name: "fempython_get_runner_contract", arguments: {} });
+  assert.equal(contract.isError, undefined);
+  const value = contract.structuredContent as {
+    runner: { path: string; readable: boolean };
+    contract: { engine: string; optionalArguments: Record<string, { default: string }> };
+  };
+  assert.equal(value.runner.path, fakeFemRunner);
+  assert.equal(value.runner.readable, true);
+  assert.equal(value.contract.engine, "fempython");
+  assert.equal(value.contract.optionalArguments["--pdf-sections"]?.default,
+    "input,section_force,pickup_section_force,displacement,pickup_displacement");
+  const template = await client.callTool({ name: "get_environment_template", arguments: { engine: "fempython" } });
+  assert.match(JSON.stringify(template.structuredContent), /STRUCTURAL_MCP_FEMPYTHON_RUNNER/);
+});
+
+test("runs FrameWeb inline outside server roots and downloads exact PDF/PIK bytes", async () => {
+  const external = await mkdtemp(resolve(tmpdir(), "structural-mcp-fem-client-"));
+  try {
+    const inputPath = resolve(external, "線路直角方向.json");
+    await writeFile(inputPath, '{"dimension":2}');
+    const result = await client.callTool({ name: "fempython_calculate", arguments: { input: await readFile(inputPath, "utf8") } });
+    assert.equal(result.isError, undefined);
+    const manifest = result.structuredContent as {
+      jobId: string; ok: boolean; engine: string; engineeringStatus: string;
+      summary: { pdfSections: string[] };
+      artifacts: Array<{ artifactId: string; name: string; bytes: number; sha256: string }>;
+    };
+    assert.equal(manifest.ok, true);
+    assert.equal(manifest.engine, "fempython");
+    assert.equal(manifest.engineeringStatus, "not_checked");
+    assert.deepEqual(manifest.summary.pdfSections, ["input", "section_force", "pickup_section_force", "displacement", "pickup_displacement"]);
+    assert.deepEqual(manifest.artifacts.map((artifact) => artifact.name), ["result.json", "pickup.pik", "report.pdf"]);
+    for (const artifact of manifest.artifacts) {
+      const chunks: Buffer[] = [];
+      let offset = 0;
+      do {
+        const read = await client.callTool({ name: "read_artifact", arguments: {
+          jobId: manifest.jobId, artifactId: artifact.artifactId, offsetBytes: offset, maxBytes: 7,
+        } });
+        assert.equal(read.isError, undefined);
+        const chunk = read.structuredContent as { base64: string; offsetBytes: number; nextOffsetBytes: number; eof: boolean; totalBytes: number };
+        assert.equal(chunk.offsetBytes, offset);
+        assert.equal(chunk.totalBytes, artifact.bytes);
+        chunks.push(Buffer.from(chunk.base64, "base64"));
+        assert.equal(chunk.nextOffsetBytes, offset + chunks.at(-1)!.length);
+        offset = chunk.nextOffsetBytes;
+        if (chunk.eof) break;
+        assert.ok(chunks.at(-1)!.length > 0);
+      } while (offset <= artifact.bytes);
+      const bytes = Buffer.concat(chunks);
+      assert.equal(bytes.length, artifact.bytes);
+      assert.equal(createHash("sha256").update(bytes).digest("hex"), artifact.sha256);
+      await writeFile(resolve(external, artifact.name), bytes);
+      if (artifact.name === "report.pdf") assert.equal(bytes.subarray(0, 5).toString(), "%PDF-");
+      if (artifact.name === "pickup.pik") assert.match(bytes.toString("utf8"), /着目力/);
+    }
+  } finally { await rm(external, { recursive: true, force: true }); }
+});
+
+test("FrameWeb forwards optional output flags and selected report sections", async () => {
+  const result = await client.callTool({ name: "fempython_calculate", arguments: {
+    input: "{}", generatePdf: false, generatePik: false, pdfSections: ["input"],
+  } });
+  assert.equal(result.isError, undefined);
+  const value = result.structuredContent as { summary: { generatePdf: boolean; generatePik: boolean; pdfSections: string[] }; artifacts: Array<{ name: string }> };
+  assert.deepEqual(value.artifacts.map((artifact) => artifact.name), ["result.json"]);
+  assert.deepEqual(value.summary, { command: "run", generatePdf: false, generatePik: false, pdfSections: ["input"] });
+});
+
+test("FrameWeb accepts BOM-prefixed UTF-8 JSON from a Windows client", async () => {
+  const result = await client.callTool({ name: "fempython_calculate", arguments: { input: '\uFEFF{"dimension":2}' } });
+  assert.equal(result.isError, undefined);
+  assert.equal((result.structuredContent as { ok: boolean }).ok, true);
+});
+
+test("FrameWeb rejects invalid sources and report selections", async () => {
+  for (const args of [{}, { input: "{}", inputPath: "unused.json" }, { input: "[]" }, { input: "{" },
+    { input: "{}", pdfSections: [] }, { input: "{}", pdfSections: ["unknown"] }, { input: "{}", pdfSections: ["input", "input"] }]) {
+    const result = await client.callTool({ name: "fempython_calculate", arguments: args });
+    assert.equal(result.isError, true, JSON.stringify(args));
+  }
+});
+
+test("FrameWeb failures publish no artifacts and missing requested outputs fail closed", async () => {
+  const failed = await client.callTool({ name: "fempython_calculate", arguments: { input: '{"simulate":"failure"}' } });
+  assert.equal(failed.isError, true);
+  assert.deepEqual((failed.structuredContent as { artifacts: unknown[] }).artifacts, []);
+  for (const name of ["result.json", "pickup.pik", "report.pdf"]) {
+    const missing = await client.callTool({ name: "fempython_calculate", arguments: { input: JSON.stringify({ omit: name }) } });
+    assert.equal(missing.isError, true);
+    assert.match(JSON.stringify(missing.structuredContent), /required artifact/);
+  }
+});
+
+test("a missing FrameWeb runner does not disable other engines", async () => {
+  const isolated = await connect({ STRUCTURAL_MCP_FEMPYTHON_RUNNER: resolve(jobRoot, "missing-frame.exe") });
+  try {
+    const caps = await isolated.callTool({ name: "get_capabilities", arguments: {} });
+    const engines = (caps.structuredContent as { engines: Record<string, { enabled: boolean }> }).engines;
+    assert.equal(engines.fempython?.enabled, false);
+    assert.equal(engines.capacita?.enabled, true);
+    assert.equal(engines.soilstructure?.enabled, true);
+    const result = await isolated.callTool({ name: "fempython_calculate", arguments: { input: "{}" } });
+    assert.equal(result.isError, true);
+    assert.match(JSON.stringify(result.structuredContent), /fempython_unavailable/);
+  } finally { await isolated.close(); }
 });

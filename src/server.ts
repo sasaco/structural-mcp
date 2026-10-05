@@ -7,12 +7,14 @@ import type { JobManifest } from "./contracts.js";
 import {
   createJob,
   loadManifest,
+  readArtifact,
   readTextArtifact,
   resolveInputPath,
   saveManifest,
   verifyArtifacts,
 } from "./jobs.js";
 import { runEngine } from "./runner.js";
+import { femPythonPdfSections, femPythonRunnerContract } from "./fempython-contract.js";
 import {
   soilStructureDocumentSchema,
   soilStructureExamples,
@@ -91,6 +93,7 @@ interface CalculationSpec {
   jobExtension: ".wdj" | ".wsj" | ".json" | ".soilstructure.json";
   runnerOptions: readonly string[] | ((outputDirectory: string) => readonly string[]);
   jsonInput?: boolean;
+  requiredArtifacts?: readonly { relativePath: string; mediaType: string }[];
   label: string;
 }
 
@@ -128,6 +131,8 @@ async function inputContents(
     contents = await readFile(resolved, "utf8");
   }
   if (jsonInput) {
+    // UTF-8 files saved by Windows clients may start with a BOM.
+    if (contents.startsWith("\uFEFF")) contents = contents.slice(1);
     try {
       const parsed: unknown = JSON.parse(contents);
       if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -161,6 +166,18 @@ async function calculate(
     config,
   );
   const artifacts = await verifyArtifacts(job.outputDirectory, envelope, config);
+  if (spec.requiredArtifacts) {
+    if (!envelope.ok && artifacts.length > 0) throw new Error("Failed runner returned partial artifacts");
+    if (envelope.ok) {
+      if (envelope.executionStatus !== "success") throw new Error("Runner success status is inconsistent");
+      for (const required of spec.requiredArtifacts) {
+        if (!envelope.artifacts.some((artifact) => artifact.relativePath === required.relativePath &&
+            artifact.mediaType.split(";")[0]?.trim().toLowerCase() === required.mediaType && artifact.bytes > 0)) {
+          throw new Error(`Runner did not produce required artifact: ${required.relativePath}`);
+        }
+      }
+    }
+  }
   const manifest: JobManifest = {
     schemaVersion: 1,
     jobId: job.jobId,
@@ -211,23 +228,25 @@ function invalidSourceSelection(inputPath: string | undefined, input: string | u
 }
 
 export function createServer(config: AppConfig): McpServer {
+  const femPythonEnabled = config.femPythonRunner !== null;
   const capacitaEnabled = config.capacitaRunner !== null;
   const soilStructureEnabled = config.soilStructureRunner !== null;
   const steelDanEnabled = capacitaEnabled && config.steelDanEnabled;
   const server = new McpServer(
     { name: "structural-mcp", version: "0.2.0" },
     {
-      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateへinlineで渡して対象operationごとに検証できます。standalone scriptはrunnerを直接呼び、artifactを検証して指定先へ配置します。executionStatusとengineeringStatusは別々に確認し、MCP計算の成果物はjob単位で扱ってください。",
+      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。FrameWebforCSの保存JSONはfempython_calculateのinputへ文字列で渡せます。PIKと入力・断面力・pickup断面力・変位・pickup変位のPDFを生成し、read_artifactで取得した成果物をclient側の指定先へ配置します。standalone利用はfempython_get_runner_contractを参照してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateへinlineで渡して対象operationごとに検証できます。standalone scriptはrunnerを直接呼び、artifactを検証して指定先へ配置します。executionStatusとengineeringStatusは別々に確認し、MCP計算の成果物はjob単位で扱ってください。",
     },
   );
 
   server.registerTool("get_environment_template", {
     title: "Get structural-mcp .env template",
     description: "AIが対象プロジェクトの.envを作成するときに使うrunner設定名、推奨絶対パス、読取可否を返します。既存.envや秘密情報は読み取りません。",
-    inputSchema: { engine: z.enum(["all", "capacita", "soilstructure"]).default("all") },
+    inputSchema: { engine: z.enum(["all", "fempython", "capacita", "soilstructure"]).default("all") },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ engine }) => {
     const entries = [
+      { engine: "fempython", ...config.runnerConfigurations.femPython },
       { engine: "capacita", ...config.runnerConfigurations.capacita },
       { engine: "soilstructure", ...config.runnerConfigurations.soilStructure },
     ].filter((entry) => engine === "all" || entry.engine === engine).map((entry) => ({
@@ -257,7 +276,15 @@ export function createServer(config: AppConfig): McpServer {
   }, async () => textResponse({
     protocolVersion: 1,
     engines: {
-      fempython: { enabled: false, readiness: "unavailable", note: "MCP adapter is not implemented" },
+      fempython: {
+        enabled: femPythonEnabled,
+        readiness: femPythonEnabled ? "experimental" : "unavailable",
+        inputFormats: [".json", "inline-json"],
+        outputFormats: ["json", "pik", "pdf"],
+        tools: ["fempython_calculate", "fempython_get_runner_contract"],
+        defaultPdfSections: femPythonPdfSections,
+        pikRequirements: "2次元モデルと計算可能なPICKUP定義が必要です。",
+      },
       capacita: {
         enabled: capacitaEnabled,
         readiness: capacitaEnabled ? "production" : "unavailable",
@@ -289,7 +316,58 @@ export function createServer(config: AppConfig): McpServer {
       allowedInputRoots: config.allowedInputRoots,
     },
     limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxArtifactBytes: config.maxArtifactBytes },
-  }, `Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}です。`));
+  }, `FEMPythonは${femPythonEnabled ? "利用可能" : "利用不可"}、Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}です。`));
+
+  server.registerTool("fempython_get_runner_contract", {
+    title: "Get FrameWebforCS runner contract",
+    description: "FrameWebforCSの非対話runnerのパス、起動引数、PDF項目、PIK形式、成果物の検証とclient側保存の手順を返します。",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async () => {
+    const runner = config.runnerConfigurations.femPython;
+    return textResponse({
+      schemaVersion: 1,
+      runner: {
+        environmentVariable: runner.environmentVariable,
+        path: runner.resolvedPath ?? runner.configuredPath,
+        readable: runner.resolvedPath !== null,
+        source: runner.source,
+      },
+      contract: femPythonRunnerContract,
+    }, "FrameWebforCS runner contractを返しました。");
+  });
+
+  server.registerTool("fempython_calculate", {
+    title: "Calculate FrameWebforCS model and export PIK/PDF",
+    description: "FrameWebforCSの保存JSONを再計算し、result.json、任意の2次元PIKとPDFをjob成果物として返します。PDF既定項目は入力データ・断面力・pickup断面力・変位・pickup変位です。clientが読み取ったJSONをinputへ文字列で渡し、read_artifactで取得した成果物をclientの指定先へ保存できます。inputPathまたはinputの一方だけを指定してください。",
+    inputSchema: {
+      ...sourceShape,
+      generatePdf: z.boolean().default(true),
+      generatePik: z.boolean().default(true).describe("2次元PICKUP断面力のpickup.pikを生成する"),
+      pdfSections: z.array(z.enum(femPythonPdfSections)).min(1).max(femPythonPdfSections.length)
+        .refine((sections) => new Set(sections).size === sections.length, "pdfSections must not contain duplicates")
+        .default([...femPythonPdfSections]),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, input, generatePdf, generatePik, pdfSections }) => {
+    const sourceError = invalidSourceSelection(inputPath, input);
+    if (sourceError) return sourceError;
+    if (config.femPythonRunner === null) return unavailable("fempython", "STRUCTURAL_MCP_FEMPYTHON_RUNNER");
+    try {
+      return await calculate({
+        tool: "fempython_calculate", engine: "fempython", runnerPath: config.femPythonRunner,
+        command: "run", extensions: [".json"], jobExtension: ".json",
+        runnerOptions: ["--generate-pdf", String(generatePdf), "--generate-pik", String(generatePik),
+          "--pdf-sections", pdfSections.join(",")],
+        requiredArtifacts: [
+          { relativePath: "result.json", mediaType: "application/json" },
+          ...(generatePik ? [{ relativePath: "pickup.pik", mediaType: "text/plain" }] : []),
+          ...(generatePdf ? [{ relativePath: "report.pdf", mediaType: "application/pdf" }] : []),
+        ],
+        jsonInput: true, label: "FrameWebforCS 計算・出力",
+      }, inputPath, input, config);
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
+  });
 
   server.registerTool("webdan_calculate", {
     title: "Run Capacita RC verification",
@@ -532,6 +610,25 @@ export function createServer(config: AppConfig): McpServer {
       return textResponse(publicManifest(manifest), `${manifest.engine} job ${jobId}: ${manifest.executionStatus}`);
     } catch (error) {
       return textResponse({ ok: false, category: "input_access", errors: [{ code: "job_not_found", message: error instanceof Error ? error.message : String(error) }] }, "jobを取得できませんでした。", true);
+    }
+  });
+
+  server.registerTool("read_artifact", {
+    title: "Read an artifact as Base64 bytes",
+    description: "jobに属する検証済み成果物をbyte範囲で取得します。base64を復号してoffset順に連結し、metadataのbytesとSHA-256を検証してclient側の指定先へ保存してください。PDF・PIKを含むbinaryに対応します。",
+    inputSchema: {
+      jobId: z.string().min(1),
+      artifactId: z.string().min(1),
+      offsetBytes: z.number().int().nonnegative().default(0),
+      maxBytes: z.number().int().positive().max(config.maxTextReadBytes).default(Math.min(64 * 1024, config.maxTextReadBytes)),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async ({ jobId, artifactId, offsetBytes, maxBytes }) => {
+    try {
+      const result = await readArtifact(jobId, artifactId, offsetBytes, maxBytes, config);
+      return textResponse(result, `${artifactId}を${result.offsetBytes} byteから取得しました。`);
+    } catch (error) {
+      return textResponse({ ok: false, category: "input_access", errors: [{ code: "artifact_read_failed", message: error instanceof Error ? error.message : String(error) }] }, "成果物を取得できませんでした。", true);
     }
   });
 

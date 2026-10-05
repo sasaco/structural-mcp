@@ -5,7 +5,7 @@ import { runnerEnvelopeSchema, type RunnerEnvelope } from "./contracts.js";
 export async function runEngine(
   runnerPath: string,
   command: "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel" | "validate" | "run" | "export-sdc" | "run-ground-displacement",
-  expectedEngine: "webdan2" | "steeldan" | "soilstructure",
+  expectedEngine: "fempython" | "webdan2" | "steeldan" | "soilstructure",
   inputPath: string,
   outputDirectory: string,
   runnerOptions: readonly string[],
