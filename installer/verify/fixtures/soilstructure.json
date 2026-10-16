@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "pileType": 6,
+  "constructionMethod": "naturalSlurry",
+  "pile": {
+    "diameterM": 1.5,
+    "lengthM": 6,
+    "embedmentDepthM": 2,
+    "groundwaterDepthM": 0,
+    "unitWeight": 24.5,
+    "stiffness": 22.4,
+    "bladeOuterDiameterM": 0,
+    "bladeInnerDiameterM": 0
+  },
+  "pileGroup": {
+    "longitudinal": { "lmM": 2.5, "lnM": 0, "m": 9, "n": 1 },
+    "transverse": { "lmM": 0, "lnM": 2.5, "m": 1, "n": 9 }
+  },
+  "soilRows": [
+    {
+      "thicknessM": "2",
+      "soilKind": "\u7c98\u6027\u571f",
+      "nValue": "0",
+      "wetUnitWeightKnPerM3": "15",
+      "submergedUnitWeightKnPerM3": "5",
+      "frictionAngleDegrees": null,
+      "cohesionKnPerM2": "30",
+      "deformationModulusKnPerM2": "7100",
+      "deL1": "0.7",
+      "deL2": "0.6"
+    },
+    {
+      "thicknessM": "3.2",
+      "soilKind": "\u7c98\u6027\u571f",
+      "nValue": "0",
+      "wetUnitWeightKnPerM3": "15",
+      "submergedUnitWeightKnPerM3": "5",
+      "frictionAngleDegrees": null,
+      "cohesionKnPerM2": "30",
+      "deformationModulusKnPerM2": "7100",
+      "deL1": "0.7",
+      "deL2": "0.6"
+    },
+    {
+      "thicknessM": "2.8",
+      "soilKind": "\u7c98\u6027\u571f",
+      "nValue": "50",
+      "wetUnitWeightKnPerM3": "20",
+      "submergedUnitWeightKnPerM3": "10",
+      "frictionAngleDegrees": null,
+      "cohesionKnPerM2": "55",
+      "deformationModulusKnPerM2": "71400",
+      "deL1": "0.7",
+      "deL2": "0.6"
+    }
+  ],
+  "sdcExport": {
+    "equivalentWidthPileCount": 3,
+    "steelPipeDiameterM": 1.5,
+    "steelPipeThicknessMm": 22,
+    "corrosionAllowanceMm": 1,
+    "longitudinalRows": [
+      { "distanceFromFirstM": "0", "pileCount": "1" },
+      { "distanceFromFirstM": "2.5", "pileCount": "3" }
+    ],
+    "transverseRows": [
+      { "distanceFromFirstM": "0", "pileCount": "1" }
+    ]
+  },
+  "groundDisplacement": {
+    "standardDesignSeismicCoefficient": 1,
+    "regionalCoefficient": 1,
+    "jotEquivalentPeriodSeconds": 0.56,
+    "jotVersion": "Ver.5.1.2",
+    "includeL1": true,
+    "includeL2": true,
+    "l2Spectrum": 2,
+    "rows": [
+      { "layerNumber": "1", "thicknessM": "0.750", "unitWeightKnPerM3": "16", "shearWaveVelocityMPerSecond": "200" },
+      { "layerNumber": "1", "thicknessM": "0.750", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "1", "thicknessM": "1.300", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "2", "thicknessM": "0.900", "unitWeightKnPerM3": "16", "shearWaveVelocityMPerSecond": "250" },
+      { "layerNumber": "2", "thicknessM": "0.900", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "3", "thicknessM": "1.100", "unitWeightKnPerM3": "19", "shearWaveVelocityMPerSecond": "250" },
+      { "layerNumber": "4", "thicknessM": "0.450", "unitWeightKnPerM3": "16", "shearWaveVelocityMPerSecond": "250" },
+      { "layerNumber": "4", "thicknessM": "0.650", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "4", "thicknessM": "0.650", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "4", "thicknessM": "0.950", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "4", "thicknessM": "0.950", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "4", "thicknessM": "0.950", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "5", "thicknessM": "0.950", "unitWeightKnPerM3": "19", "shearWaveVelocityMPerSecond": "250" },
+      { "layerNumber": "5", "thicknessM": "0.950", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "6", "thicknessM": "0.998", "unitWeightKnPerM3": "16", "shearWaveVelocityMPerSecond": "250" },
+      { "layerNumber": "6", "thicknessM": "1.000", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "6", "thicknessM": "1.000", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "6", "thicknessM": "0.102", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "7", "thicknessM": "2.898", "unitWeightKnPerM3": "20", "shearWaveVelocityMPerSecond": "400" },
+      { "layerNumber": "7", "thicknessM": "0.902", "unitWeightKnPerM3": null, "shearWaveVelocityMPerSecond": null },
+      { "layerNumber": "8", "thicknessM": "2.098", "unitWeightKnPerM3": "17", "shearWaveVelocityMPerSecond": "440" }
+    ]
+  },
+  "outputFileName": "report.pdf"
+}

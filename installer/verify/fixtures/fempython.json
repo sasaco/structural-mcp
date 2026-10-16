@@ -1,0 +1,14 @@
+{
+  "dimension": 2,
+  "node": { "1": { "x": 0, "y": 0 }, "2": { "x": 1, "y": 0 } },
+  "member": { "1": { "ni": "1", "nj": "2", "e": "1" } },
+  "element": { "1": { "1": { "E": 10000, "A": 1, "Iz": 1 } } },
+  "fix_node": { "1": [{ "n": "1", "tx": 1, "ty": 1, "rz": 1 }] },
+  "load": { "1": { "symbol": "DL", "fix_node": 1, "element": 1,
+    "load_node": [{ "row": 1, "n": "2", "tx": 4 }] } },
+  "define": { "1": { "row": 1, "C1": 1 } },
+  "combine": { "1": { "row": 1, "C1": 1 } },
+  "pickup": { "1": { "row": 1, "C1": 1 } },
+  "result": { "stale": true },
+  "analysis_result_set": { "stale": true }
+}

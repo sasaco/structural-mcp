@@ -1,0 +1,24 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const [installation, isolatedRoot] = process.argv.slice(2);
+assert(installation && isolatedRoot && isAbsolute(installation) && isAbsolute(isolatedRoot));
+const installed = resolve(installation);
+const scratch = resolve(isolatedRoot);
+assert(relative(scratch, installed) && !relative(scratch, installed).startsWith(".."), "Installation must be below isolated root");
+const codexHome = join(scratch, "codex-home");
+await mkdir(codexHome, { recursive: true });
+const configPath = join(codexHome, "config.toml");
+const original = '# isolated lifecycle fixture: preserve exactly\r\n[mcp_servers.structural-mcp-dev]\r\ncommand = "fixture-only-never-executed.exe"\r\nargs = ["dev.js"]\r\n';
+await writeFile(configPath, original, { flag: "wx" });
+const { createLayout, runAction } = await import(pathToFileURL(join(installed, "launcher.mjs")));
+const layout = createLayout(installed, { codexHome, dataRoot: join(scratch, "data"), allowedRoot: join(scratch, "inputs") });
+await runAction("register-codex", layout, {}, { initialize: async () => {}, log: () => {} });
+const receipt = JSON.parse(await readFile(join(installed, "codex-registration-state.json"), "utf8"));
+assert.equal(receipt.configPath, configPath, "Successful registration did not remember its isolated Codex target");
+assert.equal(receipt.installRoot, installed);
+const digest = bytes => createHash("sha256").update(bytes).digest("hex");
+process.stdout.write(JSON.stringify({ configPath, receiptConfigPath: receipt.configPath, originalSha256: digest(original), registeredSha256: digest(await readFile(configPath)) }) + "\n");

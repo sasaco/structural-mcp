@@ -3,3 +3,6 @@ dist/
 .structural-mcp/
 config/structural-mcp.local.json
 *.log
+installer/packaging/bin/
+installer/packaging/obj/
+.agents/logs/

@@ -1,0 +1,92 @@
+# structural-mcp Windows インストーラー
+
+Windows x64 向けのユーザー単位 MSI です。Node.js と各 .NET 計算エンジンの実行環境を同梱します。利用先 PC に Node.js、.NET SDK、Python、uv、Codex CLI を個別に入れる必要はありません。Codex アプリと、初回の Python 環境構築に使うインターネット接続が必要です。Excel 帳票を作る場合だけ Microsoft Excel が必要です。
+
+## 別の PC に入れる
+
+1. 配布された `structural-mcp-*-win-x64.msi` をコピーし、ダブルクリックしてインストールします。今回の修正版は `structural-mcp-0.2.0-preview-repairfix1-win-x64.msi`、既定の配置先は `%LOCALAPPDATA%\Programs\structural-mcp\0.2.0-preview` です。
+2. スタートメニューの **structural-mcp → 1 - Setup and register Codex** を開きます。Python 3.12.12 と固定された依存パッケージを取得し、計算エンジンと MCP 接続を確認してから Codex に登録します。`SUCCESS` が表示されるまで待ち、Enter で閉じます。初回は数分かかります。
+3. Codex を再起動し、新しい会話で「structural-mcp の get_capabilities を呼んで各エンジンの利用可否を確認して」と依頼します。
+
+MSI の完了だけでは Codex に登録されません。手順 2 まで完了させてください。登録処理は Codex CLI を使わず、ユーザーの `config.toml` の `structural-mcp` 項目を更新します。既存の別の登録と衝突した場合は上書きせず停止します。
+
+入力ファイルを直接読む既定フォルダーは `%USERPROFILE%\Documents\structural-mcp` です。ファイルをそこへ置くか、Codex にファイルを読み取らせて入力内容を MCP に渡します。計算結果とダウンロードキャッシュは `%LOCALAPPDATA%\structural-mcp` に保存します。
+
+## 確認・再実行・削除
+
+- 接続を確認する場合は **2 - Check structural-mcp** を開きます。
+- MSI は実際のインストール先をユーザーのレジストリに記録し、Windows の修復・削除でも同じ配置先を使います。
+- ダウンロードや初期化に失敗した場合は、ネットワーク・プロキシ設定を確認し、**1 - Setup and register Codex** を再実行します。失敗時に Codex 登録を成功扱いにはしません。
+- 削除する場合は、Windows の「インストールされているアプリ」から structural-mcp をアンインストールします。このインストール先の Node と server を参照する、インストーラー管理下の登録だけを自動解除します。先に **3 - Unregister from Codex** で手動解除することもできます。
+- アップグレード後は再度セットアップを実行してください。旧版のインストーラー管理下の登録を切り替える場合は、下の `--replace-existing` を使います。
+
+Python 環境、ジョブ、ダウンロードキャッシュは MSI に登録した固定ファイルと分離されています。アンインストール後も生成データが残る場合があります。必要な計算結果を確認してから手動で削除してください。
+
+登録先や入力フォルダーを指定する場合は、インストール先で PowerShell を開いて実行できます。
+
+```powershell
+.\setup.cmd --allowed-root 'C:\Work\StructuralInputs'
+.\setup.cmd --replace-existing
+.\health.cmd
+.\unregister-codex.cmd
+```
+
+`--codex-home` で通常以外の Codex 設定フォルダー、`--data-root` でジョブ・Python ダウンロード先を指定できます。絶対パスを使ってください。環境変数 `STRUCTURAL_MCP_NO_PAUSE=1` は自動実行用です。PowerShell 実行ポリシーの恒久的変更は行いません。
+
+最後に登録が成功した Codex 設定ファイルの場所をインストール先に記録し、アンインストール時の解除にも使います。解除コマンドへ明示した `--codex-home` がある場合は、その指定を優先します。複数の Codex 設定フォルダーへ登録した場合、自動解除の対象は最後に成功した登録先だけです。それ以前の場所は `unregister-codex.cmd --codex-home '<対象フォルダー>'` で個別に解除してください。
+
+登録先の記録が壊れている場合は、`--codex-home` を指定しても解除を停止します。対象の設定フォルダーを指定してセットアップを再実行し、登録先の記録を再作成してから解除してください。
+
+## 開発者が MSI を作る
+
+ビルド PC には Windows x64、Node.js 24 以上、.NET SDK 10、Git と取得済み submodule が必要です。.NET 8 向けの runtime pack、固定版 Node / uv、NuGet パッケージ、WiX SDK はビルド時に取得します。
+
+```powershell
+cd C:\path\to\structural-mcp
+npm ci
+npm test
+powershell -NoProfile -ExecutionPolicy Bypass -File installer/build/build-installer.ps1 -Preview
+```
+
+`-Preview` は未コミットの作業を含む開発用ビルドです。ソースの commit、dirty 状態、固定ツールの版、配布ファイルの SHA-256 を記録します。通常のビルドでは未確定のソース状態を検出して停止します。作業ツリーや submodule をリセットしません。
+
+出力先は `.structural-mcp/installer-work/<日時-ID>/` です。
+
+| ファイル・フォルダー | 用途 |
+|---|---|
+| `payload/` | インストールされるファイル群 |
+| `payload/release-manifest.json` | ソース情報・固定ツール・ファイルの SHA-256 |
+| `msi/structural-mcp-<version>-win-x64.msi` | コピーしてインストールする MSI |
+| `msi/*.msi.sha256` | MSI 全体の SHA-256 |
+
+`-SkipMsi` は payload 構築まで実行します。`-StagePath '<絶対 payload パス>'` は既存の staging から MSI を生成します。`-StagePath` は上記の作業フォルダー内だけを受け付けます。
+
+## 実ファイルによる検証
+
+```powershell
+npm ci --prefix installer/runtime
+node --test installer/tests/*.test.mjs
+node installer/verify/payload-smoke.mjs --payload 'C:\absolute\path\payload' --initialize --relocate
+```
+
+検証は新規の一時フォルダーへ日本語・空白を含むパスでコピーし、同梱 Node から MCP を起動します。通常の Codex 設定を変更しません。開発用 PATH と runner 環境変数を外し、固定ファイルの SHA-256、Python の実体とモジュールの配置、Capacita / SoilStructure / FEMPython の実計算、PDF / PIK / CSV の取得と hash、許可外入力と不正 JSON の拒否を確認します。結果は表示された作業フォルダーの `verification.json` に残します。
+
+この検証はインストール先へ Python 環境を新規構築します。既存の `.venv` を別の PC へコピーして再利用しないでください。MSI から展開した payload も同じ検証へ渡せます。
+
+MSI の実インストール・修復・削除を確認する場合は、次の検証を使います。関連製品が既にインストールされている PC では停止します。新しい検証フォルダーへサイレントインストールし、実ファイルの hash、削除した README の修復、隔離 Codex 登録の自動解除、製品の削除を確認します。通常の Codex 設定は前後の SHA-256 だけを照合し、内容を出力しません。ログと `lifecycle.json` は `.structural-mcp/installer-work/root-verification/` に残ります。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File installer/verify/msi-lifecycle.ps1 -MsiPath 'C:\absolute\path\installer.msi' -ExpectedSha256 '<配布物のSHA-256>'
+```
+
+## Preview の制限
+
+この版は未署名の検証用 MSI です。クリーンな別 PC / VM での初回導入・修復・更新・削除と、署名付きの正式配布は別途確認が必要です。Windows が発行元を確認できない旨を表示することがあります。
+
+同梱物には GrapeCity Spread、EPPlus、および計算エンジンに埋め込まれた MS Gothic / MS Mincho / SimSun 等が含まれます。既存ライセンスを変更するものではなく、それらの再配布権限はこの実装では確認していません。正式配布時には同梱の notices と権利条件を確認してください。
+
+今回のビルドでは、既存依存 `SixLabors.ImageSharp 2.1.13` について NuGet が High（`NU1903`）と Medium（`NU1902`）の既知脆弱性警告を出しています。対象は [GHSA-j3p4-wp97-rph4](https://github.com/advisories/GHSA-j3p4-wp97-rph4)、[GHSA-j9gm-c75j-xc9q](https://github.com/advisories/GHSA-j9gm-c75j-xc9q)、[GHSA-jjfr-hcj7-qf5w](https://github.com/advisories/GHSA-jjfr-hcj7-qf5w)、[GHSA-gwg2-r3hj-4w44](https://github.com/advisories/GHSA-gwg2-r3hj-4w44)、[GHSA-wmxv-xphr-5c9g](https://github.com/advisories/GHSA-wmxv-xphr-5c9g) です。このインストーラー作業では計算エンジンの依存関係を変更しておらず、正式配布前に更新・影響確認が必要です。
+
+現行の `get_capabilities` は runner ファイルの存在で利用可否を判定します。Python 初期化前の readiness 表示だけで動作を判断せず、セットアップまたは health check の成功を確認してください。FEMPython と SteelDan は MCP 上で experimental の扱いです。
+
+MSI のインストール時には Codex 設定を変更しません。アンインストール時だけ所有を確認して登録解除を試みます。設定ファイルが壊れている場合や所有を確認できない場合は設定を保持し、MSI の削除自体は続行します。その場合、残った登録は Codex の設定から削除してください。アップグレードで旧版を除去するときは自動解除を実行しません。

@@ -2,6 +2,12 @@
 
 `FEMPython`、`Capacita`、`SoilStructure` の構造解析・照査機能を、Codex などの MCP client から利用するためのローカル STDIO MCP gateway です。各計算エンジンの式はこのリポジトリへ再実装せず、Git submodule として固定した各プロジェクトの非対話 entry point を呼び出します。
 
+## Windows PC へのインストール
+
+別の PC では、Windows x64 向け MSI をインストールし、スタートメニューの **structural-mcp → 1 - Setup and register Codex** を実行します。Node.js と .NET 実行環境を同梱し、Python は初回セットアップで取得します。利用先で SDK や Codex CLI を準備する必要はありません。
+
+ビルド方法、初期設定、検証、削除手順と Preview の制限は [インストーラー README](./installer/README.md) を参照してください。以下はソースから開発する場合の手順です。
+
 ## 公開対象
 
 | Submodule | MCP で扱う領域 | 主な成果物 | 現在の状態 |

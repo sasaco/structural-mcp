@@ -1,0 +1,14 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>PayloadRoot=$(PayloadRoot);ProductVersion=$(ProductVersion);InstallVersion=$(InstallVersion);ProductLabel=$(ProductLabel)</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Product.wxs" />
+    <Compile Include="$(PayloadWxs)" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <WixVariable Include="WixUILicenseRtf" Value="$(MSBuildThisFileDirectory)License.rtf" />
+  </ItemGroup>
+</Project>
