@@ -7,7 +7,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { updateCodexConfig, withLock } from "./codex-config.mjs";
 
 export const PYTHON_VERSION = "3.12.12";
-const requiredTools = ["get_capabilities", "webdan_calculate", "fempython_calculate", "soilstructure_calculate"];
+const requiredTools = ["get_capabilities", "webdan_calculate", "fempython_calculate", "soilstructure_calculate", "aggrese_calculate"];
 const registrationStateName = "codex-registration-state.json";
 const samePath = (left, right) => resolve(left).toLowerCase() === resolve(right).toLowerCase();
 
@@ -27,6 +27,7 @@ export function createLayout(installRoot, options = {}, environment = process.en
       capacita: resolve(root, "engines/Capacita/WebDanforCS.Headless.exe"),
       soilstructure: resolve(root, "engines/SoilStructure/SoilStructure.Headless.exe"),
       fempython: resolve(root, "engines/FEMPython/FrameWebforCS/Headless/FrameWebforCS.Headless.exe"),
+      aggrese: resolve(root, "engines/Aggre-SE/AggreSE.Headless.exe"),
     },
   };
 }
@@ -39,6 +40,7 @@ export function registrationFor(layout) {
       STRUCTURAL_MCP_WEBDAN_RUNNER: layout.runners.capacita,
       STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER: layout.runners.soilstructure,
       STRUCTURAL_MCP_FEMPYTHON_RUNNER: layout.runners.fempython,
+      STRUCTURAL_MCP_AGGRESE_RUNNER: layout.runners.aggrese,
       STRUCTURAL_MCP_JOB_ROOT: resolve(layout.dataRoot, "jobs"),
       STRUCTURAL_MCP_ALLOWED_ROOTS: layout.allowedRoot,
       STRUCTURAL_MCP_ENABLE_STEELDAN: "true",
@@ -129,7 +131,7 @@ export async function probeMcp(layout, { sdkRoot = resolve(layout.root, "server/
     const result = await client.callTool({ name: "get_capabilities", arguments: {} }, undefined, { timeout: 60_000 });
     if (result.isError) throw new Error("MCP get_capabilities returned an error.");
     const capabilities = result.structuredContent ?? JSON.parse(result.content.find((entry) => entry.type === "text").text);
-    for (const engine of ["capacita", "soilstructure", "fempython"]) {
+    for (const engine of ["capacita", "soilstructure", "fempython", "aggrese"]) {
       if (!capabilities.engines?.[engine]?.enabled) throw new Error(`MCP engine unavailable: ${engine}`);
     }
     return capabilities;

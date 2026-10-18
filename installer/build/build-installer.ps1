@@ -125,6 +125,19 @@ if ($StagePath) {
             '-p:RestorePackagesWithLockFile=false', ('-p:NuGetLockFilePath=' + $artifacts + '\unused-packages.lock.json'),
             ('-p:RuntimeFrameworkVersion=' + $spec[2]))
     }
+    # Aggre-SE (Batch) is .NET Framework 4.8 with licensed vendor components (SPREAD, ComponentOne,
+    # VB-Report8): it needs Visual Studio MSBuild and builds into the submodule's own bin folder.
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (!(Test-Path -LiteralPath $vswhere)) { throw 'Aggre-SE runner requires Visual Studio (vswhere.exe not found).' }
+    $msbuild = @(& $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe') | Select-Object -First 1
+    if (!$msbuild) { throw 'Aggre-SE runner requires Visual Studio MSBuild.' }
+    Write-Host 'Building Batch\Aggre-SE\Headless\AggreSE.Headless.csproj...'
+    Invoke-Checked $msbuild @((Join-Path $repoRoot 'Batch\Aggre-SE\Headless\AggreSE.Headless.csproj'), '-restore', '/p:Configuration=Release', '/v:minimal', '/nologo') (Join-Path $runRoot 'msbuild-aggrese.log')
+    $aggreSeOutput = Join-Path $repoRoot 'Batch\Aggre-SE\Headless\bin\Release'
+    foreach ($file in Get-ChildItem -LiteralPath $aggreSeOutput -Recurse -File) {
+        if ($file.Extension -in '.pdb', '.xml') { continue }
+        Copy-File $file.FullName (Join-Path $payload ('engines\Aggre-SE\' + $file.FullName.Substring($aggreSeOutput.Length + 1)))
+    }
     Invoke-Checked $nodeExe @((Join-Path $PSScriptRoot 'payload.mjs'), 'finalize', $repoRoot, $runRoot, $installVersion)
 }
 

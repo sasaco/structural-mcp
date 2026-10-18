@@ -2,10 +2,14 @@ import { spawn } from "node:child_process";
 import type { AppConfig } from "./config.js";
 import { runnerEnvelopeSchema, type RunnerEnvelope } from "./contracts.js";
 
+export type RunnerCommand =
+  | "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel"
+  | "validate" | "run" | "export-sdc" | "run-ground-displacement" | "inspect";
+
 export async function runEngine(
   runnerPath: string,
-  command: "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel" | "validate" | "run" | "export-sdc" | "run-ground-displacement",
-  expectedEngine: "fempython" | "webdan2" | "steeldan" | "soilstructure",
+  command: RunnerCommand,
+  expectedEngine: "fempython" | "webdan2" | "steeldan" | "soilstructure" | "aggrese",
   inputPath: string,
   outputDirectory: string,
   runnerOptions: readonly string[],

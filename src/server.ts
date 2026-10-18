@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { JobManifest } from "./contracts.js";
 import {
+  createAggreSeJob,
   createJob,
   loadManifest,
   readArtifact,
@@ -12,8 +13,9 @@ import {
   resolveInputPath,
   saveManifest,
   verifyArtifacts,
+  type PreparedJob,
 } from "./jobs.js";
-import { runEngine } from "./runner.js";
+import { runEngine, type RunnerCommand } from "./runner.js";
 import { femPythonPdfSections, femPythonRunnerContract } from "./fempython-contract.js";
 import {
   soilStructureDocumentSchema,
@@ -26,6 +28,16 @@ const sourceShape = {
   inputPath: z.string().min(1).optional().describe("Allowed root内にある入力ファイルの絶対パス"),
   input: z.string().min(1).optional().describe("入力ファイルの内容をinlineで指定"),
 };
+
+const aggreSeInputPath = z.string().min(1)
+  .describe("Aggre-SE（Batch）プロジェクトXMLの絶対パス。SnapDBPathのDB1と同名のJRSNAP結果ファイルもallowed root内に必要");
+
+const aggreSeSpectralDuctility = z.array(z.object({
+  caseNumber: z.number().int().min(1).max(999).describe("ケース番号（1始まり、XMLのケース行）"),
+  value: z.number().finite().positive().describe("応答塑性率μ（GUIのSpectralEditFormで入力する値）"),
+}).strict()).max(999).optional()
+  .refine((items) => items === undefined || new Set(items.map((item) => item.caseNumber)).size === items.length, "caseNumberが重複しています。")
+  .describe("任意スペクトル（地盤区分9）のケースごとの応答塑性率μ。aggrese_inspectのspectralDuctilityでsourceがmissingのケースに指定する");
 
 const rebarSideSchema = z.object({
   diameter_mm: z.number().int().positive().optional(),
@@ -88,13 +100,15 @@ interface CalculationSpec {
   tool: JobManifest["tool"];
   engine: JobManifest["engine"];
   runnerPath: string;
-  command: "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel" | "validate" | "run" | "export-sdc" | "run-ground-displacement";
+  command: RunnerCommand;
   extensions: readonly string[];
   jobExtension: ".wdj" | ".wsj" | ".json" | ".soilstructure.json";
   runnerOptions: readonly string[] | ((outputDirectory: string) => readonly string[]);
   jsonInput?: boolean;
   requiredArtifacts?: readonly { relativePath: string; mediaType: string }[];
   label: string;
+  /** Replaces the single-file job (inputPath/input) for engines whose input is a set of files. */
+  prepareJob?: () => Promise<PreparedJob>;
 }
 
 function textResponse(value: unknown, summary: string, isError = false) {
@@ -152,17 +166,25 @@ async function calculate(
   config: AppConfig,
   transformInput?: (contents: string) => string,
 ): Promise<ReturnType<typeof textResponse>> {
-  const source = await inputContents(inputPath, input, spec.extensions, spec.jsonInput ?? false, config);
-  const contents = transformInput?.(source) ?? source;
+  let job: PreparedJob;
+  if (spec.prepareJob) {
+    job = await spec.prepareJob();
+  } else {
+    const source = await inputContents(inputPath, input, spec.extensions, spec.jsonInput ?? false, config);
+    const contents = transformInput?.(source) ?? source;
+    job = await createJob(spec.tool, contents, spec.jobExtension, config);
+  }
   const startedAt = new Date().toISOString();
-  const job = await createJob(spec.tool, contents, spec.jobExtension, config);
   const envelope = await runEngine(
     spec.runnerPath,
     spec.command,
     spec.engine,
     job.inputPath,
     job.outputDirectory,
-    typeof spec.runnerOptions === "function" ? spec.runnerOptions(job.outputDirectory) : spec.runnerOptions,
+    [
+      ...(typeof spec.runnerOptions === "function" ? spec.runnerOptions(job.outputDirectory) : spec.runnerOptions),
+      ...(job.runnerOptions ?? []),
+    ],
     config,
   );
   const artifacts = await verifyArtifacts(job.outputDirectory, envelope, config);
@@ -231,24 +253,26 @@ export function createServer(config: AppConfig): McpServer {
   const femPythonEnabled = config.femPythonRunner !== null;
   const capacitaEnabled = config.capacitaRunner !== null;
   const soilStructureEnabled = config.soilStructureRunner !== null;
+  const aggreSeEnabled = config.aggreSeRunner !== null;
   const steelDanEnabled = capacitaEnabled && config.steelDanEnabled;
   const server = new McpServer(
     { name: "structural-mcp", version: "0.2.0" },
     {
-      instructions: "FEMPython、Capacita、SoilStructureを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。FrameWebforCSの保存JSONはfempython_calculateのinputへ文字列で渡せます。PIKと入力・断面力・pickup断面力・変位・pickup変位のPDFを生成し、read_artifactで取得した成果物をclient側の指定先へ配置します。standalone利用はfempython_get_runner_contractを参照してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateへinlineで渡して対象operationごとに検証できます。standalone scriptはrunnerを直接呼び、artifactを検証して指定先へ配置します。executionStatusとengineeringStatusは別々に確認し、MCP計算の成果物はjob単位で扱ってください。",
+      instructions: "FEMPython、Capacita、SoilStructure、Aggre-SE（Batch）を公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。FrameWebforCSの保存JSONはfempython_calculateのinputへ文字列で渡せます。PIKと入力・断面力・pickup断面力・変位・pickup変位のPDFを生成し、read_artifactで取得した成果物をclient側の指定先へ配置します。standalone利用はfempython_get_runner_contractを参照してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateへinlineで渡して対象operationごとに検証できます。standalone scriptはrunnerを直接呼び、artifactを検証して指定先へ配置します。Aggre-SEはaggrese_inspectでケースと任意スペクトルの応答塑性率μの要否を確認し、μはユーザーに確認してからaggrese_calculateへ渡してください。executionStatusとengineeringStatusは別々に確認し、MCP計算の成果物はjob単位で扱ってください。",
     },
   );
 
   server.registerTool("get_environment_template", {
     title: "Get structural-mcp .env template",
     description: "AIが対象プロジェクトの.envを作成するときに使うrunner設定名、推奨絶対パス、読取可否を返します。既存.envや秘密情報は読み取りません。",
-    inputSchema: { engine: z.enum(["all", "fempython", "capacita", "soilstructure"]).default("all") },
+    inputSchema: { engine: z.enum(["all", "fempython", "capacita", "soilstructure", "aggrese"]).default("all") },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ engine }) => {
     const entries = [
       { engine: "fempython", ...config.runnerConfigurations.femPython },
       { engine: "capacita", ...config.runnerConfigurations.capacita },
       { engine: "soilstructure", ...config.runnerConfigurations.soilStructure },
+      { engine: "aggrese", ...config.runnerConfigurations.aggreSe },
     ].filter((entry) => engine === "all" || entry.engine === engine).map((entry) => ({
       engine: entry.engine,
       name: entry.environmentVariable,
@@ -270,7 +294,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("get_capabilities", {
     title: "Structural engine capabilities",
-    description: "FEMPython、Capacita、SoilStructureの接続状態とrunnerのreadiness・制限を返します。",
+    description: "FEMPython、Capacita、SoilStructure、Aggre-SEの接続状態とrunnerのreadiness・制限を返します。",
     inputSchema: {},
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => textResponse({
@@ -315,13 +339,21 @@ export function createServer(config: AppConfig): McpServer {
           "soilstructure_ground_displacement",
         ],
       },
+      aggrese: {
+        enabled: aggreSeEnabled,
+        readiness: aggreSeEnabled ? "experimental" : "unavailable",
+        inputFormats: [".xml（Aggre-SE/Batchプロジェクト）+ SnapDBPathのJRSNAP解析結果（*.DB1と同名ファイル）"],
+        outputFormats: ["json", "xlsx", "pdf", "pik", "csv"],
+        options: "購入オプションはすべて有効（GUIと同じ）。任意スペクトル（地盤区分9）の応答塑性率μはspectralDuctilityで指定します。",
+        tools: ["aggrese_inspect", "aggrese_calculate"],
+      },
     },
     configurationTool: "get_environment_template",
     pathPolicy: {
       allowedInputRoots: config.allowedInputRoots,
     },
-    limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxArtifactBytes: config.maxArtifactBytes },
-  }, `FEMPythonは${femPythonEnabled ? "利用可能" : "利用不可"}、Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}です。`));
+    limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxBundleBytes: config.maxBundleBytes, maxArtifactBytes: config.maxArtifactBytes },
+  }, `FEMPythonは${femPythonEnabled ? "利用可能" : "利用不可"}、Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}、Aggre-SEは${aggreSeEnabled ? "利用可能" : "利用不可"}です。`));
 
   server.registerTool("fempython_get_runner_contract", {
     title: "Get FrameWebforCS runner contract",
@@ -605,6 +637,70 @@ export function createServer(config: AppConfig): McpServer {
         runnerOptions: ["--generate-pdf", String(generatePdf), "--generate-jot", String(generateJot)],
         jsonInput: true, label: "SoilStructure 地盤応答変位",
       }, inputPath, input, config);
+    } catch (error) {
+      return requestFailure(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  server.registerTool("aggrese_inspect", {
+    title: "Inspect an Aggre-SE (Batch) project",
+    description: "Aggre-SE（Batch / Docu-SE）のプロジェクトXMLとJRSNAP解析結果（DB1等）を読み、ケース一覧と、任意スペクトル（地盤区分9）で応答塑性率μの入力が必要なケースと参考値を返します。成果物は作りません。aggrese_calculateの前に呼んでください。XMLとSnapDBPathのDB1はallowed root内に必要です。",
+    inputSchema: { inputPath: aggreSeInputPath, spectralDuctility: aggreSeSpectralDuctility },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, spectralDuctility }) => {
+    if (config.aggreSeRunner === null) return unavailable("aggrese", "STRUCTURAL_MCP_AGGRESE_RUNNER");
+    try {
+      return await calculate({
+        tool: "aggrese_inspect", engine: "aggrese", runnerPath: config.aggreSeRunner,
+        command: "inspect", extensions: [".xml"], jobExtension: ".json", runnerOptions: [],
+        label: "Aggre-SE 入力確認",
+        prepareJob: () => createAggreSeJob(inputPath, spectralDuctility ?? [], config),
+      }, undefined, undefined, config);
+    } catch (error) {
+      return requestFailure(error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  server.registerTool("aggrese_calculate", {
+    title: "Run Aggre-SE (Batch) reports",
+    description: "Aggre-SE（Batch / Docu-SE）のプロジェクトXMLとJRSNAP解析結果から、総括表Excel・計算書PDF・断面力ピックアップPIK・杭の段落とし計算書PDFをjob内に作成します（購入オプションはすべて有効）。任意スペクトルのケースは、aggrese_inspectで示されたμをユーザーに確認してspectralDuctilityで渡してください。推測しないでください。指定先への配置はread_artifactで取得してclient側で行います。",
+    inputSchema: {
+      inputPath: aggreSeInputPath,
+      generateSummaryExcel: z.boolean().default(true).describe("総括表 summary.xlsx（CLI cmd=3）"),
+      generateReportPdf: z.boolean().default(false).describe("計算書 report.pdf（CLI cmd=1/2）"),
+      includeCheckTables: z.boolean().default(true).describe("計算書に部材照査表を含め、ケース毎の照査表xlsxと荷重変位csvも作る（CLI cmd=1）。generateReportPdf=trueのときだけ有効"),
+      generatePik: z.boolean().default(false).describe("断面力ピックアップ pickup.pik（CLI cmd=5）。ケースのピックアップ対象指定が必要"),
+      generatePileAnchorBarPdf: z.boolean().default(false).describe("杭の段落とし計算書 pile-anchor-bar.pdf（CLI cmd=4）。段落し入力が必要"),
+      spectralDuctility: aggreSeSpectralDuctility,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, generateSummaryExcel, generateReportPdf, includeCheckTables, generatePik, generatePileAnchorBarPdf, spectralDuctility }) => {
+    if (!generateSummaryExcel && !generateReportPdf && !generatePik && !generatePileAnchorBarPdf) {
+      return requestFailure("生成する成果物を1つ以上指定してください。");
+    }
+    if (config.aggreSeRunner === null) return unavailable("aggrese", "STRUCTURAL_MCP_AGGRESE_RUNNER");
+    const xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    try {
+      return await calculate({
+        tool: "aggrese_calculate", engine: "aggrese", runnerPath: config.aggreSeRunner,
+        command: "run", extensions: [".xml"], jobExtension: ".json",
+        runnerOptions: [
+          "--summary-xlsx", String(generateSummaryExcel),
+          "--report-pdf", String(generateReportPdf),
+          "--check-tables", String(generateReportPdf && includeCheckTables),
+          "--pik", String(generatePik),
+          "--pile-anchor-bar-pdf", String(generatePileAnchorBarPdf),
+        ],
+        requiredArtifacts: [
+          { relativePath: "result.json", mediaType: "application/json" },
+          ...(generateSummaryExcel ? [{ relativePath: "summary.xlsx", mediaType: xlsx }] : []),
+          ...(generateReportPdf ? [{ relativePath: "report.pdf", mediaType: "application/pdf" }] : []),
+          ...(generatePik ? [{ relativePath: "pickup.pik", mediaType: "text/plain" }] : []),
+          ...(generatePileAnchorBarPdf ? [{ relativePath: "pile-anchor-bar.pdf", mediaType: "application/pdf" }] : []),
+        ],
+        label: "Aggre-SE 帳票作成",
+        prepareJob: () => createAggreSeJob(inputPath, spectralDuctility ?? [], config),
+      }, undefined, undefined, config);
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));
     }

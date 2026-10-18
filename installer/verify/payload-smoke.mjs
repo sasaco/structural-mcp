@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -14,11 +14,14 @@ const { values } = parseArgs({ options: {
   initialize: { type: "boolean", default: false },
   relocate: { type: "boolean", default: false },
   "skip-fempython": { type: "boolean", default: false },
+  // JRSNAP results (*.DB1) are not in git, so the Aggre-SE calculation runs only on a supplied project.
+  "aggrese-xml": { type: "string" },
   "work-directory": { type: "string" },
 } });
 const progress = message => process.stderr.write(`[payload verification] ${message}\n`);
 assert(values.payload && isAbsolute(values.payload), "--payload must be an absolute staged/extracted/installed payload directory");
 if (values["work-directory"]) assert(isAbsolute(values["work-directory"]), "--work-directory must be absolute and new");
+if (values["aggrese-xml"]) assert(isAbsolute(values["aggrese-xml"]), "--aggrese-xml must be an absolute Aggre-SE project XML path");
 const work = values["work-directory"] ? resolve(values["work-directory"]) : await mkdtemp(join(tmpdir(), "structural-mcp-verify-"));
 if (values["work-directory"]) await mkdir(work);
 const sourcePayload = resolve(values.payload);
@@ -125,19 +128,19 @@ try {
 
   const capabilities = await call("get_capabilities");
   evidence.capabilities = capabilities;
-  for (const key of ["capacita", "soilstructure", ...(!values["skip-fempython"] ? ["fempython"] : [])]) {
+  for (const key of ["capacita", "soilstructure", "aggrese", ...(!values["skip-fempython"] ? ["fempython"] : [])]) {
     assert.equal(capabilities.engines[key].enabled, true, `${key} must be enabled`);
   }
   const listed = await client.listTools();
-  for (const name of ["get_capabilities", "webdan_calculate", "soilstructure_calculate", "fempython_calculate", "read_artifact"]) {
+  for (const name of ["get_capabilities", "webdan_calculate", "soilstructure_calculate", "fempython_calculate", "aggrese_inspect", "aggrese_calculate", "read_artifact"]) {
     assert(listed.tools.some(tool => tool.name === name), `Missing tool ${name}`);
   }
   evidence.checks.push("MCP initialization, tool discovery, engine availability");
 
   async function calculate(tool, fixture, toolArgs, expectedNames, inspect) {
     progress(`Running ${tool} and checking its artifacts...`);
-    const input = await readFile(join(import.meta.dirname, "fixtures", fixture), "utf8");
-    const result = await call(tool, { input, ...toolArgs });
+    const source = fixture === null ? {} : { input: await readFile(join(import.meta.dirname, "fixtures", fixture), "utf8") };
+    const result = await call(tool, { ...source, ...toolArgs });
     assert.equal(result.ok, true, `${tool} failed`);
     assert.equal(result.executionStatus, "success", `${tool} did not execute successfully`);
     const metadata = await call("get_job", { jobId: result.jobId });
@@ -182,6 +185,15 @@ try {
       assert(Math.abs(node.components.dx - 0.0004) < 1e-10, `Unexpected FEMPython cantilever dx: ${node.components.dx}`);
       assert(!result.stale, "Saved stale result was reused");
     });
+  }
+  if (values["aggrese-xml"]) {
+    // Inputs are read in place by path: copy the project folder (XML and JRSNAP results) under the allowed root.
+    const project = join(inputs, "aggrese");
+    await cp(dirname(resolve(values["aggrese-xml"])), project, { recursive: true });
+    const inputPath = join(project, basename(values["aggrese-xml"]));
+    const inspected = await call("aggrese_inspect", { inputPath });
+    assert(inspected.summary.cases.length > 0, "Aggre-SE inspect found no cases");
+    await calculate("aggrese_calculate", null, { inputPath, generateSummaryExcel: true }, ["result.json", "summary.xlsx"]);
   }
   const outside = join(work, "outside.json");
   await writeFile(outside, await readFile(join(import.meta.dirname, "fixtures", "soilstructure.json")));

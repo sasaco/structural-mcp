@@ -41,6 +41,8 @@ Python 環境、ジョブ、ダウンロードキャッシュは MSI に登録�
 
 ビルド PC には Windows x64、Node.js 24 以上、.NET SDK 10、Git と取得済み submodule が必要です。.NET 8 向けの runtime pack、固定版 Node / uv、NuGet パッケージ、WiX SDK はビルド時に取得します。
 
+Aggre-SE（`Batch` submodule）の runner は .NET Framework 4.8 で、Visual Studio の MSBuild と、開発 PC に導入済みの SPREAD 15・ComponentOne 2015・VB-Report8（ライセンス付き）が必要です。`Batch\Aggre-SE\Headless\bin\Release` に build し、`engines\Aggre-SE` へコピーします。.NET Framework 4.8 は Windows 10/11 に標準搭載のため同梱しません。これらの部品と `itextsharp.dll` の再頒布条件は配布前に確認してください。
+
 ```powershell
 cd C:\path\to\structural-mcp
 npm ci
@@ -69,7 +71,7 @@ node --test installer/tests/*.test.mjs
 node installer/verify/payload-smoke.mjs --payload 'C:\absolute\path\payload' --initialize --relocate
 ```
 
-検証は新規の一時フォルダーへ日本語・空白を含むパスでコピーし、同梱 Node から MCP を起動します。通常の Codex 設定を変更しません。開発用 PATH と runner 環境変数を外し、固定ファイルの SHA-256、Python の実体とモジュールの配置、Capacita / SoilStructure / FEMPython の実計算、PDF / PIK / CSV の取得と hash、許可外入力と不正 JSON の拒否を確認します。結果は表示された作業フォルダーの `verification.json` に残します。
+検証は新規の一時フォルダーへ日本語・空白を含むパスでコピーし、同梱 Node から MCP を起動します。通常の Codex 設定を変更しません。開発用 PATH と runner 環境変数を外し、固定ファイルの SHA-256、Python の実体とモジュールの配置、Capacita / SoilStructure / FEMPython の実計算、PDF / PIK / CSV の取得と hash、許可外入力と不正 JSON の拒否を確認します。Aggre-SE は JRSNAP の解析結果（`*.DB1` 等）が git 管理外のため、`--aggrese-xml <プロジェクトXMLの絶対パス>` を指定したときだけ、そのフォルダーをコピーして総括表を実計算します。結果は表示された作業フォルダーの `verification.json` に残します。
 
 この検証はインストール先へ Python 環境を新規構築します。既存の `.venv` を別の PC へコピーして再利用しないでください。MSI から展開した payload も同じ検証へ渡せます。
 

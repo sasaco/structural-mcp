@@ -128,6 +128,7 @@ test("runtime MCP probe imports SDK and calls a real server over stdio", async (
   registration.env.STRUCTURAL_MCP_WEBDAN_RUNNER = resolve(root, "tests/fixtures/fake-runner.mjs");
   registration.env.STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER = resolve(root, "tests/fixtures/fake-runner.mjs");
   registration.env.STRUCTURAL_MCP_FEMPYTHON_RUNNER = resolve(root, "tests/fixtures/fake-fempython-runner.mjs");
+  registration.env.STRUCTURAL_MCP_AGGRESE_RUNNER = resolve(root, "tests/fixtures/fake-aggrese-runner.mjs");
   const capabilities = await probeMcp(layout, { sdkRoot: resolve(root, "node_modules/@modelcontextprotocol/sdk/dist/esm"), registration });
   assert.equal(capabilities.engines.capacita.enabled, true);
   registration.env.STRUCTURAL_MCP_FEMPYTHON_RUNNER = resolve(layout.root, "missing.exe");

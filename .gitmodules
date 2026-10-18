@@ -7,3 +7,6 @@
 [submodule "SoilStructure"]
 	path = SoilStructure
 	url = https://github.com/sasaco/SoilStructure.git
+[submodule "Batch"]
+	path = Batch
+	url = https://gitlab.com/sasaco/Batch.git

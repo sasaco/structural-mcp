@@ -1,6 +1,6 @@
 # structural-mcp
 
-`FEMPython`、`Capacita`、`SoilStructure` の構造解析・照査機能を、Codex などの MCP client から利用するためのローカル STDIO MCP gateway です。各計算エンジンの式はこのリポジトリへ再実装せず、Git submodule として固定した各プロジェクトの非対話 entry point を呼び出します。
+`FEMPython`、`Capacita`、`SoilStructure`、`Batch`（Aggre-SE）の構造解析・照査・集計機能を、Codex などの MCP client から利用するためのローカル STDIO MCP gateway です。各計算エンジンの式はこのリポジトリへ再実装せず、Git submodule として固定した各プロジェクトの非対話 entry point を呼び出します。
 
 ## Windows PC へのインストール
 
@@ -15,13 +15,14 @@
 | [`FEMPython`](./FEMPython/) | 骨組・有限要素解析 | 解析結果 JSON、PIK、PDF | FrameWebforCS非対話runner接続済み（experimental） |
 | [`Capacita`](./Capacita/) | RC・鋼部材の断面照査 | 結果 JSON、PDF、Markdown、Excel | 既存 adapter あり。旧 runner path から submodule への移行中 |
 | [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算、SNAP連携、地盤応答変位 | 中間結果 JSON、Excel、PDF、SDC、JOT | MCP adapter 接続済み。headless runner を個別設定して利用 |
+| [`Batch`](./Batch/) | Aggre-SE（Docu-SE）: JRSNAP解析結果の集計・照査 | 総括表 Excel、計算書 PDF、PIK、杭段落とし PDF | AggreSE.Headless runner 接続済み（experimental） |
 
 > [!NOTE]
 > `WebDan2` は旧リポジトリ名です。現在の正式なリポジトリ名は `Capacita` で、RC 計算コアは `RcDan`、鋼部材計算コアは `SteelDan`、統合アプリケーションは `WebDanforCS` に整理されています。互換性維持のため、現行 MCP の tool ID と環境変数には `webdan` という旧名称が残っています。
 
 ## 現在の MCP interface
 
-ルートの TypeScript server には、FEMPython、Capacita、SoilStructure の protocol v1 runner を接続できます。
+ルートの TypeScript server には、FEMPython、Capacita、SoilStructure、Aggre-SE の protocol v1 runner を接続できます。
 
 | Tool | Purpose | Output |
 |---|---|---|
@@ -40,6 +41,8 @@
 | `soilstructure_calculate` | SoilStructure document JSON から杭計算を実行 | 計算要約、`result.json`、任意 PDF・XLSX |
 | `soilstructure_export_sdc` | 杭計算と `sdcExport` 設定からSNAP連携データを生成 | `result.json`、通常・液状化L1/L2 SDC |
 | `soilstructure_ground_displacement` | `groundDisplacement` 設定からL1/L2地盤応答変位を計算 | `result.json`、任意 PDF、任意 L1/L2 JOT |
+| `aggrese_inspect` | Aggre-SEプロジェクトXMLとJRSNAP結果を読み、ケースと任意スペクトルの応答塑性率μの要否を確認 | ケース一覧、μが必要なケースと参考値 |
+| `aggrese_calculate` | Aggre-SEの帳票を作成（購入オプションはすべて有効） | `result.json`、任意 `summary.xlsx`・`report.pdf`・ケース毎照査表・`pickup.pik`・`pile-anchor-bar.pdf` |
 | `get_job` | 過去の job を取得 | manifest と artifact metadata |
 | `read_artifact` | PDF・PIK等の検証済み成果物をbyte範囲で取得 | Base64、offset、EOF、総byte数 |
 | `read_text_artifact` | JSON・Markdown・text 成果物を範囲読取 | UTF-8 text fragment |
@@ -59,7 +62,8 @@ structural-mcp (Node.js 24 / TypeScript)
         |
         +-- FEMPython adapter ------> FrameWebforCS.Headless / FEMPython
         +-- Capacita adapter -------> RcDan / SteelDan （既存互換 tool）
-        `-- SoilStructure adapter --> SoilPile / SoilDisp / headless runner
+        +-- SoilStructure adapter --> SoilPile / SoilDisp / headless runner
+        `-- Aggre-SE adapter -------> AggreSE.Headless / Batch（Docu-SE）
 ```
 
 runner は 1 tool call ごとに別 process で起動する方針です。stdout は小さな JSON envelope に限定し、完全な計算結果や帳票は artifact として管理します。
@@ -87,9 +91,10 @@ submodule はそれぞれ検証済み commit に固定されています。各 s
 - Python 3.12 と `uv`（FEMPython）
 - .NET SDK 8 以上（Capacita）
 - .NET SDK 10（SoilStructure。`global.json` を参照）
+- Visual Studio（MSBuild）、.NET Framework 4.8、SPREAD 15・ComponentOne 2015・VB-Report8（Aggre-SE。`dotnet build` は不可）
 - Windows（現在の各アプリケーションと帳票生成環境）
 
-各 engine 固有の構築・検証手順は、[FEMPython README](./FEMPython/README.md)、[Capacita README](./Capacita/README.md)、[SoilStructure README](./SoilStructure/README.md) を参照してください。
+各 engine 固有の構築・検証手順は、[FEMPython README](./FEMPython/README.md)、[Capacita README](./Capacita/README.md)、[SoilStructure README](./SoilStructure/README.md)、[Aggre-SE Headless README](./Batch/Aggre-SE/Headless/README.md) を参照してください。
 
 ## MCP server の build
 
@@ -99,7 +104,11 @@ npm run build
 dotnet build .\Capacita\WebDanforCS\Headless\WebDanforCS.Headless.csproj -c Release
 uv sync --project .\FEMPython\FrameWeb --locked
 dotnet build .\FEMPython\FrameWebforCS\Headless\FrameWebforCS.Headless.csproj -c Release
+# Aggre-SE: Visual Studio の MSBuild で build（dotnet build は不可）
+& $msbuild .\Batch\Docu-SE.sln -restore /p:Configuration=Release /v:minimal /nologo
 ```
+
+`$msbuild` は `vswhere` で取得します（[Aggre-SE Headless README](./Batch/Aggre-SE/Headless/README.md)）。
 
 現行の Capacita adapter は、protocol v1 互換の `WebDanforCS.Headless` runnerを `STRUCTURAL_MCP_WEBDAN_RUNNER` で受け取ります。未指定時は、このリポジトリ内のRelease buildを使用します。
 
@@ -200,6 +209,29 @@ standalone Python雛形では `run_soilstructure(..., generate_excel=True)` に�
 
 実runnerでの接続確認は `npm run smoke:soilstructure -- <入力JSONの絶対パス> pile-excel` で行います。
 
+### Aggre-SE（Batch）の総括表・計算書
+
+`aggrese_inspect` / `aggrese_calculate` は、Aggre-SE（Batch / Docu-SE）のプロジェクトXMLを `inputPath` で受け取ります。XMLの `SNAP/SnapDBPath` にあるJRSNAP解析結果（`*.DB1` と同名の `.DB2`・`.R10` 等、`<名前>_Output_Chokukiso.csv`、DB1と同じフォルダーの `Aspect-SE_*.csv`）もallowed root内に必要です。MCPはそれらをjobへコピーし、XMLは書き換えずにDB1のパスだけを差し替えてrunnerを起動します。DB1の隣にBatchが出力する同名の `.xlsx` / `.csv` はコピーしません。合計サイズは `STRUCTURAL_MCP_MAX_BUNDLE_BYTES` が上限です。
+
+```json
+{
+  "inputPath": "K:\\example\\C1.xml",
+  "generateSummaryExcel": true,
+  "generateReportPdf": true,
+  "includeCheckTables": true,
+  "generatePik": false,
+  "generatePileAnchorBarPdf": false
+}
+```
+
+購入オプションはGUIと同じくすべて有効です。任意スペクトル（地盤区分9）のケースはGUIでは応答塑性率μを画面入力するため、先に `aggrese_inspect` で `summary.spectralDuctility` の `source: "missing"` と参考値（等価固有周期・折曲点震度・構造物種類）を確認し、ユーザーが決めた値を `spectralDuctility: [{ "caseNumber": 1, "value": 2.5 }]` で渡します。未指定の場合は `SPECTRAL_DUCTILITY_REQUIRED` で失敗します。`generatePik` はケースのピックアップ対象、`generatePileAnchorBarPdf` は段落し入力が必要で、作れない場合は失敗します。`.pik` とケース毎 `.csv` はShift-JISのため `read_artifact` で取得します。
+
+runnerはSNAPDBLibの固定作業フォルダー（`%SystemDrive%\nwl\Docu-SE`、`%TEMP%\Temp002`）を使うため、同時実行はrunner側で直列化されます。build・検証は [Aggre-SE Headless README](./Batch/Aggre-SE/Headless/README.md) を参照してください。実runnerとMCPの接続確認は次のコマンドで行います（`--outputs summary,report,pik,pile`、DB1がXMLと別フォルダーなら `--allowed-root`）。
+
+```powershell
+npm run smoke:aggrese -- 'C:\path\to\project.xml' --outputs summary,report
+```
+
 ## 設定
 
 設定は MCP process の環境変数で渡します。
@@ -209,11 +241,13 @@ standalone Python雛形では `run_soilstructure(..., generate_excel=True)` に�
 | `STRUCTURAL_MCP_FEMPYTHON_RUNNER` | `./FEMPython/FrameWebforCS/Headless/bin/Release/net10.0-windows/FrameWebforCS.Headless.exe` | FrameWebforCS protocol v1 runner（Windows / .NET 10 / Python環境が必要） |
 | `STRUCTURAL_MCP_WEBDAN_RUNNER` | `./Capacita/WebDanforCS/Headless/bin/Release/net8.0/WebDanforCS.Headless.dll` | Capacita protocol v1 互換 runner DLL の絶対 path。変数名は後方互換のため維持 |
 | `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure/Headless/bin/Release/net10.0/SoilStructure.Headless.exe` | SoilStructure protocol v1 runner の絶対 path |
+| `STRUCTURAL_MCP_AGGRESE_RUNNER` | `./Batch/Aggre-SE/Headless/bin/Release/AggreSE.Headless.exe` | Aggre-SE protocol v1 runner（.NET Framework 4.8）の絶対 path |
 | `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP 所有 job root |
 | `STRUCTURAL_MCP_ALLOWED_ROOTS` | `%USERPROFILE%/Documents` | 読取可能な入力 root。複数指定は Windows で `;` 区切り |
 | `STRUCTURAL_MCP_ENABLE_STEELDAN` | `false` | experimental な SteelDan を明示的に有効化 |
 | `STRUCTURAL_MCP_TIMEOUT_MS` | `180000` | runner timeout |
 | `STRUCTURAL_MCP_MAX_INPUT_BYTES` | `16777216` | 入力上限 |
+| `STRUCTURAL_MCP_MAX_BUNDLE_BYTES` | `1073741824` | Aggre-SE の XML と JRSNAP 結果ファイルの合計上限 |
 | `STRUCTURAL_MCP_MAX_ARTIFACT_BYTES` | `134217728` | artifact 単体上限 |
 | `STRUCTURAL_MCP_MAX_TEXT_READ_BYTES` | `262144` | text artifact の 1 回の読取上限 |
 
@@ -228,6 +262,7 @@ codex mcp add structural-mcp `
   --env STRUCTURAL_MCP_FEMPYTHON_RUNNER=C:\path\to\FEMPython\FrameWebforCS\Headless\bin\Release\net10.0-windows\FrameWebforCS.Headless.exe `
   --env STRUCTURAL_MCP_WEBDAN_RUNNER=C:\path\to\capacita-headless.dll `
   --env STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER=C:\path\to\SoilStructure.Headless.dll `
+  --env STRUCTURAL_MCP_AGGRESE_RUNNER=C:\path\to\Batch\Aggre-SE\Headless\bin\Release\AggreSE.Headless.exe `
   --env STRUCTURAL_MCP_JOB_ROOT=C:\path\to\structural-mcp-jobs `
   --env STRUCTURAL_MCP_ALLOWED_ROOTS=C:\path\to\Documents `
   --env STRUCTURAL_MCP_ENABLE_STEELDAN=true `
@@ -252,6 +287,7 @@ codex mcp add structural-mcp `
 - [FEMPython](./FEMPython/README.md)
 - [Capacita](./Capacita/README.md)
 - [SoilStructure](./SoilStructure/README.md)
+- [Aggre-SE Headless](./Batch/Aggre-SE/Headless/README.md)
 - [配布・開発中MCPテスト計画](./.agents/docs/plans/distribution-and-development-testing-plan.md)
 - [統合 MCP server 実装プラン](./.agents/docs/plans/structural-mcp-server-plan.md)（旧名称を含む歴史的計画）
 - [旧 WebDan2 headless 計画](./.agents/docs/plans/webdan2-headless-mcp-plan.md)（現在の Capacita）

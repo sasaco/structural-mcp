@@ -8,16 +8,19 @@ export interface AppConfig {
   femPythonRunner: string | null;
   capacitaRunner: string | null;
   soilStructureRunner: string | null;
+  aggreSeRunner: string | null;
   runnerConfigurations: {
     femPython: RunnerConfiguration;
     capacita: RunnerConfiguration;
     soilStructure: RunnerConfiguration;
+    aggreSe: RunnerConfiguration;
   };
   jobRoot: string;
   allowedInputRoots: string[];
   steelDanEnabled: boolean;
   timeoutMs: number;
   maxInputBytes: number;
+  maxBundleBytes: number;
   maxStdoutBytes: number;
   maxStderrBytes: number;
   maxArtifactBytes: number;
@@ -89,6 +92,10 @@ export async function loadConfig(): Promise<AppConfig> {
     "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER",
     resolve(sourceRoot, "SoilStructure/SoilStructure/Headless/bin/Release/net10.0/SoilStructure.Headless.exe"),
   );
+  const aggreSeConfiguration = await runnerConfiguration(
+    "STRUCTURAL_MCP_AGGRESE_RUNNER",
+    resolve(sourceRoot, "Batch/Aggre-SE/Headless/bin/Release/AggreSE.Headless.exe"),
+  );
   const defaultJobs = process.env.LOCALAPPDATA
     ? resolve(process.env.LOCALAPPDATA, "structural-mcp/jobs")
     : resolve(sourceRoot, ".structural-mcp/jobs");
@@ -104,16 +111,19 @@ export async function loadConfig(): Promise<AppConfig> {
     femPythonRunner: femPythonConfiguration.resolvedPath,
     capacitaRunner: capacitaConfiguration.resolvedPath,
     soilStructureRunner: soilStructureConfiguration.resolvedPath,
+    aggreSeRunner: aggreSeConfiguration.resolvedPath,
     runnerConfigurations: {
       femPython: femPythonConfiguration,
       capacita: capacitaConfiguration,
       soilStructure: soilStructureConfiguration,
+      aggreSe: aggreSeConfiguration,
     },
     jobRoot: await realpath(jobRoot),
     allowedInputRoots: await Promise.all(allowedInputRoots.map((root) => realpath(root))),
     steelDanEnabled: booleanValue("STRUCTURAL_MCP_ENABLE_STEELDAN", false),
     timeoutMs: positiveInteger("STRUCTURAL_MCP_TIMEOUT_MS", 180_000),
     maxInputBytes: positiveInteger("STRUCTURAL_MCP_MAX_INPUT_BYTES", 16 * 1024 * 1024),
+    maxBundleBytes: positiveInteger("STRUCTURAL_MCP_MAX_BUNDLE_BYTES", 1024 * 1024 * 1024),
     maxStdoutBytes: positiveInteger("STRUCTURAL_MCP_MAX_STDOUT_BYTES", 1024 * 1024),
     maxStderrBytes: positiveInteger("STRUCTURAL_MCP_MAX_STDERR_BYTES", 4 * 1024 * 1024),
     maxArtifactBytes: positiveInteger("STRUCTURAL_MCP_MAX_ARTIFACT_BYTES", 128 * 1024 * 1024),

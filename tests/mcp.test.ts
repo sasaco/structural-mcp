@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -11,6 +11,7 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const fixtureRoot = resolve(repositoryRoot, "tests/fixtures");
 const fakeRunner = resolve(fixtureRoot, "fake-runner.mjs");
 const fakeFemRunner = resolve(fixtureRoot, "fake-fempython-runner.mjs");
+const fakeAggreSeRunner = resolve(fixtureRoot, "fake-aggrese-runner.mjs");
 let jobRoot: string;
 let client: Client;
 
@@ -24,6 +25,7 @@ async function connect(overrides: Record<string, string> = {}): Promise<Client> 
       STRUCTURAL_MCP_WEBDAN_RUNNER: fakeRunner,
       STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER: fakeRunner,
       STRUCTURAL_MCP_FEMPYTHON_RUNNER: fakeFemRunner,
+      STRUCTURAL_MCP_AGGRESE_RUNNER: fakeAggreSeRunner,
       STRUCTURAL_MCP_JOB_ROOT: jobRoot,
       STRUCTURAL_MCP_ALLOWED_ROOTS: fixtureRoot,
       STRUCTURAL_MCP_ENABLE_STEELDAN: "true",
@@ -47,6 +49,8 @@ after(async () => {
 test("lists all tools and reports independently available runners", async () => {
   const result = await client.listTools();
   assert.deepEqual(result.tools.map((tool) => tool.name).sort(), [
+    "aggrese_calculate",
+    "aggrese_inspect",
     "fempython_calculate",
     "fempython_get_runner_contract",
     "get_capabilities",
@@ -625,5 +629,143 @@ test("a missing FrameWeb runner does not disable other engines", async () => {
     const result = await isolated.callTool({ name: "fempython_calculate", arguments: { input: "{}" } });
     assert.equal(result.isError, true);
     assert.match(JSON.stringify(result.structuredContent), /fempython_unavailable/);
+  } finally { await isolated.close(); }
+});
+
+const aggreSeProject = resolve(fixtureRoot, "aggrese", "model.xml");
+
+async function readResultJson(jobId: string): Promise<Record<string, unknown>> {
+  const read = await client.callTool({ name: "read_text_artifact", arguments: { jobId, artifactId: "result-json", maxBytes: 65536 } });
+  assert.equal(read.isError, undefined);
+  return JSON.parse((read.structuredContent as { text: string }).text) as Record<string, unknown>;
+}
+
+/** Shift-JIS bytes of an ASCII-only Aggre-SE XML (ASCII is a subset of Shift-JIS). */
+function aggreSeXml(db1Paths: string[], marker = ""): Buffer {
+  const strings = db1Paths.map((path) => `      <string>${path.replaceAll("&", "&amp;")}</string>`).join("\n");
+  return Buffer.from(`<?xml version="1.0" encoding="utf-16"?>\n<Datas>${marker}\n  <SNAP>\n    <SnapDBPath>\n${strings}\n    </SnapDBPath>\n  </SNAP>\n</Datas>\n`, "ascii");
+}
+
+test("stages an Aggre-SE project with its JRSNAP files and returns the selected outputs", async () => {
+  const result = await client.callTool({
+    name: "aggrese_calculate",
+    arguments: { inputPath: aggreSeProject, generateReportPdf: true, generatePik: true },
+  });
+  assert.equal(result.isError, undefined, JSON.stringify(result.structuredContent));
+  const structured = result.structuredContent as { jobId: string; engine: string; tool: string; artifacts: Array<{ artifactId: string; relativePath: string }> };
+  assert.equal(structured.engine, "aggrese");
+  assert.equal(structured.tool, "aggrese_calculate");
+  assert.deepEqual(structured.artifacts.map((item) => item.relativePath), [
+    "output/result.json",
+    "output/summary.xlsx",
+    "output/report.pdf",
+    "output/cases/case-01.xlsx",
+    "output/cases/case-03.xlsx",
+    "output/pickup.pik",
+  ]);
+  const summary = await readResultJson(structured.jobId);
+  // Same-name JRSNAP files, the direct-foundation CSV and Aspect-SE CSVs; never Batch's own .xlsx/.csv outputs.
+  assert.deepEqual(summary.staged, {
+    0: ["Aspect-SE_L2-spc1_G9（RC）.csv", "ケース1(正向&負向).DB1", "ケース1(正向&負向).R10", "ケース1(正向&負向)_Output_Chokukiso.csv"],
+    2: ["ケース3.DB1", "ケース3.DB2"],
+  });
+  assert.deepEqual(summary.flags, {
+    "--summary-xlsx": "true", "--report-pdf": "true", "--check-tables": "true", "--pik": "true", "--pile-anchor-bar-pdf": "false",
+  });
+  const pik = await client.callTool({ name: "read_artifact", arguments: { jobId: structured.jobId, artifactId: "pickup-pik" } });
+  assert.equal(Buffer.from((pik.structuredContent as { base64: string }).base64, "base64").toString("ascii"), "Batch ver1.0.0\r\n");
+});
+
+test("Aggre-SE check tables follow the report PDF and at least one output is required", async () => {
+  const summaryOnly = await client.callTool({ name: "aggrese_calculate", arguments: { inputPath: aggreSeProject } });
+  assert.equal(summaryOnly.isError, undefined);
+  const summary = await readResultJson((summaryOnly.structuredContent as { jobId: string }).jobId);
+  assert.equal((summary.flags as Record<string, string>)["--check-tables"], "false");
+
+  const none = await client.callTool({ name: "aggrese_calculate", arguments: { inputPath: aggreSeProject, generateSummaryExcel: false } });
+  assert.equal(none.isError, true);
+  assert.match(JSON.stringify(none.structuredContent), /成果物を1つ以上/);
+});
+
+test("Aggre-SE inspect passes the user's spectral ductility and rejects unknown cases", async () => {
+  const result = await client.callTool({
+    name: "aggrese_inspect",
+    arguments: { inputPath: aggreSeProject, spectralDuctility: [{ caseNumber: 3, value: 2.5 }] },
+  });
+  assert.equal(result.isError, undefined);
+  const structured = result.structuredContent as { jobId: string; artifacts: Array<{ relativePath: string }> };
+  assert.deepEqual(structured.artifacts.map((item) => item.relativePath), ["output/result.json"]);
+  const summary = await readResultJson(structured.jobId);
+  assert.equal(summary.command, "inspect");
+  assert.deepEqual(summary.spectralDuctility, { 2: 2.5 });
+
+  // Case 2 has no DB1 in the fixture.
+  const unknown = await client.callTool({
+    name: "aggrese_inspect",
+    arguments: { inputPath: aggreSeProject, spectralDuctility: [{ caseNumber: 2, value: 2.5 }] },
+  });
+  assert.equal(unknown.isError, true);
+  assert.match(JSON.stringify(unknown.structuredContent), /ケース2にはDB1がありません/);
+});
+
+test("Aggre-SE reports a missing spectral ductility and accepts it on the next call", async () => {
+  const project = await mkdtemp(resolve(tmpdir(), "structural-mcp-aggrese-"));
+  const isolated = await connect({ STRUCTURAL_MCP_ALLOWED_ROOTS: project });
+  try {
+    await writeFile(resolve(project, "case.DB1"), "fake");
+    await writeFile(resolve(project, "model.xml"), aggreSeXml(["case.DB1"], "<!-- FAKE_SPECTRAL -->"));
+    const missing = await isolated.callTool({ name: "aggrese_calculate", arguments: { inputPath: resolve(project, "model.xml") } });
+    assert.equal(missing.isError, true);
+    const failure = missing.structuredContent as { ok: boolean; artifacts: unknown[]; errors: Array<{ code: string }> };
+    assert.equal(failure.ok, false);
+    assert.deepEqual(failure.artifacts, []);
+    assert.equal(failure.errors[0]?.code, "SPECTRAL_DUCTILITY_REQUIRED");
+
+    const given = await isolated.callTool({
+      name: "aggrese_calculate",
+      arguments: { inputPath: resolve(project, "model.xml"), spectralDuctility: [{ caseNumber: 1, value: 3 }] },
+    });
+    assert.equal(given.isError, undefined);
+  } finally {
+    await isolated.close();
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("Aggre-SE DB1 files must be inside the allowed roots", async () => {
+  const project = await mkdtemp(resolve(tmpdir(), "structural-mcp-aggrese-"));
+  const external = await mkdtemp(resolve(tmpdir(), "structural-mcp-external-"));
+  const isolated = await connect({ STRUCTURAL_MCP_ALLOWED_ROOTS: project });
+  try {
+    await writeFile(resolve(external, "case.DB1"), "fake");
+    await writeFile(resolve(project, "absolute.xml"), aggreSeXml([resolve(external, "case.DB1")]));
+    await writeFile(resolve(project, "relative.xml"), aggreSeXml([`..\\${basename(external)}\\case.DB1`]));
+    await writeFile(resolve(project, "missing.xml"), aggreSeXml(["missing.DB1"]));
+    for (const name of ["absolute.xml", "relative.xml"]) {
+      const result = await isolated.callTool({ name: "aggrese_inspect", arguments: { inputPath: resolve(project, name) } });
+      assert.equal(result.isError, true);
+      assert.match(JSON.stringify(result.structuredContent), /ケース1のDB1を読み取れません.*outside STRUCTURAL_MCP_ALLOWED_ROOTS/);
+    }
+    const missing = await isolated.callTool({ name: "aggrese_inspect", arguments: { inputPath: resolve(project, "missing.xml") } });
+    assert.equal(missing.isError, true);
+    assert.match(JSON.stringify(missing.structuredContent), /ケース1のDB1を読み取れません/);
+  } finally {
+    await isolated.close();
+    await rm(project, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
+});
+
+test("a missing Aggre-SE runner disables only its tools", async () => {
+  const isolated = await connect({ STRUCTURAL_MCP_AGGRESE_RUNNER: resolve(jobRoot, "missing-aggrese.exe") });
+  try {
+    const caps = await isolated.callTool({ name: "get_capabilities", arguments: {} });
+    const engines = (caps.structuredContent as { engines: Record<string, { enabled: boolean; readiness: string }> }).engines;
+    assert.equal(engines.aggrese?.enabled, false);
+    assert.equal(engines.aggrese?.readiness, "unavailable");
+    assert.equal(engines.soilstructure?.enabled, true);
+    const result = await isolated.callTool({ name: "aggrese_calculate", arguments: { inputPath: aggreSeProject } });
+    assert.equal(result.isError, true);
+    assert.match(JSON.stringify(result.structuredContent), /aggrese_unavailable/);
   } finally { await isolated.close(); }
 });

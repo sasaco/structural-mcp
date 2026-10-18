@@ -57,8 +57,10 @@ export interface JobManifest {
     | "soilstructure_validate"
     | "soilstructure_calculate"
     | "soilstructure_export_sdc"
-    | "soilstructure_ground_displacement";
-  engine: "fempython" | "webdan2" | "steeldan" | "soilstructure";
+    | "soilstructure_ground_displacement"
+    | "aggrese_inspect"
+    | "aggrese_calculate";
+  engine: "fempython" | "webdan2" | "steeldan" | "soilstructure" | "aggrese";
   engineVersion: string;
   readiness: string;
   createdAt: string;

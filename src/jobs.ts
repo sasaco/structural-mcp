@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, open, readFile, realpath, stat, writeFile } from "node:fs/promises";
-import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { constants } from "node:fs";
+import { copyFile, mkdir, open, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep, win32 } from "node:path";
 import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import { runnerEnvelopeSchema } from "./contracts.js";
@@ -24,13 +25,16 @@ export async function resolveInputPath(inputPath: string, config: AppConfig): Pr
   return resolved;
 }
 
-export async function createJob(
-  tool: JobManifest["tool"],
-  input: string,
-  extension: ".wdj" | ".wsj" | ".json" | ".soilstructure.json",
-  config: AppConfig,
-): Promise<{ jobId: string; directory: string; inputPath: string; outputDirectory: string }> {
-  if (Buffer.byteLength(input, "utf8") > config.maxInputBytes) throw new Error("input exceeds the configured size limit");
+export interface PreparedJob {
+  jobId: string;
+  directory: string;
+  inputPath: string;
+  outputDirectory: string;
+  /** Job-specific runner options, appended after the tool's options. */
+  runnerOptions?: readonly string[];
+}
+
+async function allocateJob(config: AppConfig): Promise<{ jobId: string; directory: string; inputDirectory: string; outputDirectory: string }> {
   const date = new Date().toISOString().slice(0, 10);
   const jobId = `${date}_${randomUUID()}`;
   const directory = resolve(config.jobRoot, date, jobId);
@@ -38,9 +42,116 @@ export async function createJob(
   const outputDirectory = resolve(directory, "output");
   await mkdir(inputDirectory, { recursive: true });
   await mkdir(outputDirectory, { recursive: true });
+  return { jobId, directory, inputDirectory, outputDirectory };
+}
+
+export async function createJob(
+  tool: JobManifest["tool"],
+  input: string,
+  extension: ".wdj" | ".wsj" | ".json" | ".soilstructure.json",
+  config: AppConfig,
+): Promise<PreparedJob> {
+  if (Buffer.byteLength(input, "utf8") > config.maxInputBytes) throw new Error("input exceeds the configured size limit");
+  const { jobId, directory, inputDirectory, outputDirectory } = await allocateJob(config);
   const inputPath = resolve(inputDirectory, `model${extension}`);
   await writeFile(inputPath, input, { encoding: "utf8", flag: "wx" });
   return { jobId, directory, inputPath, outputDirectory };
+}
+
+const xmlEntities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'" };
+
+function decodeXmlText(value: string): string {
+  return value.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g, (_, entity: string) =>
+    entity.startsWith("#x") ? String.fromCodePoint(Number.parseInt(entity.slice(2), 16))
+      : entity.startsWith("#") ? String.fromCodePoint(Number.parseInt(entity.slice(1), 10))
+        : xmlEntities[entity]!);
+}
+
+/** SNAP/SnapDBPath entries of an Aggre-SE (Batch) project XML, by case index; empty entries are "". */
+export function aggreSeSnapPaths(xml: string): string[] {
+  const block = /<SnapDBPath>([\s\S]*?)<\/SnapDBPath>/.exec(xml)?.[1];
+  if (block === undefined) return [];
+  return [...block.matchAll(/<string(?:\s[^>]*?\/>|\s*\/>|>([\s\S]*?)<\/string>)/g)]
+    .map((match) => decodeXmlText(match[1] ?? "").trim());
+}
+
+async function allowedFile(path: string, config: AppConfig): Promise<{ path: string; bytes: number }> {
+  const resolved = await realpath(path);
+  if (!config.allowedInputRoots.some((root) => isInside(root, resolved))) {
+    throw new Error(`${basename(path)} is outside STRUCTURAL_MCP_ALLOWED_ROOTS`);
+  }
+  const info = await stat(resolved);
+  if (!info.isFile()) throw new Error(`${basename(path)} is not a file`);
+  return { path: resolved, bytes: info.size };
+}
+
+/**
+ * Copy an Aggre-SE project into a job: the XML unchanged, and for each case every JRSNAP file sharing
+ * the DB1 name (SNAPDBLib unpacks *.R10 etc. from them), the direct-foundation CSV and Aspect-SE CSVs.
+ * Files Batch itself writes beside a DB1 (*.xlsx / *.csv with the DB1 name) are left out.
+ */
+export async function createAggreSeJob(
+  inputPath: string,
+  spectralDuctility: readonly { caseNumber: number; value: number }[],
+  config: AppConfig,
+): Promise<PreparedJob> {
+  const xml = await resolveInputPath(inputPath, config);
+  if (extname(xml).toLowerCase() !== ".xml") throw new Error("入力ファイルの拡張子は.xmlである必要があります。");
+  const bytes = await readFile(xml);
+  const entries = aggreSeSnapPaths(new TextDecoder("shift_jis").decode(bytes));
+  if (entries.length > 999) throw new Error("SNAP/SnapDBPath has too many cases");
+
+  const sources = new Map<number, { db1: string; files: string[] }>();
+  let total = bytes.length;
+  for (const [index, entry] of entries.entries()) {
+    if (entry === "") continue;
+    const candidate = win32.isAbsolute(entry) ? entry : resolve(dirname(xml), entry);
+    let db1: string;
+    try {
+      ({ path: db1 } = await allowedFile(candidate, config));
+    } catch (error) {
+      throw new Error(`ケース${index + 1}のDB1を読み取れません（${entry}）: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (extname(db1).toLowerCase() !== ".db1") throw new Error(`ケース${index + 1}のSnapDBPathがDB1ではありません: ${entry}`);
+    const folder = dirname(db1);
+    const stem = basename(db1, extname(db1)).toLowerCase();
+    const files: string[] = [];
+    for (const name of await readdir(folder)) {
+      const lower = name.toLowerCase();
+      const sibling = lower.startsWith(`${stem}.`) && ![".xlsx", ".csv"].includes(extname(lower));
+      if (!sibling && lower !== `${stem}_output_chokukiso.csv` && !/^aspect-se_.*\.csv$/.test(lower)) continue;
+      const file = await allowedFile(resolve(folder, name), config);
+      total += file.bytes;
+      if (total > config.maxBundleBytes) throw new Error("入力XMLとJRSNAP結果の合計がSTRUCTURAL_MCP_MAX_BUNDLE_BYTESを超えています。");
+      files.push(file.path);
+    }
+    sources.set(index, { db1, files });
+  }
+  const known = new Set([...sources.keys()].map((index) => index + 1));
+  for (const { caseNumber } of spectralDuctility) {
+    if (!known.has(caseNumber)) throw new Error(`spectralDuctilityのケース${caseNumber}にはDB1がありません。`);
+  }
+
+  const job = await allocateJob(config);
+  const modelPath = resolve(job.inputDirectory, "model.xml");
+  await writeFile(modelPath, bytes, { flag: "wx" });
+  const snapMap: Record<string, string> = {};
+  for (const [index, { db1, files }] of sources) {
+    const target = resolve(job.inputDirectory, "snap", String(index + 1).padStart(2, "0"));
+    await mkdir(target, { recursive: true });
+    for (const file of files) await copyFile(file, resolve(target, basename(file)), constants.COPYFILE_EXCL);
+    snapMap[String(index)] = resolve(target, basename(db1));
+  }
+  const snapMapPath = resolve(job.inputDirectory, "snap-map.json");
+  await writeFile(snapMapPath, JSON.stringify(snapMap), { encoding: "utf8", flag: "wx" });
+  const runnerOptions = ["--snap-map", snapMapPath];
+  if (spectralDuctility.length > 0) {
+    const ductilityPath = resolve(job.inputDirectory, "spectral-ductility.json");
+    const values = Object.fromEntries(spectralDuctility.map(({ caseNumber, value }) => [String(caseNumber - 1), value]));
+    await writeFile(ductilityPath, JSON.stringify(values), { encoding: "utf8", flag: "wx" });
+    runnerOptions.push("--spectral-ductility", ductilityPath);
+  }
+  return { jobId: job.jobId, directory: job.directory, inputPath: modelPath, outputDirectory: job.outputDirectory, runnerOptions };
 }
 
 async function sha256(path: string): Promise<string> {

@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Local MCP gateway for FEMPython, Capacita, and SoilStructure",
+  "description": "Local MCP gateway for FEMPython, Capacita, SoilStructure, and Aggre-SE",
   "main": "dist/src/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -11,7 +11,8 @@
     "test": "npm run build && node --test dist/tests/*.test.js",
     "smoke": "npm run build && node scripts/smoke-test.mjs",
     "smoke:soilstructure": "npm run build && node scripts/smoke-soilstructure.mjs",
-    "smoke:fempython": "npm run build && node scripts/smoke-fempython.mjs"
+    "smoke:fempython": "npm run build && node scripts/smoke-fempython.mjs",
+    "smoke:aggrese": "npm run build && node scripts/smoke-aggrese.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
