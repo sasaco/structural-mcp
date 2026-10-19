@@ -21,4 +21,16 @@
 - **La＝1（ちょうど 1.0）は「自動算定」**（`CommonDataClass.cs` の `ShearVerification`）。そのときは断面力から `|1000 × Md / Vd|`（mm）を使う（`ModelDataForCalc.GetShearSpan`）。旧 WebDan の WDJ の `La: 1` はこの意味。1 mm のつもりで 1 を書かない。`shear` の表がない（La が null）着目点は、せん断スパン比を考えない。
 - **La は着目点ごとに1つ**なので、限界状態ごとに La を変えるには着目点を分ける。各節はその節の断面力を持つ点だけを印刷する（1点だけの表になる）。旧 WebDan は照査ごとの La を持っていた。
 - 上側鉄筋なしは `rebar1` を全部 null（`enable` は true のまま）で通る。
+
+### 断面力入力で版（スラブ）を照査した例（R5_Rail、2026-10-19、本物の runner で確認）
+
+関内 EVピット部の 0530 底版（四辺固定スラブの近似解法の断面力を1m幅で照査）で確かめたこと。
+
+- 成果物は `result.json`・`report.pdf` と、`calc.print_summary_table_checked: true` なら `summary.xlsx` の3つ（kind `result`・`report`・`spreadsheet`）。照査値と OK/NG はこの総括表と計算書にだけある。与えた WDJ を GUI で開けるので、利用者が控えに残すのはその WDJ。
+- 骨組の無い断面だけの照査は、**着目点1つに部材1つ**（`members[].m_no` と `points[].m_no` を同じに、`m_len` は使われない値でよい）、`points[].position` は null、`p_id` は文字列でも通る。`members[].g_name` が各頁の右上に `[x方向]` のように出て、同じ `g_id` の部材が1つの表の列に並ぶ（列見出しは `No<m_no>`・`p_name`・引張側）。
+- 曲げだけの点は `isVyCalc: false`。せん断の節にはその点が出ない（せん断の節はグループごとに Part 1・Part 2 の2頁、通し番号は節全体で (1/4)〜(4/4)。曲げは1グループ1頁）。
+- せん断の行には `Vd<id>_Vd` と一緒に `Vd<id>_Md`（その点の Md）を書く。計算書の Md 欄と、軸力を考えない曲げ耐力 Mu の比較に使われる。軸力は `_Nd` を null にすると 0.0 と印字される。
+- 疲労（id 2〜4）・使用性（損傷）（id 6）・最小鉄筋量（id 8）を空にすると、着目点ごと・行ごとに warn の WD-408（曲げ）／WD-409（せん断）が出る（4点・曲げ点4・せん断点2で24件）。照査の節は欠けない（`reportSections` は与えた行の節だけ）。
+- 変動作用の無い構造で耐久性の行0（縁応力度）と行1（永久作用）に同じ値を入れても、耐久性の節は出る。曲げひび割れは σc・σct・σs が制限値以内なら「省略判定 省略」（ひび割れ幅は「-」、総括表は `OK (省略)`）、せん断ひび割れは変動作用0で `OK (省略)`。
+- 上向きの荷重を受ける底版の支点部は下面引張なので、「支点部は負」で書かれた断面力（上からの荷重の慣用）を渡すときは Md の符号を反転する（Capacita は正の Md が下側引張）。計算書の「引張側」欄（下側／上側）で確かめられる。
 - 疲労は WDJ の `fatigues`（`train_A_count`・`train_B_count`・`service_life` は文字列、`fatigue_list[0]` の M1/V1 に SA・SB・NA06・NB06・NA12・NB12・r1）から Capacita が ΣN を計算する（`RcDan/Calculation/Calc_NRepetition.cs`）。外部プログラム（N-EQUIVALENT など）で求めた値を使う見本と比べるときは、その入力を写す。

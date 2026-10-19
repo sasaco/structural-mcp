@@ -68,6 +68,16 @@ RcDan（`VerificationControl.CheckValidation`）は断面力0の照査の節を�
 - 左右対称の永久作用（例：橋脚の直角方向）では 1901・1906 が出る。
 - 断面力入力モードで与えない限界状態の照査は、WD-19xx ではなく warn の WD-408（曲げ）／WD-409（せん断）／WD-410（ねじり）で、印刷されず `reportSections` にも出ない。
 
+## 令和5年の基準（R5_Rail など）で使うとき（2026-10-19、Capacita a29c9b4 の本物の runner で確認）
+
+- `basic.specification2_list` で id 3（R5_Rail）を選ぶ。R5 では行6（`pickup_*` と `safety_factor` の id 6）が**使用性（損傷）**、行7が**復旧性（損傷）**（H16 の「地震時以外」「地震時」に当たる行）。行7 の節の ID は `bending/shear_restorability_eq` のまま（README の表）。
+- `crack[].con_u`・`con_l`・`con_s` は R5 では**水掛かりの程度**：1 常時乾燥・2 乾湿繰返し・3 常時湿潤（`EnvironmentCondition.ConvertToEnvType`。H16 では 1 一般・2 腐食性・3 特に厳しい）。σsl・σsl2 は乾燥・湿潤 140、乾湿繰返し 120。Wlim は乾燥 0.005c、乾湿繰返し・湿潤 0.004c。計算書の行「水掛かりの程度」に出る。
+- 耐久性の節（`bending_durability`・`shear_durability`）は、**永久作用の行（`pickup_moment`・`pickup_shear_force` の id 1）が無いと出ない**（行0 だけでは info も warn も出ずに節ごと消える）。せん断の変動作用の行（id 2）は空でよい（`CalcResult_ShearCrack` が行0−行1 の差で作る）。
+- `safety_factor` の `V_rbv` は Vdd の γb（`S_Gamma_bd`、Capacita の既定 1.2）。Vwcd の γb は別（計算書では Vcd・Vwcd・Vdd の γb 欄に V_rbc が出る）。
+- 照査値と OK/NG の総括表 `summary.xlsx` は WDJ の `calc.print_summary_table_checked: true` で返る（成果物 kind `spreadsheet`）。`--summary-xlsx` という引数は runner に無い（付けても無視される）。計算書の節は変わらない。
+- 対称な配筋（上下が同じ）では、着目断面力が小さいほうの引張側を飛ばす info（WD-16xx。確認したのは 1618・1619・1622・1625・1628）が出る。照査の省略（WD-19xx）ではない。
+- `members[].g_name` は各頁の右上に `[g_name]` で出る。1つの計算書に複数の骨組の計算書を並べるときは、名前に骨組を入れると頁を区別できる。
+
 ## 配筋の既定と数え方
 
 - `side_cover`・`side_ss` を空欄にすると、RcDan（`DefaultValue.CalcDefaultUedgeAndPitchForSideBar`）が上下の主鉄筋の間に側方鉄筋を等分し、側方の芯かぶりを主鉄筋の芯にする。
