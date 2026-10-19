@@ -16,6 +16,8 @@
 | [`Capacita`](./Capacita/) | RC・鋼部材の断面照査 | 結果 JSON、PDF、Markdown、Excel | 既存 adapter あり。旧 runner path から submodule への移行中 |
 | [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算、SNAP連携、地盤応答変位 | 中間結果 JSON、Excel、PDF、SDC、JOT | MCP adapter 接続済み。headless runner を個別設定して利用 |
 | [`Batch`](./Batch/) | Aggre-SE（Docu-SE）: JRSNAP解析結果の集計・照査 | 総括表 Excel、計算書 PDF、PIK、杭段落とし PDF | AggreSE.Headless runner 接続済み（experimental） |
+| [`WebPier`](./WebPier/) | 鉄道橋脚の設計計算（上の各エンジンと JRSNAP を呼ぶアプリ） | 計算書 PDF、結果 JSON、各エンジンの入力（FrameWeb 入力・NDU・WDJ・Aggre-SE XML） | MCP 未接続（[計画](./.claude/docs/plans/global-engine-skills-plan.md) の Phase 4）。CLI で直接使う |
+| [`JRSNAPHeadless`](./JRSNAPHeadless/) | JRSNAP（鉄道総研）の解析用データ出力・静的非線形解析・データ確認図と荷重図 | `.ndt`、解析結果、図の PDF | MCP 未接続。WebPier が直接呼ぶ。**private repo**。JRSNAP 本体は同梱せず、利用者が別に入れる |
 
 > [!NOTE]
 > `WebDan2` は旧リポジトリ名です。現在の正式なリポジトリ名は `Capacita` で、RC 計算コアは `RcDan`、鋼部材計算コアは `SteelDan`、統合アプリケーションは `WebDanforCS` に整理されています。互換性維持のため、現行 MCP の tool ID と環境変数には `webdan` という旧名称が残っています。
@@ -85,16 +87,25 @@ git submodule update --init --recursive
 
 submodule はそれぞれ検証済み commit に固定されています。各 submodule 内で branch を進めても、ルート側の参照 commit を更新しない限り他の利用者へは反映されません。
 
+`Batch` は GitLab、`JRSNAPHeadless` は GitHub の private repo です。読取り権限がない場合は、その submodule の取得だけが失敗します。
+
+WebPier の Python 環境は、submodule の取得後に WebPier の中で作ります。帳票の組版ライブラリ GridLayoutPdf は `WebPier/pyproject.toml` の git 参照（commit の SHA 固定）で入ります。
+
+```powershell
+uv sync --project ".\WebPier" --locked
+```
+
 ## 必要環境
 
 - Node.js 24 以上（MCP server）
-- Python 3.12 と `uv`（FEMPython）
+- Python 3.12 と `uv`（FEMPython、WebPier）
 - .NET SDK 8 以上（Capacita）
 - .NET SDK 10（SoilStructure。`global.json` を参照）
 - Visual Studio（MSBuild）、.NET Framework 4.8、SPREAD 15・ComponentOne 2015・VB-Report8（Aggre-SE。`dotnet build` は不可）
+- JRSNAP 5.2-L03 または 5.3-L01体験版2（JRSNAPHeadless。鉄道総研のライセンス品で、別にインストール）と .NET SDK（net48 の参照アセンブリ）
 - Windows（現在の各アプリケーションと帳票生成環境）
 
-各 engine 固有の構築・検証手順は、[FEMPython README](./FEMPython/README.md)、[Capacita README](./Capacita/README.md)、[SoilStructure README](./SoilStructure/README.md)、[Aggre-SE Headless README](./Batch/Aggre-SE/Headless/README.md) を参照してください。
+各 engine 固有の構築・検証手順は、[FEMPython README](./FEMPython/README.md)、[Capacita README](./Capacita/README.md)、[SoilStructure README](./SoilStructure/README.md)、[Aggre-SE Headless README](./Batch/Aggre-SE/Headless/README.md)、[WebPier README](./WebPier/README.md)、[JRSNAP Headless README](./JRSNAPHeadless/README.md) を参照してください。
 
 ## MCP server の build
 
@@ -298,6 +309,8 @@ npm run skills:uninstall   # このスクリプトが置いたものだけを消
 - [Capacita](./Capacita/README.md)
 - [SoilStructure](./SoilStructure/README.md)
 - [Aggre-SE Headless](./Batch/Aggre-SE/Headless/README.md)
+- [WebPier](./WebPier/README.md)
+- [JRSNAP Headless](./JRSNAPHeadless/README.md)
 - [配布・開発中MCPテスト計画](./.claude/docs/plans/distribution-and-development-testing-plan.md)
 - [エンジンと WebPier の MCP・グローバルスキル公開計画](./.claude/docs/plans/global-engine-skills-plan.md)
 - [統合 MCP server 実装プラン](./.claude/docs/plans/structural-mcp-server-plan.md)（旧名称を含む歴史的計画）

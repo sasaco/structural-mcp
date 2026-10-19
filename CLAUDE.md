@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A local STDIO MCP server (Node.js 24, TypeScript, ESM) that exposes four structural-engineering engines to MCP clients (mainly Codex). The engines live in Git submodules — `FEMPython`, `Capacita`, `SoilStructure`, `Batch` (Aggre-SE / Docu-SE) — and are **never reimplemented here**: the server spawns each engine's non-interactive "headless runner" process and manages its outputs as jobs/artifacts. README.md (Japanese) is the user-facing spec for every tool and env var; keep it in sync when tool behavior changes.
 
-`WebPier/` is an untracked, unrelated project in the working tree (it has its own CLAUDE.md). Ignore it unless asked.
+Two more submodules are not yet connected to the server (Phase 4 of `.claude/docs/plans/global-engine-skills-plan.md` adds them to `config.ts`): `WebPier` (pier design app, Python/uv; it calls the engine runners itself and depends on GridLayoutPdf through a git reference in its `pyproject.toml`) and `JRSNAPHeadless` (protocol v1 runner for JRSNAP, a licensed RTRI program installed separately; **private** GitHub repo, so cloning it needs access). Each has its own CLAUDE.md/README with its rules — follow them when working inside, and commit there (WebPier may be in use by another session: check its branch and status first).
 
 ## Commands
 

@@ -10,3 +10,9 @@
 [submodule "Batch"]
 	path = Batch
 	url = https://gitlab.com/sasaco/Batch.git
+[submodule "JRSNAPHeadless"]
+	path = JRSNAPHeadless
+	url = https://github.com/sasaco/JRSNAPHeadless.git
+[submodule "WebPier"]
+	path = WebPier
+	url = https://github.com/sasaco/WebPier.git
