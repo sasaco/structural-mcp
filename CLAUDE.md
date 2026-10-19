@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A local STDIO MCP server (Node.js 24, TypeScript, ESM) that exposes four structural-engineering engines to MCP clients (mainly Codex). The engines live in Git submodules — `FEMPython`, `Capacita`, `SoilStructure`, `Batch` (Aggre-SE / Docu-SE) — and are **never reimplemented here**: the server spawns each engine's non-interactive "headless runner" process and manages its outputs as jobs/artifacts. README.md (Japanese) is the user-facing spec for every tool and env var; keep it in sync when tool behavior changes.
+A local STDIO MCP server (Node.js 24, TypeScript, ESM) that exposes four structural-engineering engines and one application to MCP clients (mainly Codex). They live in Git submodules — `FEMPython`, `Capacita`, `SoilStructure`, `Batch` (Aggre-SE / Docu-SE), and `WebPier` (pier design app) — and are **never reimplemented here**: the server spawns each one's non-interactive "headless runner" process and manages its outputs as jobs/artifacts. README.md (Japanese) is the user-facing spec for every tool and env var; keep it in sync when tool behavior changes.
 
-Two more submodules are not yet connected to the server (Phase 4 of `.claude/docs/plans/global-engine-skills-plan.md` adds them to `config.ts`): `WebPier` (pier design app, Python/uv; it calls the engine runners itself and depends on GridLayoutPdf through a git reference in its `pyproject.toml`) and `JRSNAPHeadless` (protocol v1 runner for JRSNAP, a licensed RTRI program installed separately; **private** GitHub repo, so cloning it needs access). Each has its own CLAUDE.md/README with its rules — follow them when working inside, and commit there (WebPier may be in use by another session: check its branch and status first).
+`WebPier` (Python/uv; depends on GridLayoutPdf through a git reference in its `pyproject.toml`) calls the other runners itself: its runner is `WebPier/run_headless.py` (`webpier/pipeline/headless.py`, WebPier decision 61), started with the `.venv` beside it, and the server passes it the paths of the runners it detected. `JRSNAPHeadless` (protocol v1 runner for JRSNAP, a licensed RTRI program installed separately; **private** GitHub repo, so cloning it needs access) is only detected and passed to WebPier — it has no tools of its own. Each has its own CLAUDE.md/README with its rules — follow them when working inside, and commit there (WebPier may be in use by another session: check its branch and status first). The Phase 4 record is `.claude/docs/plans/phase4-webpier-mcp.md`.
 
 ## Commands
 
@@ -24,7 +24,7 @@ npm run build; node --test dist/tests/artifacts.test.js
 npm run build; node --test --test-name-pattern "rejects an input path outside" dist/tests/mcp.test.js
 ```
 
-`tests/mcp.test.ts` launches the real server over STDIO (`dist/src/index.js`) with the fake runners in `tests/fixtures/` (`fake-runner.mjs` serves both Capacita and SoilStructure; `fake-fempython-runner.mjs` serves FEMPython). Runner paths ending in `.mjs/.js/.cjs` are executed with node, `.dll` with `dotnet`, anything else directly — this is what lets tests avoid real engines.
+`tests/mcp.test.ts` launches the real server over STDIO (`dist/src/index.js`) with the fake runners in `tests/fixtures/` (`fake-runner.mjs` serves both Capacita and SoilStructure; `fake-fempython-runner.mjs` serves FEMPython; `fake-aggrese-runner.mjs` and `fake-webpier-runner.mjs` the others). Runner paths ending in `.mjs/.js/.cjs` are executed with node, `.dll` with `dotnet`, `.py` with the `.venv\Scripts\python.exe -X utf8` beside the script (`runner.ts: runnerInvocation`; a `.py` runner without that venv counts as missing), anything else directly — this is what lets tests avoid real engines.
 
 Real-runner smoke tests (need built submodule runners; see README for arguments): `npm run smoke`, `npm run smoke:soilstructure -- <abs input> pile-excel`, `npm run smoke:fempython -- <input.json> [--exports all|node-csv|displacement|reaction]`. Python verifiers in `scripts/` run via `uv`.
 
@@ -36,7 +36,7 @@ uv sync --project .\FEMPython\FrameWeb --locked
 dotnet build .\FEMPython\FrameWebforCS\Headless\FrameWebforCS.Headless.csproj -c Release
 ```
 
-Aggre-SE (`Batch`) is .NET Framework 4.8 VB.NET with licensed vendor components (SPREAD, ComponentOne, VB-Report8): build it with Visual Studio MSBuild (`vswhere`), never `dotnet build` — see `Batch/Aggre-SE/Headless/README.md`. Its runner tests are in `Batch/tests/Aggre-SE.Test` (`dotnet test --no-build` after the MSBuild build) and skip when the JRSNAP sample results (`*.DB1`, gitignored) are absent. `npm run smoke:aggrese -- <project.xml>` drives the real runner through MCP.
+Aggre-SE (`Batch`) is .NET Framework 4.8 VB.NET with licensed vendor components (SPREAD, ComponentOne, VB-Report8): build it with Visual Studio MSBuild (`vswhere`), never `dotnet build` — see `Batch/Aggre-SE/Headless/README.md`. Its runner tests are in `Batch/tests/Aggre-SE.Test` (`dotnet test --no-build` after the MSBuild build) and skip when the JRSNAP sample results (`*.DB1`, gitignored) are absent. `npm run smoke:aggrese -- <project.xml>` drives the real runner through MCP. `npm run smoke:webpier -- <input.json> [--stage 0612] [--frame-analysis] [--nonlinear-analysis]` generates through MCP, runs WebPier's CLI with the same venv/input/runners, and compares the bytes.
 
 Installer (MSI) has its own tests and build: `npm ci --prefix installer/runtime; node --test installer/tests/*.test.mjs` and `installer/build/build-installer.ps1 -Preview`. See `installer/README.md`.
 
@@ -62,7 +62,9 @@ Key invariants to preserve:
 
 Aggre-SE is the one multi-file input: `aggrese_*` tools set `CalculationSpec.prepareJob` → `jobs.ts: createAggreSeJob`, which copies the Shift-JIS project XML unchanged plus every JRSNAP file sharing each DB1's name (SNAPDBLib unpacks zipped `.R10` etc. from them) into `input/snap/NN/`, checks each against the allowed roots, and passes `--snap-map` (and `--spectral-ductility`) to the runner, which swaps only the DB1 paths in memory. The runner (`Batch/Aggre-SE/Headless`) drives Batch's report classes through `HeadlessHost` (no progress dialogs/MsgBox; GUI behavior unchanged) with all purchasable options enabled, and must keep the C1Zip binding redirect in its `App.config`.
 
-Non-calculation tools return static contracts: `soilstructure-contract.ts` (JSON Schema v1 for SoilStructure documents + standalone-runner contract/Python template) and `fempython-contract.ts` (PDF section IDs + FrameWebforCS runner contract). `get_environment_template` emits a dotenv for client scripts that call runners directly.
+WebPier is the one runner whose contract comes from the runner itself: `webpier_get_contract` / `webpier_get_input_schema` run `run_headless.py contract|schema` (no `--input`/`--output-dir`: `runEngine` takes `null` for both) and add which selections the detected runners can generate. `webpier_validate` / `webpier_generate` copy the input byte for byte under its own name (`jobs.ts: createNamedJsonJob`; WebPier records the input's name and SHA-256), pass only the detected runner paths in the environment (`server.ts: webPierEnvironment`; Capacita's `.dll` as its `.exe`), and `webpier_generate` uses `STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS` (`CalculationSpec.timeoutMs`). Its artifacts keep WebPier's `output/`/`post/` layout under the job output, with WebPier's roles as kinds (`0612-pdf`; a JRSNAP folder's files `0711-jrsnap`, `0711-jrsnap-2`, …).
+
+Other non-calculation tools return static contracts: `soilstructure-contract.ts` (JSON Schema v1 for SoilStructure documents + standalone-runner contract/Python template) and `fempython-contract.ts` (PDF section IDs + FrameWebforCS runner contract). `get_environment_template` emits a dotenv for client scripts that call runners directly.
 
 ### Adding or changing a tool
 

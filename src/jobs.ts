@@ -58,6 +58,42 @@ export async function createJob(
   return { jobId, directory, inputPath, outputDirectory };
 }
 
+/**
+ * Copy a JSON input into a job byte for byte under its own file name (inline input: `inlineName`), for an engine
+ * that records the input's name and SHA-256 in its outputs (WebPier's provenance), so they match the client's file.
+ */
+export async function createNamedJsonJob(
+  inputPath: string | undefined,
+  input: string | undefined,
+  inlineName: string,
+  config: AppConfig,
+): Promise<PreparedJob> {
+  if ((inputPath === undefined) === (input === undefined)) {
+    throw new Error("inputPathまたはinputのどちらか一方だけを指定してください。");
+  }
+  let bytes: Buffer;
+  let name = inlineName;
+  if (inputPath !== undefined) {
+    const resolved = await resolveInputPath(inputPath, config);
+    if (extname(resolved).toLowerCase() !== ".json") throw new Error("入力ファイルの拡張子は.jsonである必要があります。");
+    bytes = await readFile(resolved);
+    name = basename(resolved);
+  } else {
+    bytes = Buffer.from(input!, "utf8");
+    if (bytes.length > config.maxInputBytes) throw new Error("inputがサイズ上限を超えています。");
+  }
+  try {
+    const parsed: unknown = JSON.parse(bytes.toString("utf8").replace(/^﻿/, ""));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("root value must be an object");
+  } catch (error) {
+    throw new Error(`入力は有効なJSON objectではありません: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const { jobId, directory, inputDirectory, outputDirectory } = await allocateJob(config);
+  const jobInput = resolve(inputDirectory, name);
+  await writeFile(jobInput, bytes, { flag: "wx" });
+  return { jobId, directory, inputPath: jobInput, outputDirectory };
+}
+
 const xmlEntities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'" };
 
 function decodeXmlText(value: string): string {
@@ -174,8 +210,9 @@ export async function verifyArtifacts(
     if (!info.isFile() || info.size !== artifact.bytes) throw new Error("runner artifact size mismatch");
     if (info.size > config.maxArtifactBytes) throw new Error("runner artifact exceeds the configured size limit");
     if ((await sha256(candidate)) !== artifact.sha256) throw new Error("runner artifact hash mismatch");
-    let artifactId = artifact.kind.replace(/[^a-zA-Z0-9_-]/g, "-") || "artifact";
-    for (let suffix = 2; used.has(artifactId); suffix += 1) artifactId = `${artifact.kind}-${suffix}`;
+    const baseId = artifact.kind.replace(/[^a-zA-Z0-9_-]/g, "-") || "artifact";
+    let artifactId = baseId;
+    for (let suffix = 2; used.has(artifactId); suffix += 1) artifactId = `${baseId}-${suffix}`;
     used.add(artifactId);
     result.push({
       artifactId,

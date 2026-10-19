@@ -16,15 +16,15 @@
 | [`Capacita`](./Capacita/) | RC・鋼部材の断面照査 | 結果 JSON、PDF、Markdown、Excel | 既存 adapter あり。旧 runner path から submodule への移行中 |
 | [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算、SNAP連携、地盤応答変位 | 中間結果 JSON、Excel、PDF、SDC、JOT | MCP adapter 接続済み。headless runner を個別設定して利用 |
 | [`Batch`](./Batch/) | Aggre-SE（Docu-SE）: JRSNAP解析結果の集計・照査 | 総括表 Excel、計算書 PDF、PIK、杭段落とし PDF | AggreSE.Headless runner 接続済み（experimental） |
-| [`WebPier`](./WebPier/) | 鉄道橋脚の設計計算（上の各エンジンと JRSNAP を呼ぶアプリ） | 計算書 PDF、結果 JSON、各エンジンの入力（FrameWeb 入力・NDU・WDJ・Aggre-SE XML） | MCP 未接続（[計画](./.claude/docs/plans/global-engine-skills-plan.md) の Phase 4）。CLI で直接使う |
-| [`JRSNAPHeadless`](./JRSNAPHeadless/) | JRSNAP（鉄道総研）の解析用データ出力・静的非線形解析・データ確認図と荷重図 | `.ndt`、解析結果、図の PDF | MCP 未接続。WebPier が直接呼ぶ。**private repo**。JRSNAP 本体は同梱せず、利用者が別に入れる |
+| [`WebPier`](./WebPier/) | 鉄道橋脚の設計計算（上の各エンジンと JRSNAP を呼ぶアプリ） | 計算書 PDF、結果 JSON、各エンジンの入力（FrameWeb 入力・NDU・WDJ・Aggre-SE XML）と解析結果 | headless runner 接続済み（experimental）。CLI でも使う |
+| [`JRSNAPHeadless`](./JRSNAPHeadless/) | JRSNAP（鉄道総研）の解析用データ出力・静的非線形解析・データ確認図と荷重図 | `.ndt`、解析結果、図の PDF | runner を検出して WebPier に渡す（単体の MCP ツールはない）。**private repo**。JRSNAP 本体は同梱せず、利用者が別に入れる |
 
 > [!NOTE]
 > `WebDan2` は旧リポジトリ名です。現在の正式なリポジトリ名は `Capacita` で、RC 計算コアは `RcDan`、鋼部材計算コアは `SteelDan`、統合アプリケーションは `WebDanforCS` に整理されています。互換性維持のため、現行 MCP の tool ID と環境変数には `webdan` という旧名称が残っています。
 
 ## 現在の MCP interface
 
-ルートの TypeScript server には、FEMPython、Capacita、SoilStructure、Aggre-SE の protocol v1 runner を接続できます。
+ルートの TypeScript server には、FEMPython、Capacita、SoilStructure、Aggre-SE、WebPier の protocol v1 runner を接続できます。
 
 | Tool | Purpose | Output |
 |---|---|---|
@@ -45,6 +45,10 @@
 | `soilstructure_ground_displacement` | `groundDisplacement` 設定からL1/L2地盤応答変位を計算 | `result.json`、任意 PDF、任意 L1/L2 JOT |
 | `aggrese_inspect` | Aggre-SEプロジェクトXMLとJRSNAP結果を読み、ケースと任意スペクトルの応答塑性率μの要否を確認 | ケース一覧、μが必要なケースと参考値 |
 | `aggrese_calculate` | Aggre-SEの帳票を作成（購入オプションはすべて有効） | `result.json`、任意 `summary.xlsx`・`report.pdf`・ケース毎照査表・`pickup.pik`・`pile-anchor-bar.pdf` |
+| `webpier_get_input_schema` | WebPier の入力（schema 2）の JSON Schema を取得 | JSON Schema（項目・型・選択肢・単位・印字桁） |
+| `webpier_get_contract` | WebPier の段階・依存・必要な runner と、いまの環境で生成できる段階を確認 | 段階表、選択ごとの available・missingRunners |
+| `webpier_validate` | WebPier の入力を runner なしで検証 | path 付き入力エラー、選択が呼ぶ runner |
+| `webpier_generate` | WebPier で橋脚の計算書を生成（CLI と同じバイト） | `output/`（計算書 PDF・結果 JSON）と `post/`（外部入力・解析結果・付帯JSON）の全ファイル、段階ごとの engineeringStatus |
 | `get_job` | 過去の job を取得 | manifest と artifact metadata |
 | `read_artifact` | PDF・PIK等の検証済み成果物をbyte範囲で取得 | Base64、offset、EOF、総byte数 |
 | `read_text_artifact` | JSON・Markdown・text 成果物を範囲読取 | UTF-8 text fragment |
@@ -65,7 +69,9 @@ structural-mcp (Node.js 24 / TypeScript)
         +-- FEMPython adapter ------> FrameWebforCS.Headless / FEMPython
         +-- Capacita adapter -------> RcDan / SteelDan （既存互換 tool）
         +-- SoilStructure adapter --> SoilPile / SoilDisp / headless runner
-        `-- Aggre-SE adapter -------> AggreSE.Headless / Batch（Docu-SE）
+        +-- Aggre-SE adapter -------> AggreSE.Headless / Batch（Docu-SE）
+        `-- WebPier adapter --------> WebPier/run_headless.py（.venv の python）
+                                        `-- FEMPython・JRSNAPHeadless・Capacita・Aggre-SE の runner を呼ぶ
 ```
 
 runner は 1 tool call ごとに別 process で起動する方針です。stdout は小さな JSON envelope に限定し、完全な計算結果や帳票は artifact として管理します。
@@ -243,6 +249,28 @@ runnerはSNAPDBLibの固定作業フォルダー（`%SystemDrive%\nwl\Docu-SE`�
 npm run smoke:aggrese -- 'C:\path\to\project.xml' --outputs summary,report
 ```
 
+### WebPier（鉄道橋脚の設計計算・計算書）
+
+`webpier_*` は WebPier の headless runner（`WebPier/run_headless.py`、WebPier の決定61）を、その横の `.venv\Scripts\python.exe -X utf8` で起動します（`uv sync --project .\WebPier --locked` で作る venv が必要）。生成は WebPier の CLI（`python -m webpier`）と同じで、成果物のバイトも同じです。
+
+1. `webpier_get_contract`：段階（0500〜0910）の依存・選択式のスイッチ・必要な runner・公開するファイルと、**いまの環境で各選択を生成できるか**（`available`・`missingRunners`、直接選べない段階は `unavailableStages`）。JRSNAP の runner がなければ 0500・0600・0610〜0622 だけです。
+2. `webpier_get_input_schema`：入力（schema 2）の JSON Schema（WebPier の項目表から作る。必須と項目間の規則は書かない）。
+3. `webpier_validate`：runner を呼ばずに決まる範囲で入力を検証（入力エラーは `errors[].path` に項目のパス）。`summary.requiredRunners` に選択が呼ぶ runner。
+4. `webpier_generate`：`stage`（既定 `all`）・`frameAnalysis`・`nonlinearAnalysis`。成果物は `output/output/…`（計算書 PDF・結果 JSON）と `output/post/…`（FrameWeb 入力・NDU・PIK・CSV・WDJ・Aggre-SE の XML・PIK・xlsx・付帯JSON、JRSNAP の結果フォルダーの中のファイル）。artifact の ID は WebPier の役割（`0612-pdf`、`0612-pik-provenance`、JRSNAP のファイルは `0711-jrsnap`・`0711-jrsnap-2`…）です。案件の `output/`・`post/` へは、クライアントが `read_artifact` で取得して SHA-256 を確かめてから置きます。
+
+- 入力は `inputPath`（案件の `pre/input.json` が主）か inline の `input`。`inputPath` のファイルは名前とバイトのまま job にコピーします（WebPier は入力のファイル名と SHA-256 を結果 JSON・付帯JSONに記録するため、CLI と同じ値になる）。inline は `input.json` という名前になります。
+- WebPier には最小の環境に加えて、server が検出した runner のパスだけを `STRUCTURAL_MCP_FEMPYTHON_RUNNER`・`STRUCTURAL_MCP_JRSNAP_RUNNER`・`STRUCTURAL_MCP_WEBDAN_RUNNER`（`.dll` なら横の `.exe`）・`STRUCTURAL_MCP_AGGRESE_RUNNER` で渡します。WebPier の `.env` は読みません。選択が要る runner がなければ何も作らずに `RUNNER_UNAVAILABLE` で失敗します。
+- `engineeringStatus` は段階ごと（`summary.stages`。0612・0622 の基礎の照査は ok／not_ok、ほかは not_evaluated）と全体（not_ok が1つでもあれば not_ok、判定した段階がすべて ok なら ok）。Capacita・Aggre-SE の照査は判定を返さないので not_evaluated です。
+- `webpier_generate` の timeout は `STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS`（既定30分）。`nonlinearAnalysis` は1方向数分かかり、JRSNAP の画面が出ます。JRSNAP は同じインストール先で同時に解析できません（JRSNAPHeadless が直列にする）。クライアント側の tool の timeout も長くしてください（Codex は `config.toml` の `[mcp_servers.<名前>]` に `tool_timeout_sec = 1800`）。
+- JRSNAPHeadless の runner（`STRUCTURAL_MCP_JRSNAP_RUNNER`）は検出して WebPier に渡すだけで、単体の MCP ツールはありません。
+
+実 runner と MCP の接続確認は次のコマンドで行います。MCP で作った成果物と、同じ venv・入力・runner で CLI が作ったものをバイトで比べます（他のプログラムのページを差し込む計算書、Aggre-SE の xlsx、JRSNAP の結果と、それらの SHA-256 を記録する JSON は違っても失敗にしません）。
+
+```powershell
+npm run smoke:webpier -- 'C:\path\to\pre\input.json' --stage 0612
+npm run smoke:webpier -- 'C:\path\to\pre\input.json' --frame-analysis --nonlinear-analysis
+```
+
 ## 設定
 
 設定は MCP process の環境変数で渡します。
@@ -253,10 +281,13 @@ npm run smoke:aggrese -- 'C:\path\to\project.xml' --outputs summary,report
 | `STRUCTURAL_MCP_WEBDAN_RUNNER` | `./Capacita/WebDanforCS/Headless/bin/Release/net8.0/WebDanforCS.Headless.dll` | Capacita protocol v1 互換 runner DLL の絶対 path。変数名は後方互換のため維持 |
 | `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` | `./SoilStructure/SoilStructure/Headless/bin/Release/net10.0/SoilStructure.Headless.exe` | SoilStructure protocol v1 runner の絶対 path |
 | `STRUCTURAL_MCP_AGGRESE_RUNNER` | `./Batch/Aggre-SE/Headless/bin/Release/AggreSE.Headless.exe` | Aggre-SE protocol v1 runner（.NET Framework 4.8）の絶対 path |
+| `STRUCTURAL_MCP_WEBPIER_RUNNER` | `./WebPier/run_headless.py` | WebPier の headless runner。`.py` は横の `.venv\Scripts\python.exe` もあるときだけ使える |
+| `STRUCTURAL_MCP_JRSNAP_RUNNER` | `./JRSNAPHeadless/bin/Release/JRSNAP.Headless.exe` | JRSNAPHeadless の runner。WebPier に渡すだけ（MCP ツールはない） |
 | `STRUCTURAL_MCP_JOB_ROOT` | `%LOCALAPPDATA%/structural-mcp/jobs` | MCP 所有 job root |
 | `STRUCTURAL_MCP_ALLOWED_ROOTS` | `%USERPROFILE%/Documents` | 読取可能な入力 root。複数指定は Windows で `;` 区切り |
 | `STRUCTURAL_MCP_ENABLE_STEELDAN` | `false` | experimental な SteelDan を明示的に有効化 |
 | `STRUCTURAL_MCP_TIMEOUT_MS` | `180000` | runner timeout |
+| `STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS` | `1800000` | `webpier_generate` の runner timeout（静的非線形解析は1方向数分） |
 | `STRUCTURAL_MCP_MAX_INPUT_BYTES` | `16777216` | 入力上限 |
 | `STRUCTURAL_MCP_MAX_BUNDLE_BYTES` | `1073741824` | Aggre-SE の XML と JRSNAP 結果ファイルの合計上限 |
 | `STRUCTURAL_MCP_MAX_ARTIFACT_BYTES` | `134217728` | artifact 単体上限 |

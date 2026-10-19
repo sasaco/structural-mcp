@@ -9,16 +9,23 @@ export interface AppConfig {
   capacitaRunner: string | null;
   soilStructureRunner: string | null;
   aggreSeRunner: string | null;
+  /** WebPier's run_headless.py, started with the .venv beside it. */
+  webPierRunner: string | null;
+  /** Not exposed as tools: only passed on to WebPier, which draws and analyzes with it. */
+  jrsnapRunner: string | null;
   runnerConfigurations: {
     femPython: RunnerConfiguration;
     capacita: RunnerConfiguration;
     soilStructure: RunnerConfiguration;
     aggreSe: RunnerConfiguration;
+    webPier: RunnerConfiguration;
+    jrsnap: RunnerConfiguration;
   };
   jobRoot: string;
   allowedInputRoots: string[];
   steelDanEnabled: boolean;
   timeoutMs: number;
+  webPierTimeoutMs: number;
   maxInputBytes: number;
   maxBundleBytes: number;
   maxStdoutBytes: number;
@@ -59,10 +66,16 @@ function absolutePath(name: string, fallback: string): string {
   return resolve(value);
 }
 
+/** A Python runner (*.py) is started with the .venv beside it, which must be there too. */
+export function pythonForScript(scriptPath: string): string {
+  return resolve(dirname(scriptPath), ".venv", "Scripts", "python.exe");
+}
+
 async function runnerConfiguration(name: string, fallback: string): Promise<RunnerConfiguration> {
   const configuredPath = absolutePath(name, fallback);
   try {
     await access(configuredPath, constants.R_OK);
+    if (configuredPath.toLowerCase().endsWith(".py")) await access(pythonForScript(configuredPath), constants.X_OK);
     return {
       environmentVariable: name,
       configuredPath,
@@ -96,6 +109,14 @@ export async function loadConfig(): Promise<AppConfig> {
     "STRUCTURAL_MCP_AGGRESE_RUNNER",
     resolve(sourceRoot, "Batch/Aggre-SE/Headless/bin/Release/AggreSE.Headless.exe"),
   );
+  const webPierConfiguration = await runnerConfiguration(
+    "STRUCTURAL_MCP_WEBPIER_RUNNER",
+    resolve(sourceRoot, "WebPier/run_headless.py"),
+  );
+  const jrsnapConfiguration = await runnerConfiguration(
+    "STRUCTURAL_MCP_JRSNAP_RUNNER",
+    resolve(sourceRoot, "JRSNAPHeadless/bin/Release/JRSNAP.Headless.exe"),
+  );
   const defaultJobs = process.env.LOCALAPPDATA
     ? resolve(process.env.LOCALAPPDATA, "structural-mcp/jobs")
     : resolve(sourceRoot, ".structural-mcp/jobs");
@@ -112,16 +133,22 @@ export async function loadConfig(): Promise<AppConfig> {
     capacitaRunner: capacitaConfiguration.resolvedPath,
     soilStructureRunner: soilStructureConfiguration.resolvedPath,
     aggreSeRunner: aggreSeConfiguration.resolvedPath,
+    webPierRunner: webPierConfiguration.resolvedPath,
+    jrsnapRunner: jrsnapConfiguration.resolvedPath,
     runnerConfigurations: {
       femPython: femPythonConfiguration,
       capacita: capacitaConfiguration,
       soilStructure: soilStructureConfiguration,
       aggreSe: aggreSeConfiguration,
+      webPier: webPierConfiguration,
+      jrsnap: jrsnapConfiguration,
     },
     jobRoot: await realpath(jobRoot),
     allowedInputRoots: await Promise.all(allowedInputRoots.map((root) => realpath(root))),
     steelDanEnabled: booleanValue("STRUCTURAL_MCP_ENABLE_STEELDAN", false),
     timeoutMs: positiveInteger("STRUCTURAL_MCP_TIMEOUT_MS", 180_000),
+    // A WebPier generation runs several runners; a static nonlinear analysis takes minutes a direction.
+    webPierTimeoutMs: positiveInteger("STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS", 30 * 60_000),
     maxInputBytes: positiveInteger("STRUCTURAL_MCP_MAX_INPUT_BYTES", 16 * 1024 * 1024),
     maxBundleBytes: positiveInteger("STRUCTURAL_MCP_MAX_BUNDLE_BYTES", 1024 * 1024 * 1024),
     maxStdoutBytes: positiveInteger("STRUCTURAL_MCP_MAX_STDOUT_BYTES", 1024 * 1024),

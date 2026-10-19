@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -7,6 +8,7 @@ import type { JobManifest } from "./contracts.js";
 import {
   createAggreSeJob,
   createJob,
+  createNamedJsonJob,
   loadManifest,
   readArtifact,
   readTextArtifact,
@@ -109,6 +111,10 @@ interface CalculationSpec {
   label: string;
   /** Replaces the single-file job (inputPath/input) for engines whose input is a set of files. */
   prepareJob?: () => Promise<PreparedJob>;
+  /** Replaces STRUCTURAL_MCP_TIMEOUT_MS. */
+  timeoutMs?: number;
+  /** Added to the runner's minimal environment. */
+  environment?: Readonly<Record<string, string>>;
 }
 
 function textResponse(value: unknown, summary: string, isError = false) {
@@ -186,6 +192,7 @@ async function calculate(
       ...(job.runnerOptions ?? []),
     ],
     config,
+    { environment: spec.environment, timeoutMs: spec.timeoutMs },
   );
   const artifacts = await verifyArtifacts(job.outputDirectory, envelope, config);
   if (spec.requiredArtifacts) {
@@ -244,6 +251,63 @@ function unavailable(engine: string, environmentVariable: string) {
   );
 }
 
+interface WebPierRunner {
+  engine: "fempython" | "jrsnap" | "webdan2" | "aggrese";
+  environmentVariable: string;
+  path: string | null;
+}
+
+/**
+ * The runners WebPier calls, by the engine name its contract uses, as this server detected them. WebPier starts a
+ * runner as an executable, so Capacita's .dll is passed as the .exe apphost beside it (or not at all).
+ */
+function webPierRunners(config: AppConfig): WebPierRunner[] {
+  const capacita = config.capacitaRunner?.toLowerCase().endsWith(".dll")
+    ? config.capacitaRunner.replace(/\.dll$/i, ".exe")
+    : config.capacitaRunner;
+  return [
+    { engine: "fempython", environmentVariable: "STRUCTURAL_MCP_FEMPYTHON_RUNNER", path: config.femPythonRunner },
+    { engine: "jrsnap", environmentVariable: "STRUCTURAL_MCP_JRSNAP_RUNNER", path: config.jrsnapRunner },
+    { engine: "webdan2", environmentVariable: "STRUCTURAL_MCP_WEBDAN_RUNNER", path: capacita !== null && existsSync(capacita) ? capacita : null },
+    { engine: "aggrese", environmentVariable: "STRUCTURAL_MCP_AGGRESE_RUNNER", path: config.aggreSeRunner },
+  ];
+}
+
+/** The minimal environment's addition for WebPier: only the runners it calls, and only those detected. */
+function webPierEnvironment(config: AppConfig): Record<string, string> {
+  return Object.fromEntries(webPierRunners(config).flatMap((runner) =>
+    runner.path === null ? [] : [[runner.environmentVariable, runner.path]]));
+}
+
+const webPierSelectionSchema = z.object({
+  stage: z.string(),
+  frameAnalysis: z.boolean(),
+  nonlinearAnalysis: z.boolean(),
+  stages: z.array(z.string()),
+  runners: z.array(z.string()),
+  files: z.array(z.object({ role: z.string(), path: z.string(), folder: z.boolean() }).passthrough()),
+}).passthrough();
+
+const webPierContractSchema = z.object({
+  stages: z.array(z.object({ id: z.string() }).passthrough()),
+  switches: z.array(z.unknown()),
+  runners: z.array(z.unknown()),
+  selections: z.array(webPierSelectionSchema),
+}).passthrough();
+
+const webPierSelectionShape = {
+  stage: z.string().regex(/^(?:all|\d{4})$/).default("all")
+    .describe("計算段階（0500・0610・0612 など、またはall）。使える段階はwebpier_get_contractで確認する"),
+  frameAnalysis: z.boolean().default(false)
+    .describe("stage=allに骨組解析（FEMPython）の選択式の段階を加える（CLIの--frame-analysis）。段階を直接選ぶときは不要"),
+  nonlinearAnalysis: z.boolean().default(false)
+    .describe("stage=allに静的非線形解析（JRSNAP・Aggre-SE）の選択式の段階を加える（CLIの--nonlinear-analysis）。1方向数分かかり、JRSNAPの画面が出る"),
+};
+
+function webPierOptions(stage: string, frameAnalysis: boolean, nonlinearAnalysis: boolean): string[] {
+  return ["--stage", stage, "--frame-analysis", String(frameAnalysis), "--nonlinear-analysis", String(nonlinearAnalysis)];
+}
+
 function invalidSourceSelection(inputPath: string | undefined, input: string | undefined) {
   if ((inputPath === undefined) !== (input === undefined)) return null;
   return requestFailure("inputPathまたはinputのどちらか一方だけを指定してください。");
@@ -254,18 +318,20 @@ export function createServer(config: AppConfig): McpServer {
   const capacitaEnabled = config.capacitaRunner !== null;
   const soilStructureEnabled = config.soilStructureRunner !== null;
   const aggreSeEnabled = config.aggreSeRunner !== null;
+  const webPierEnabled = config.webPierRunner !== null;
+  const jrsnapEnabled = config.jrsnapRunner !== null;
   const steelDanEnabled = capacitaEnabled && config.steelDanEnabled;
   const server = new McpServer(
     { name: "structural-mcp", version: "0.2.0" },
     {
-      instructions: "FEMPython、Capacita、SoilStructure、Aggre-SE（Batch）を公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。FrameWebforCSの保存JSONはfempython_calculateのinputへ文字列で渡せます。PIKと入力・断面力・pickup断面力・変位・pickup変位のPDFを生成し、read_artifactで取得した成果物をclient側の指定先へ配置します。standalone利用はfempython_get_runner_contractを参照してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateへinlineで渡して対象operationごとに検証できます。standalone scriptはrunnerを直接呼び、artifactを検証して指定先へ配置します。Aggre-SEはaggrese_inspectでケースと任意スペクトルの応答塑性率μの要否を確認し、μはユーザーに確認してからaggrese_calculateへ渡してください。executionStatusとengineeringStatusは別々に確認し、MCP計算の成果物はjob単位で扱ってください。",
+      instructions: "FEMPython、Capacita、SoilStructure、Aggre-SE（Batch）、WebPierを公開する構造計算MCPです。計算前にget_capabilitiesでrunnerの利用可否を確認してください。FrameWebforCSの保存JSONはfempython_calculateのinputへ文字列で渡せます。PIKと入力・断面力・pickup断面力・変位・pickup変位のPDFを生成し、read_artifactで取得した成果物をclient側の指定先へ配置します。standalone利用はfempython_get_runner_contractを参照してください。SoilStructure入力を作る前にsoilstructure_get_schema、standalone scriptを作る前にsoilstructure_get_runner_contractを使用し、不足する設計条件は推測しないでください。入力はsoilstructure_validateへinlineで渡して対象operationごとに検証できます。standalone scriptはrunnerを直接呼び、artifactを検証して指定先へ配置します。Aggre-SEはaggrese_inspectでケースと任意スペクトルの応答塑性率μの要否を確認し、μはユーザーに確認してからaggrese_calculateへ渡してください。WebPier（鉄道橋脚の設計計算）はwebpier_get_contractで使える段階を確かめ、webpier_get_input_schemaとwebpier_validateで入力を確かめてからwebpier_generateで計算書を作ります。資料から決まらない入力値は推測せずユーザーに確認してください。executionStatusとengineeringStatusは別々に確認し、MCP計算の成果物はjob単位で扱ってください。",
     },
   );
 
   server.registerTool("get_environment_template", {
     title: "Get structural-mcp .env template",
     description: "AIが対象プロジェクトの.envを作成するときに使うrunner設定名、推奨絶対パス、読取可否を返します。既存.envや秘密情報は読み取りません。",
-    inputSchema: { engine: z.enum(["all", "fempython", "capacita", "soilstructure", "aggrese"]).default("all") },
+    inputSchema: { engine: z.enum(["all", "fempython", "capacita", "soilstructure", "aggrese", "webpier", "jrsnap"]).default("all") },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ engine }) => {
     const entries = [
@@ -273,6 +339,8 @@ export function createServer(config: AppConfig): McpServer {
       { engine: "capacita", ...config.runnerConfigurations.capacita },
       { engine: "soilstructure", ...config.runnerConfigurations.soilStructure },
       { engine: "aggrese", ...config.runnerConfigurations.aggreSe },
+      { engine: "webpier", ...config.runnerConfigurations.webPier },
+      { engine: "jrsnap", ...config.runnerConfigurations.jrsnap },
     ].filter((entry) => engine === "all" || entry.engine === engine).map((entry) => ({
       engine: entry.engine,
       name: entry.environmentVariable,
@@ -294,7 +362,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("get_capabilities", {
     title: "Structural engine capabilities",
-    description: "FEMPython、Capacita、SoilStructure、Aggre-SEの接続状態とrunnerのreadiness・制限を返します。",
+    description: "FEMPython、Capacita、SoilStructure、Aggre-SE、WebPier（とWebPierが使うJRSNAP）の接続状態とrunnerのreadiness・制限を返します。",
     inputSchema: {},
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async () => textResponse({
@@ -347,13 +415,30 @@ export function createServer(config: AppConfig): McpServer {
         options: "購入オプションはすべて有効（GUIと同じ）。任意スペクトル（地盤区分9）の応答塑性率μはspectralDuctilityで指定します。",
         tools: ["aggrese_inspect", "aggrese_calculate"],
       },
+      webpier: {
+        enabled: webPierEnabled,
+        readiness: webPierEnabled ? "experimental" : "unavailable",
+        inputFormats: [".json（schema 2）", "inline-json"],
+        outputFormats: ["pdf", "json", "pik", "csv", "ndu", "wdj", "xml", "xlsx", "JRSNAPの解析結果"],
+        runners: webPierRunners(config).map(({ engine, environmentVariable, path }) => ({ engine, environmentVariable, available: path !== null })),
+        stageAvailability: "段階ごとに要るrunnerが違います。webpier_get_contractで使える段階を確かめてください（JRSNAPがなければ0500・0600・0610〜0622だけ）。",
+        timeoutMs: config.webPierTimeoutMs,
+        tools: ["webpier_get_input_schema", "webpier_get_contract", "webpier_validate", "webpier_generate"],
+      },
+      jrsnap: {
+        enabled: jrsnapEnabled,
+        readiness: jrsnapEnabled ? "experimental" : "unavailable",
+        tools: [],
+        usedBy: ["webpier"],
+        note: "JRSNAP本体（鉄道総研）は別にインストールし、runnerの横のjrsnap-headless.jsonにインストール先を書きます。単体のMCPツールはありません。",
+      },
     },
     configurationTool: "get_environment_template",
     pathPolicy: {
       allowedInputRoots: config.allowedInputRoots,
     },
     limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxBundleBytes: config.maxBundleBytes, maxArtifactBytes: config.maxArtifactBytes },
-  }, `FEMPythonは${femPythonEnabled ? "利用可能" : "利用不可"}、Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}、Aggre-SEは${aggreSeEnabled ? "利用可能" : "利用不可"}です。`));
+  }, `FEMPythonは${femPythonEnabled ? "利用可能" : "利用不可"}、Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}、Aggre-SEは${aggreSeEnabled ? "利用可能" : "利用不可"}、WebPierは${webPierEnabled ? "利用可能" : "利用不可"}です。`));
 
   server.registerTool("fempython_get_runner_contract", {
     title: "Get FrameWebforCS runner contract",
@@ -704,6 +789,100 @@ export function createServer(config: AppConfig): McpServer {
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));
     }
+  });
+
+  server.registerTool("webpier_get_input_schema", {
+    title: "Get WebPier input schema",
+    description: "WebPier（鉄道橋脚の設計計算）の入力 schema 2 のJSON Schemaを返します。項目表（fields.py）から作った項目・型・選択肢・範囲・単位（x-webpier-unit）・印字桁（x-webpier-digits）で、必須の項目と項目間の規則は書いていません（webpier_validateで確かめる）。空欄はnullで、資料から決まらない値は推測せずユーザーに確認してください。",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async () => {
+    if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
+    try {
+      const envelope = await runEngine(config.webPierRunner, "schema", "webpier", null, null, [], config,
+        { environment: webPierEnvironment(config) });
+      const summary = z.object({ schema: z.record(z.string(), z.unknown()) }).passthrough().parse(envelope.summary);
+      return textResponse({
+        schemaVersion: 1,
+        engineVersion: envelope.engineVersion,
+        inputSchema: summary.schema,
+        validationTool: "webpier_validate",
+      }, "WebPier入力（schema 2）のJSON Schemaを返しました。");
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
+  });
+
+  server.registerTool("webpier_get_contract", {
+    title: "Get WebPier stages and their runners",
+    description: "WebPierの段階（0500〜0910）の依存・選択式のスイッチ・必要なrunner・公開するファイルと、いまの環境で各選択（stage=allとスイッチの4通り、各段階の直接選択）を生成できるか（available、missingRunners）を返します。webpier_generateの前に呼んでください。",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  }, async () => {
+    if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
+    try {
+      const envelope = await runEngine(config.webPierRunner, "contract", "webpier", null, null, [], config,
+        { environment: webPierEnvironment(config) });
+      const contract = webPierContractSchema.parse(envelope.summary);
+      const runners = webPierRunners(config);
+      const detected = new Set(runners.filter((runner) => runner.path !== null).map((runner) => runner.engine as string));
+      const selections = contract.selections.map((selection) => {
+        const missingRunners = selection.runners.filter((engine) => !detected.has(engine));
+        return { ...selection, available: missingRunners.length === 0, missingRunners };
+      });
+      const direct = selections.filter((selection) => selection.stage !== "all");
+      const unavailableStages = direct.filter((selection) => !selection.available).map((selection) => selection.stage);
+      return textResponse({
+        schemaVersion: 1,
+        engineVersion: envelope.engineVersion,
+        runners: runners.map(({ engine, environmentVariable, path }) => ({ engine, environmentVariable, available: path !== null })),
+        stages: contract.stages,
+        switches: contract.switches,
+        selections,
+        unavailableStages,
+        generationTool: "webpier_generate",
+      }, unavailableStages.length === 0
+        ? "WebPierの全段階を生成できます。"
+        : `WebPierの段階のうち${unavailableStages.join("・")}はrunnerが足りないため生成できません。`);
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
+  });
+
+  server.registerTool("webpier_validate", {
+    title: "Validate a WebPier input",
+    description: "WebPierの入力（schema 2のJSON）を、runnerを呼ばずに決まる範囲（厳密な解析、選んだ段階と依存段階の計算、外部出力・Aggre-SEプロジェクトの入力）で検証します。入力エラーはmessages・errorsのpathに項目のパス（例: 下部構造.寸法.側面.B1）が入ります。summary.requiredRunnersにこの選択が呼ぶrunnerを返します。inputPath（案件のpre/input.json）またはinputのどちらか一方だけを指定してください。",
+    inputSchema: { ...sourceShape, ...webPierSelectionShape },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis }) => {
+    const sourceError = invalidSourceSelection(inputPath, input);
+    if (sourceError) return sourceError;
+    if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
+    try {
+      return await calculate({
+        tool: "webpier_validate", engine: "webpier", runnerPath: config.webPierRunner,
+        command: "validate", extensions: [".json"], jobExtension: ".json",
+        runnerOptions: webPierOptions(stage, frameAnalysis, nonlinearAnalysis), label: "WebPier 入力検証",
+        environment: webPierEnvironment(config),
+        prepareJob: () => createNamedJsonJob(inputPath, input, "input.json", config),
+      }, undefined, undefined, config);
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
+  });
+
+  server.registerTool("webpier_generate", {
+    title: "Generate WebPier pier design reports",
+    description: "WebPierで橋脚の設計計算をし、計算書PDF・結果JSON（output/）と外部プログラムの入力・解析結果・付帯JSON（post/）をjob成果物として返します。CLIと同じ生成で、同じバイトです。artifactsのrelativePathはoutput/output/…・output/post/…で、案件のoutput/・post/へはread_artifactで取得しSHA-256を確かめてからclient側で置きます。engineeringStatusは段階ごと（summary.stages。0612・0622はok/not_ok、ほかはnot_evaluated）と全体で、実行の成否（ok）とは別です。先にwebpier_get_contractで使える段階を確かめ、webpier_validateで入力を検証してください。inputPathまたはinputのどちらか一方だけを指定してください。",
+    inputSchema: { ...sourceShape, ...webPierSelectionShape },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis }) => {
+    const sourceError = invalidSourceSelection(inputPath, input);
+    if (sourceError) return sourceError;
+    if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
+    try {
+      return await calculate({
+        tool: "webpier_generate", engine: "webpier", runnerPath: config.webPierRunner,
+        command: "run", extensions: [".json"], jobExtension: ".json",
+        runnerOptions: webPierOptions(stage, frameAnalysis, nonlinearAnalysis), label: "WebPier 計算書作成",
+        requiredArtifacts: [], timeoutMs: config.webPierTimeoutMs, environment: webPierEnvironment(config),
+        prepareJob: () => createNamedJsonJob(inputPath, input, "input.json", config),
+      }, undefined, undefined, config);
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
   });
 
   server.registerTool("get_job", {

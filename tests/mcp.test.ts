@@ -12,6 +12,7 @@ const fixtureRoot = resolve(repositoryRoot, "tests/fixtures");
 const fakeRunner = resolve(fixtureRoot, "fake-runner.mjs");
 const fakeFemRunner = resolve(fixtureRoot, "fake-fempython-runner.mjs");
 const fakeAggreSeRunner = resolve(fixtureRoot, "fake-aggrese-runner.mjs");
+const fakeWebPierRunner = resolve(fixtureRoot, "fake-webpier-runner.mjs");
 let jobRoot: string;
 let client: Client;
 
@@ -26,6 +27,9 @@ async function connect(overrides: Record<string, string> = {}): Promise<Client> 
       STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER: fakeRunner,
       STRUCTURAL_MCP_FEMPYTHON_RUNNER: fakeFemRunner,
       STRUCTURAL_MCP_AGGRESE_RUNNER: fakeAggreSeRunner,
+      STRUCTURAL_MCP_WEBPIER_RUNNER: fakeWebPierRunner,
+      // WebPier passes on only the runners the server found; JRSNAP is missing unless a test sets it.
+      STRUCTURAL_MCP_JRSNAP_RUNNER: resolve(jobRoot, "missing-jrsnap.exe"),
       STRUCTURAL_MCP_JOB_ROOT: jobRoot,
       STRUCTURAL_MCP_ALLOWED_ROOTS: fixtureRoot,
       STRUCTURAL_MCP_ENABLE_STEELDAN: "true",
@@ -69,6 +73,10 @@ test("lists all tools and reports independently available runners", async () => 
     "webdan_compose_wdj",
     "webdan_inspect",
     "webdan_validate",
+    "webpier_generate",
+    "webpier_get_contract",
+    "webpier_get_input_schema",
+    "webpier_validate",
   ]);
   const capabilities = await client.callTool({ name: "get_capabilities", arguments: {} });
   assert.equal(capabilities.isError, undefined);
@@ -768,4 +776,171 @@ test("a missing Aggre-SE runner disables only its tools", async () => {
     assert.equal(result.isError, true);
     assert.match(JSON.stringify(result.structuredContent), /aggrese_unavailable/);
   } finally { await isolated.close(); }
+});
+
+const webPierInput = resolve(fixtureRoot, "webpier/pier-input.json");
+
+interface WebPierManifest {
+  ok: boolean;
+  jobId: string;
+  engine: string;
+  engineeringStatus: string;
+  summary: {
+    input: { file: string; sha256: string };
+    environment: Record<string, string>;
+    environmentKeys: string[];
+    stages: Array<{ id: string; stem: string; engineeringStatus: string }>;
+    requiredRunners?: Array<{ engine: string; environmentVariable: string; available: boolean }>;
+  };
+  artifacts: Array<{ artifactId: string; relativePath: string; bytes: number; sha256: string }>;
+  errors: Array<{ code: string; path?: string }>;
+}
+
+test("the WebPier contract says which stages the detected runners can generate", async () => {
+  const result = await client.callTool({ name: "webpier_get_contract", arguments: {} });
+  assert.equal(result.isError, undefined);
+  const contract = result.structuredContent as {
+    runners: Array<{ engine: string; environmentVariable: string; available: boolean }>;
+    selections: Array<{ stage: string; frameAnalysis: boolean; nonlinearAnalysis: boolean; available: boolean; missingRunners: string[] }>;
+    unavailableStages: string[];
+    generationTool: string;
+  };
+  assert.deepEqual(contract.runners.map(({ engine, available }) => [engine, available]),
+    [["fempython", true], ["jrsnap", false], ["webdan2", true], ["aggrese", true]]);
+  assert.deepEqual(contract.unavailableStages, ["0711"]);
+  const all = contract.selections.filter((selection) => selection.stage === "all");
+  assert.deepEqual(all.map((selection) => [selection.frameAnalysis, selection.nonlinearAnalysis, selection.available]),
+    [[false, false, true], [true, false, true], [false, true, false], [true, true, false]]);
+  assert.deepEqual(contract.selections.find((selection) => selection.stage === "0711")?.missingRunners, ["jrsnap"]);
+  assert.equal(contract.generationTool, "webpier_generate");
+
+  const schema = await client.callTool({ name: "webpier_get_input_schema", arguments: {} });
+  assert.equal(schema.isError, undefined);
+  assert.deepEqual((schema.structuredContent as { inputSchema: { properties: unknown } }).inputSchema.properties,
+    { schema_version: { const: 2 } });
+
+  const capabilities = await client.callTool({ name: "get_capabilities", arguments: {} });
+  const engines = (capabilities.structuredContent as {
+    engines: Record<string, { enabled: boolean; tools: string[]; timeoutMs?: number }>;
+  }).engines;
+  assert.equal(engines.webpier?.enabled, true);
+  assert.equal(engines.webpier?.timeoutMs, 30 * 60_000);
+  assert.deepEqual(engines.webpier?.tools,
+    ["webpier_get_input_schema", "webpier_get_contract", "webpier_validate", "webpier_generate"]);
+  assert.equal(engines.jrsnap?.enabled, false);
+  const template = await client.callTool({ name: "get_environment_template", arguments: { engine: "webpier" } });
+  assert.deepEqual((template.structuredContent as { variables: Array<{ name: string; value: string }> }).variables
+    .map(({ name, value }) => [name, value]), [["STRUCTURAL_MCP_WEBPIER_RUNNER", fakeWebPierRunner]]);
+});
+
+test("WebPier generates a stage from the project's input with only the runners it calls", async () => {
+  const result = await client.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, stage: "0612" } });
+  assert.equal(result.isError, undefined);
+  const manifest = result.structuredContent as unknown as WebPierManifest;
+  assert.equal(manifest.engine, "webpier");
+  assert.equal(manifest.engineeringStatus, "not_ok");
+  assert.deepEqual(manifest.summary.stages, [{ id: "0612", stem: "0612_線路方向基礎", engineeringStatus: "not_ok" }]);
+  // The input keeps its name and bytes: WebPier records both in its outputs.
+  const bytes = await readFile(webPierInput);
+  assert.deepEqual(manifest.summary.input,
+    { file: "pier-input.json", sha256: createHash("sha256").update(bytes).digest("hex") });
+  // The minimal environment and the detected runners WebPier calls; JRSNAP is missing, so it is not passed.
+  assert.deepEqual(manifest.summary.environment, {
+    STRUCTURAL_MCP_FEMPYTHON_RUNNER: fakeFemRunner,
+    STRUCTURAL_MCP_WEBDAN_RUNNER: fakeRunner,
+    STRUCTURAL_MCP_AGGRESE_RUNNER: fakeAggreSeRunner,
+  });
+  // libuv adds the variables Windows needs (USERPROFILE, WINDIR, ...) to every child's environment.
+  const windows = ["HOMEDRIVE", "HOMEPATH", "LOGONSERVER", "SYSTEMDRIVE", "USERDOMAIN", "USERNAME", "USERPROFILE", "WINDIR"];
+  const allowed = new Set(["PATH", "Path", "SystemRoot", "SYSTEMROOT", "DOTNET_ROOT", "TEMP", "TMP", ...windows,
+    ...Object.keys(manifest.summary.environment)]);
+  assert.deepEqual(manifest.summary.environmentKeys.filter((key) => !allowed.has(key)), []);
+  assert.deepEqual(manifest.artifacts.map(({ artifactId, relativePath }) => [artifactId, relativePath]), [
+    ["0612-pdf", "output/output/0612_線路方向基礎.pdf"],
+    ["0612-json", "output/output/0612_線路方向基礎.json"],
+    ["0612-pik", "output/post/線路方向.pik"],
+    ["0612-pik-provenance", "output/post/線路方向.pik.provenance.json"],
+    ["0612-reaction", "output/post/線路方向_ピックアップ反力.csv"],
+    ["0612-reaction-provenance", "output/post/線路方向_ピックアップ反力.csv.provenance.json"],
+  ]);
+  const pik = manifest.artifacts.find((artifact) => artifact.artifactId === "0612-pik")!;
+  const read = await client.callTool({ name: "read_artifact", arguments: { jobId: manifest.jobId, artifactId: pik.artifactId } });
+  const content = Buffer.from((read.structuredContent as { base64: string }).base64, "base64");
+  assert.equal(createHash("sha256").update(content).digest("hex"), pik.sha256);
+
+  const inline = await client.callTool({ name: "webpier_generate", arguments: { input: bytes.toString("utf8"), stage: "0500" } });
+  assert.equal(inline.isError, undefined);
+  assert.equal((inline.structuredContent as unknown as WebPierManifest).summary.input.file, "input.json");
+});
+
+test("WebPier reports a stage whose runner is missing, and input errors with their path", async () => {
+  const missing = await client.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, stage: "0711" } });
+  assert.equal(missing.isError, true);
+  const failed = missing.structuredContent as unknown as WebPierManifest;
+  assert.equal(failed.ok, false);
+  assert.deepEqual(failed.errors.map((error) => error.code), ["RUNNER_UNAVAILABLE"]);
+  assert.deepEqual(failed.artifacts, []);
+
+  const valid = await client.callTool({
+    name: "webpier_validate", arguments: { inputPath: webPierInput, stage: "all", nonlinearAnalysis: true },
+  });
+  assert.equal(valid.isError, undefined);
+  assert.deepEqual((valid.structuredContent as unknown as WebPierManifest).summary.requiredRunners, [
+    { engine: "fempython", environmentVariable: "STRUCTURAL_MCP_FEMPYTHON_RUNNER", available: true },
+    { engine: "jrsnap", environmentVariable: "STRUCTURAL_MCP_JRSNAP_RUNNER", available: false },
+    { engine: "aggrese", environmentVariable: "STRUCTURAL_MCP_AGGRESE_RUNNER", available: true },
+  ]);
+
+  const wrong = JSON.stringify({ schema_version: 2, 下部構造: { 寸法: { 側面: { B1: -1 } } } });
+  const invalid = await client.callTool({ name: "webpier_validate", arguments: { input: wrong } });
+  assert.equal(invalid.isError, true);
+  assert.deepEqual((invalid.structuredContent as unknown as WebPierManifest).errors.map(({ code, path }) => [code, path]),
+    [["INPUT_ERROR", "下部構造.寸法.側面.B1"]]);
+
+  const rejections: Array<[Record<string, unknown>, RegExp]> = [
+    [{ inputPath: webPierInput, input: "{}" }, /どちらか一方だけ/],
+    [{ input: "[]" }, /JSON object/],
+    [{ inputPath: resolve(fixtureRoot, "model.wdj") }, /\.json/],
+    [{ inputPath: webPierInput, stage: "--overwrite" }, /stage/],
+  ];
+  for (const [args, pattern] of rejections) {
+    const rejected = await client.callTool({ name: "webpier_generate", arguments: args });
+    assert.equal(rejected.isError, true);
+    assert.match(JSON.stringify(rejected.structuredContent ?? rejected.content), pattern);
+  }
+});
+
+test("WebPier lists a JRSNAP folder file by file with distinct artifact IDs", async () => {
+  const isolated = await connect({ STRUCTURAL_MCP_JRSNAP_RUNNER: fakeRunner });
+  try {
+    const result = await isolated.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, stage: "0711" } });
+    assert.equal(result.isError, undefined);
+    const manifest = result.structuredContent as unknown as WebPierManifest;
+    assert.deepEqual(manifest.artifacts.filter((artifact) => artifact.relativePath.includes("_JRSNAP/"))
+      .map(({ artifactId, relativePath }) => [artifactId, relativePath]), [
+      ["0711-jrsnap", "output/post/線路方向_JRSNAP/線路方向(Case1).DB1"],
+      ["0711-jrsnap-2", "output/post/線路方向_JRSNAP/線路方向(Case1).ndt"],
+    ]);
+    assert.equal(manifest.summary.environment.STRUCTURAL_MCP_JRSNAP_RUNNER, fakeRunner);
+  } finally { await isolated.close(); }
+});
+
+test("a WebPier script without its .venv, or a missing one, disables only the WebPier tools", async () => {
+  for (const runner of [resolve(fixtureRoot, "webpier/run_headless.py"), resolve(jobRoot, "missing/run_headless.py")]) {
+    const isolated = await connect({ STRUCTURAL_MCP_WEBPIER_RUNNER: runner });
+    try {
+      const caps = await isolated.callTool({ name: "get_capabilities", arguments: {} });
+      const engines = (caps.structuredContent as { engines: Record<string, { enabled: boolean; readiness: string }> }).engines;
+      assert.equal(engines.webpier?.enabled, false);
+      assert.equal(engines.webpier?.readiness, "unavailable");
+      assert.equal(engines.fempython?.enabled, true);
+      for (const name of ["webpier_get_contract", "webpier_get_input_schema"]) {
+        const result = await isolated.callTool({ name, arguments: {} });
+        assert.equal(result.isError, true);
+        assert.match(JSON.stringify(result.structuredContent), /webpier_unavailable/);
+      }
+      const generate = await isolated.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput } });
+      assert.match(JSON.stringify(generate.structuredContent), /webpier_unavailable/);
+    } finally { await isolated.close(); }
+  }
 });

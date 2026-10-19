@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { RunnerEngine } from "./runner.js";
 
 export const runnerMessageSchema = z.object({
   level: z.string(),
@@ -59,8 +60,10 @@ export interface JobManifest {
     | "soilstructure_export_sdc"
     | "soilstructure_ground_displacement"
     | "aggrese_inspect"
-    | "aggrese_calculate";
-  engine: "fempython" | "webdan2" | "steeldan" | "soilstructure" | "aggrese";
+    | "aggrese_calculate"
+    | "webpier_validate"
+    | "webpier_generate";
+  engine: RunnerEngine;
   engineVersion: string;
   readiness: string;
   createdAt: string;
