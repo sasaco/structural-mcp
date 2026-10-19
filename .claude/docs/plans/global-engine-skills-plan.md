@@ -1,6 +1,6 @@
 # 解析エンジンと WebPier を MCP とグローバルスキルで公開する計画
 
-- 状態: Phase 0・1・2・3・4・5 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase4-webpier-mcp.md`・`phase5-engine-skills.md`
+- 状態: Phase 0・1・2・3・4・5・7 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase4-webpier-mcp.md`・`phase5-engine-skills.md`・`phase7-structural-webpier-skill.md`。§9 の3（P7橋脚 での最終確認）は利用者が別に行う
 - 更新日: 2026-10-19
 - 対象: `structural-mcp`（新設 `skills/`、server、installer）、WebPier（橋脚自動設計アプリ）、JRSNAPHeadless、GridLayoutPdf、K:\レールウェイコンサルタント の各案件、Batch submodule
 - 対象クライアント: Codex（主）、Claude Code
@@ -232,7 +232,7 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
 3. `installer/tests/runtime.test.mjs`、`verify/payload-smoke.mjs`（WebPier の 0500〜0620 を実計算。JRSNAP があれば `--jrsnap` 指定時だけ 0710 以降も）、`installer/README.md`。
 4. 再頒布の確認：JRSNAP 本体は同梱しない（利用者が入れる）。JRSNAPHeadless が JRSNAP の DLL を同梱していないことを確かめる。
 
-### Phase 7：`structural-webpier` スキル
+### ✅ Phase 7：`structural-webpier` スキル
 
 1. SKILL.md：何を作るアプリか（0500〜0910 の段階）、MCP での流れ（`webpier_get_contract` で使える段階を確かめる → 入力を作る／直す → `webpier_validate` → `webpier_generate` → 成果物を `output/`・`post/` に置く）、スイッチの選び方、入力エディタ（GUI）の起動方法、判定（engineering_status）と実行の成否を混同しないこと。
 2. references/：§3 のとおり。WebPier の README・CONTEXT.md・`fields.py` を正とし、要約とそこへの参照にとどめる（二重管理を避けるため、項目の一覧は `webpier_get_input_schema` で取れるようにして、スキルには意味の説明だけを書く）。
@@ -242,6 +242,8 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
    - schema 2 の入力（`P7橋脚\pre\input.json`）はまだない。発注者の資料（`NJC→ささこう`）から入力を作るところも、`structural-webpier` と `webpier_get_input_schema`・`webpier_validate` で進められることを含めて確かめる。入力値が資料から決まらない項目は利用者に聞く（推測で埋めない）。
    - 0612 は 0500・0610 と骨組解析（FEMPython）に依存する。JRSNAP・Aggre-SE は要らない。
    - K: は NAS（実体は `\\sasaco-ds218\...`）。`STRUCTURAL_MCP_ALLOWED_ROOTS` に入れた `K:\...` と、入力の realpath が UNC で返る場合の包含判定が一致するかを Phase 0 で確かめる。
+
+**結果（2026-10-19、完了）**：`skills/structural-webpier/` を作った（structural-mcp `df4b395`）。SKILL.md（MCP での流れ、段階とスイッチの選び方、成果物を置く、入力エディタ、runner を直接呼ぶ方法）と references（`input-schema2.md`・`stages.md`・`checks.md`・`outputs.md`・`troubleshooting.md`）。段階の表は WebPier の `run_headless.py contract` の出力から写し、項目の一覧は書かずに `webpier_get_input_schema` を正とした。3（WebPier の開発用スキルの利用者向けの部分）は `checks.md` に移した（WebPier 側から消すのは Phase 8）。成果物の受け渡しは §5.2 の「`read_artifact` で1つずつ」から変え、job の `manifest.json` のバイト数と SHA-256 を確かめて案件の `output/`・`post/` に複写する Node のスクリプト `scripts/place-webpier-outputs.mjs` を付けた（計算書は1つ最大 2MB、JRSNAP の結果は数十MB で、Base64 で文脈に通せないため。server は `get_capabilities` の `pathPolicy.jobRoot` を返すようにした）。`npm test` 66件、`npm run skills:install`、Claude Code と Codex の新しいセッションで `structural-webpier` が選ばれ、0612・FEMPython・スクリプトでの配置と正しく答えた。4（P7橋脚 での最終確認）は利用者の判断で Phase 7 から外し、§9 の3 の確認として利用者が別に行う（手順は `phase7-structural-webpier-skill.md`）。
 
 ### Phase 8：各プロジェクトの片付け
 
