@@ -44,3 +44,4 @@ node scripts/install-skills.mjs install --mode copy   # ジャンクションを
 - 同じ名前の他人のスキルやリンクがあると、何も変更せずに止まる。
 - 置いた記録は `.structural-mcp/skills-install-state.json`。ここから消したスキルは、次の `install` でインストール先からも消える。
 - 新しいスキルは、新しいセッションから見える。
+- MSI の利用者には、セットアップ（`setup.cmd`）が同じ2か所へ**コピー**する（記録はインストール先の `skills-install-state.json`、`--no-skills` で省略）。規則は同じで、同じ名前の他人のスキルやリンクがあれば何も変えずに止まり、解除・アンインストールは自分が置いて変更されていないものだけを消す。詳細は `installer/README.md`。

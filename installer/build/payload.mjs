@@ -38,13 +38,14 @@ function git(directory, ...args) {
 async function sources(repo, run, preview, filename = 'source-provenance.json') {
   const records = [];
   const scopes = {
-    '.': ['src', 'tests', 'package.json', 'package-lock.json', 'tsconfig.json', 'installer'],
+    '.': ['src', 'tests', 'package.json', 'package-lock.json', 'tsconfig.json', 'installer', 'skills'],
     Capacita: ['RcDan', 'RcSolver', 'SteelDan', 'WebDanforCS', 'Directory.Build.props', 'global.json'],
     SoilStructure: ['SoilPile', 'SoilDisp', 'SoilStructure', 'Directory.Build.props', 'global.json'],
     Batch: ['Aggre-SE', 'RCNonlinear', 'WinPDFPrint', 'Docu-SE.sln'],
+    WebPier: ['webpier', 'run_headless.py', 'pyproject.toml', 'uv.lock', 'README.md'],
     FEMPython: ['FrameWeb/src', 'FrameWeb/pyproject.toml', 'FrameWeb/uv.lock', 'FrameWeb/README.md', 'FrameWeb/LICENSE', 'FrameWebforCS', 'FrameGConverter/Convert_Manager', 'FramePrintPDF/PDF_Manager', 'THREE', 'Directory.Build.props', 'global.json'],
   };
-  for (const name of ['.', 'Capacita', 'SoilStructure', 'FEMPython', 'Batch']) {
+  for (const name of ['.', 'Capacita', 'SoilStructure', 'FEMPython', 'Batch', 'WebPier']) {
     const root = path.resolve(repo, name);
     const allStatus = git(root, 'status', '--porcelain=v1', '--untracked-files=normal');
     const status = git(root, 'status', '--porcelain=v1', '--untracked-files=all', '--', ...scopes[name]);
@@ -64,7 +65,7 @@ async function sources(repo, run, preview, filename = 'source-provenance.json') 
 }
 async function prepare(repo, payload) {
   const runtime = path.join(repo, 'installer', 'runtime');
-  for (const name of ['launcher.mjs', 'codex-config.mjs', 'package.json', 'package-lock.json', 'setup.cmd', 'health.cmd', 'unregister-codex.cmd', 'structural-mcp.ps1']) {
+  for (const name of ['launcher.mjs', 'codex-config.mjs', 'skills.mjs','package.json', 'package-lock.json', 'setup.cmd', 'health.cmd', 'unregister-codex.cmd', 'structural-mcp.ps1']) {
     await copy(path.join(runtime, name), path.join(payload, name));
   }
   const frame = path.join(repo, 'FEMPython', 'FrameWeb');
@@ -73,6 +74,16 @@ async function prepare(repo, payload) {
   await copyTree(path.join(frame, 'src'), path.join(target, 'src'));
   const inputs = await json(path.join(repo, 'installer', 'build', 'inputs.json'));
   await fs.writeFile(path.join(target, '.python-version'), `${inputs.python}\n`);
+  // WebPier: the headless runner and its package; setup builds the .venv beside run_headless.py from uv.lock.
+  const webPier = path.join(repo, 'WebPier');
+  const webPierTarget = path.join(payload, 'engines', 'WebPier');
+  for (const name of ['run_headless.py', 'pyproject.toml', 'uv.lock', 'README.md']) await copy(path.join(webPier, name), path.join(webPierTarget, name));
+  await copyTree(path.join(webPier, 'webpier'), path.join(webPierTarget, 'webpier'));
+  await fs.writeFile(path.join(webPierTarget, '.python-version'), `${inputs.python}\n`);
+  // Global skills, which setup copies into the Claude Code and Codex skill folders.
+  for (const entry of await fs.readdir(path.join(repo, 'skills'), { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.startsWith('structural-')) await copyTree(path.join(repo, 'skills', entry.name), path.join(payload, 'skills', entry.name));
+  }
   await copy(path.join(repo, 'installer', 'README.md'), path.join(payload, 'INSTALLER-README.md'));
   await copy(path.join(repo, 'SoilStructure', 'SoilPile', 'Reporting', 'Fonts', 'OFL.txt'), path.join(payload, 'licenses', 'BIZUDMincho-OFL.txt'));
   await copy(path.join(frame, 'LICENSE'), path.join(payload, 'licenses', 'FEMPython-LICENSE.txt'));
@@ -87,7 +98,7 @@ async function collectLicenses(repo, run, payload, inputs) {
     // Only this generator's notice subtree is replaced, never user data or source files.
     await fs.rm(nugetNotices, { recursive: true });
   }
-  const inventory = { npm: [], nuget: [], externalPython: 'Resolved by shipped FrameWeb/uv.lock during explicit initialization.' };
+  const inventory = { npm: [], nuget: [], externalPython: 'Resolved by shipped FrameWeb/uv.lock and WebPier/uv.lock during explicit initialization.' };
   for (const root of [path.join(payload, 'server', 'node_modules'), path.join(payload, 'node_modules')]) {
     for (const file of (await files(root)).filter(file => path.basename(file) === 'package.json')) {
       const metadata = await json(file);
@@ -133,7 +144,7 @@ async function collectLicenses(repo, run, payload, inputs) {
     await fs.writeFile(path.join(licensesRoot, `uv-${name}.txt`), await response.text());
   }
   await writeJson(path.join(licensesRoot, 'dependency-inventory.json'), inventory);
-  await fs.writeFile(path.join(payload, 'THIRD-PARTY-NOTICES.md'), `# Third-party notices\n\nThis is an unsigned preview assembled from the source revisions and worktree hashes recorded in release-manifest.json. No repository-wide distribution license was found; this package does not grant redistribution rights.\n\n- Node.js ${inputs.node.version}: licenses/node-LICENSE.txt includes its dependency notices.\n- uv ${inputs.uv.version}: licenses/uv-LICENSE-MIT.txt and licenses/uv-LICENSE-APACHE.txt.\n- FEMPython Python source: licenses/FEMPython-LICENSE.txt. Locked dependencies and managed CPython are downloaded during initialization; their installed distributions retain license metadata.\n- .NET runtimes and NuGet dependencies: licenses/nuget and licenses/dependency-inventory.json. npm licenses remain beside their packages in node_modules.\n- BIZUDMincho font: licenses/BIZUDMincho-OFL.txt.\n\n## Distribution review still required\n\nThe runners include GrapeCity Spread components, EPPlus 7, and (Aggre-SE / Batch, engines/Aggre-SE) GrapeCity SPREAD 15, ComponentOne 2015 (C1Pdf, C1Report, C1Chart, C1Zip, C1 WPF), AdvanceSoftware VB-Report8, iTextSharp and SNAPDBLib, and embedded fonts such as MS Gothic, MS Mincho and SimSun. Their commercial/distribution rights have not been verified. Review the original package terms and your organization's entitlements before sharing outside your licensed environment. The included third-party notices are evidence, not a grant of rights.\n\nWiX 5.0.2 builds this MSI and is not a runtime dependency. Source: https://www.nuget.org/packages/WixToolset.Sdk/5.0.2\n`);
+  await fs.writeFile(path.join(payload, 'THIRD-PARTY-NOTICES.md'), `# Third-party notices\n\nThis is an unsigned preview assembled from the source revisions and worktree hashes recorded in release-manifest.json. No repository-wide distribution license was found; this package does not grant redistribution rights.\n\n- Node.js ${inputs.node.version}: licenses/node-LICENSE.txt includes its dependency notices.\n- uv ${inputs.uv.version}: licenses/uv-LICENSE-MIT.txt and licenses/uv-LICENSE-APACHE.txt.\n- FEMPython Python source: licenses/FEMPython-LICENSE.txt. Locked dependencies and managed CPython are downloaded during initialization; their installed distributions retain license metadata.\n- WebPier Python source (engines/WebPier, https://github.com/sasaco/WebPier): no license file was found in its repository. Its locked dependencies are downloaded during initialization from engines/WebPier/uv.lock, including GridLayoutPdf 0.1.0 as the wheel published at https://github.com/sasaco/grid_layout_pdf/releases/tag/v0.1.0 (no license file was found in that repository either).\n- Skills (skills/structural-*): instructions for Claude Code and Codex from the structural-mcp repository, copied by setup into the user's skill folders.\n- .NET runtimes and NuGet dependencies: licenses/nuget and licenses/dependency-inventory.json. npm licenses remain beside their packages in node_modules.\n- BIZUDMincho font: licenses/BIZUDMincho-OFL.txt.\n\n## Distribution review still required\n\nThe runners include GrapeCity Spread components, EPPlus 7, and (Aggre-SE / Batch, engines/Aggre-SE) GrapeCity SPREAD 15, ComponentOne 2015 (C1Pdf, C1Report, C1Chart, C1Zip, C1 WPF), AdvanceSoftware VB-Report8, iTextSharp and SNAPDBLib, and embedded fonts such as MS Gothic, MS Mincho and SimSun. WebPier renders with the Windows fonts installed on the PC (MS Mincho, MS Gothic, Calibri, Times New Roman Italic); they are not bundled. Their commercial/distribution rights have not been verified. Review the original package terms and your organization's entitlements before sharing outside your licensed environment. The included third-party notices are evidence, not a grant of rights.\n\nJRSNAP (Railway Technical Research Institute) and its runner JRSNAPHeadless are not bundled, so WebPier's JRSNAP stages (0710 and later) are unavailable in this package.\n\nWiX 5.0.2 builds this MSI and is not a runtime dependency. Source: https://www.nuget.org/packages/WixToolset.Sdk/5.0.2\n`);
 }
 async function finalize(repo, run, version) {
   const payload = path.join(run, 'payload');
@@ -154,7 +165,7 @@ async function finalize(repo, run, version) {
   const manifest = { schemaVersion: 1, version, channel: version.includes('preview') ? 'preview' : 'unsigned-candidate',
     signed: false, createdUtc: new Date().toISOString(), platform: 'win-x64', inputs,
     sources: initialSources, sourceSnapshotAtPackaging: finalSources, sourceChangedDuringBuild, files: records,
-    limitations: ['Unsigned; clean-VM install/repair/upgrade/uninstall acceptance is not implied.', 'FEMPython needs online first-run initialization.', 'Commercial component and embedded font redistribution rights require review.', 'Aggre-SE runner (.NET Framework 4.8) is built with Visual Studio MSBuild from the developer machine vendor installs (SPREAD 15, ComponentOne 2015, VB-Report8); their runtime redistribution terms and the iTextSharp version license require review.', 'Existing SixLabors.ImageSharp 2.1.13 dependency generates NU1902/NU1903 vulnerability warnings; engine dependencies were not upgraded by packaging.', 'NuGet transitive resolutions are recorded in dependency-inventory.json; full reproducible release requires frozen restore inputs.'] };
+    limitations: ['Unsigned; clean-VM install/repair/upgrade/uninstall acceptance is not implied.', 'FEMPython and WebPier need online first-run initialization.', 'JRSNAP and JRSNAPHeadless are not bundled: WebPier stages 0710 and later, and the stages that depend on them, are unavailable.', 'Commercial component and embedded font redistribution rights require review.', 'Aggre-SE runner (.NET Framework 4.8) is built with Visual Studio MSBuild from the developer machine vendor installs (SPREAD 15, ComponentOne 2015, VB-Report8); their runtime redistribution terms and the iTextSharp version license require review.', 'Existing SixLabors.ImageSharp 2.1.13 dependency generates NU1902/NU1903 vulnerability warnings; engine dependencies were not upgraded by packaging.', 'NuGet transitive resolutions are recorded in dependency-inventory.json; full reproducible release requires frozen restore inputs.'] };
   await writeJson(path.join(payload, 'release-manifest.json'), manifest);
   await copy(path.join(payload, 'release-manifest.json'), path.join(run, 'release-manifest.json'));
 }

@@ -4,7 +4,7 @@
 
 ## Windows PC へのインストール
 
-別の PC では、Windows x64 向け MSI をインストールし、スタートメニューの **structural-mcp → 1 - Setup and register Codex** を実行します。Node.js と .NET 実行環境を同梱し、Python は初回セットアップで取得します。利用先で SDK や Codex CLI を準備する必要はありません。
+別の PC では、Windows x64 向け MSI をインストールし、スタートメニューの **structural-mcp → 1 - Setup and register Codex** を実行します。Node.js と .NET 実行環境を同梱し、Python（FEMPython と WebPier の環境）は初回セットアップで取得します。セットアップはスキル `structural-*` を Claude Code と Codex のユーザーのスキルフォルダーにコピーします。JRSNAP と JRSNAPHeadless は同梱しないので、WebPier の 0710 以降（JRSNAP を使う段階）は MSI では使えません。利用先で SDK や Codex CLI を準備する必要はありません。
 
 ビルド方法、初期設定、検証、削除手順と Preview の制限は [インストーラー README](./installer/README.md) を参照してください。以下はソースから開発する場合の手順です。
 
@@ -95,7 +95,7 @@ submodule はそれぞれ検証済み commit に固定されています。各 s
 
 `Batch` は GitLab、`JRSNAPHeadless` は GitHub の private repo です。読取り権限がない場合は、その submodule の取得だけが失敗します。
 
-WebPier の Python 環境は、submodule の取得後に WebPier の中で作ります。帳票の組版ライブラリ GridLayoutPdf は `WebPier/pyproject.toml` の git 参照（commit の SHA 固定）で入ります。
+WebPier の Python 環境は、submodule の取得後に WebPier の中で作ります。帳票の組版ライブラリ GridLayoutPdf は `WebPier/pyproject.toml` の URL 参照で、GitHub Release（`sasaco/grid_layout_pdf`）の wheel から入ります（`uv.lock` に SHA-256。git がなくても取得できる）。
 
 ```powershell
 uv sync --project ".\WebPier" --locked

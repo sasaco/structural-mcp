@@ -4,7 +4,9 @@ param(
     [string]$CodexHome,
     [string]$DataRoot,
     [string]$AllowedRoot,
+    [string]$SkillsHome,
     [switch]$ReplaceExisting,
+    [switch]$NoSkills,
     [switch]$NoPause
 )
 $ErrorActionPreference = 'Stop'
@@ -16,7 +18,9 @@ try {
     if ($CodexHome) { $launcherArgs += @('--codex-home', $CodexHome) }
     if ($DataRoot) { $launcherArgs += @('--data-root', $DataRoot) }
     if ($AllowedRoot) { $launcherArgs += @('--allowed-root', $AllowedRoot) }
+    if ($SkillsHome) { $launcherArgs += @('--skills-home', $SkillsHome) }
     if ($ReplaceExisting) { $launcherArgs += '--replace-existing' }
+    if ($NoSkills) { $launcherArgs += '--no-skills' }
     & $node @launcherArgs
     $resultCode = $LASTEXITCODE
 } catch {

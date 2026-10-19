@@ -132,6 +132,10 @@ try {
     $evidence.fixtureAfterSha256 = Hash-OrMissing $evidence.fixture.configPath
     $evidence.uninstallHookReachedIsolatedCodex = $evidence.fixtureAfterSha256 -eq $evidence.fixture.originalSha256
     if (!$evidence.uninstallHookReachedIsolatedCodex) { throw 'MSI removal completed but the isolated owned registration was not removed; inspect custom action environment/log.' }
+    $evidence.placedSkillsRemaining = @($evidence.fixture.placedSkills | Where-Object { Test-Path -LiteralPath $_ })
+    if ($evidence.placedSkillsRemaining.Count) { throw 'MSI removal completed but skills placed by the installation remain.' }
+    $evidence.foreignSkillKept = Test-Path -LiteralPath $evidence.fixture.foreignSkill
+    if (!$evidence.foreignSkillKept) { throw 'MSI removal deleted a skill the installation did not place.' }
     $evidence.ok = $true
 } catch {
     $evidence.error = $_.Exception.Message

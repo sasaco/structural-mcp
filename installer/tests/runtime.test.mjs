@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile, copyFile, link } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile, copyFile, link, symlink, cp, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import TOML from "../runtime/node_modules/@iarna/toml/toml.js";
 import { updateCodexConfig, updateConfigText, withLock } from "../runtime/codex-config.mjs";
 import { createLayout, registrationFor, runAction, runProcess, bootstrapPython, probeMcp, PYTHON_VERSION } from "../runtime/launcher.mjs";
+import { checkSkills, installSkills, skillTargets } from "../runtime/skills.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const quiet = () => {};
@@ -14,6 +15,7 @@ async function isolated(t) {
   t.after(() => rm(path, { recursive: true, force: true }));
   const layout = createLayout(resolve(path, "install 0.2.0"), {
     codexHome: resolve(path, "isolated codex"), dataRoot: resolve(path, "isolated data"), allowedRoot: resolve(path, "計算 inputs"),
+    skillsHome: resolve(path, "isolated home"),
   });
   await mkdir(layout.root, { recursive: true });
   return layout;
@@ -106,17 +108,31 @@ test("health failure after download does not register", async (t) => {
   await assert.rejects(readFile(layout.configPath), { code: "ENOENT" });
 });
 
-test("bootstrap pins Python and lock; environment and cache are isolated", async (t) => {
+test("bootstrap pins Python and lock for FrameWeb and WebPier; environment and cache are isolated", async (t) => {
   const layout = await isolated(t);
   await mkdir(layout.frameWeb, { recursive: true });
-  let call;
-  await bootstrapPython(layout, { log: quiet, execute: async (...args) => { call = args; } });
-  assert.equal(call[0], layout.uv);
-  assert.deepEqual(call[1], ["sync", "--no-config", "--project", layout.frameWeb, "--locked", "--no-dev", "--managed-python", "--python", PYTHON_VERSION]);
-  assert.equal(call[2].env.UV_PROJECT_ENVIRONMENT, resolve(layout.frameWeb, ".venv"));
-  assert.equal(call[2].env.UV_PYTHON_INSTALL_DIR, resolve(layout.dataRoot, "python"));
-  assert.equal(call[2].env.UV_CACHE_DIR, resolve(layout.dataRoot, "uv-cache"));
-  assert.equal(call[2].env.PYTHONHOME, undefined);
+  await mkdir(layout.webPier, { recursive: true });
+  const calls = [];
+  await bootstrapPython(layout, { log: quiet, execute: async (...args) => { calls.push(args); } });
+  assert.equal(calls.length, 2);
+  for (const [call, project] of [[calls[0], layout.frameWeb], [calls[1], layout.webPier]]) {
+    assert.equal(call[0], layout.uv);
+    assert.deepEqual(call[1], ["sync", "--no-config", "--project", project, "--locked", "--no-dev", "--managed-python", "--python", PYTHON_VERSION]);
+    assert.equal(call[2].env.UV_PROJECT_ENVIRONMENT, resolve(project, ".venv"));
+    assert.equal(call[2].env.UV_PYTHON_INSTALL_DIR, resolve(layout.dataRoot, "python"));
+    assert.equal(call[2].env.UV_CACHE_DIR, resolve(layout.dataRoot, "uv-cache"));
+    assert.equal(call[2].env.PYTHONHOME, undefined);
+  }
+  // structural-mcp finds a .py runner only with the .venv beside it.
+  assert.equal(layout.webPierPython, resolve(layout.webPierRunner, "../.venv/Scripts/python.exe"));
+});
+
+test("registration passes the bundled WebPier runner and leaves JRSNAP undetected", async (t) => {
+  const layout = await isolated(t);
+  const registration = registrationFor(layout);
+  assert.equal(registration.env.STRUCTURAL_MCP_WEBPIER_RUNNER, resolve(layout.root, "engines/WebPier/run_headless.py"));
+  assert.equal(registration.env.STRUCTURAL_MCP_JRSNAP_RUNNER, undefined);
+  assert.equal(registration.tool_timeout_sec, 1800);
 });
 
 test("runtime MCP probe imports SDK and calls a real server over stdio", async (t) => {
@@ -129,8 +145,13 @@ test("runtime MCP probe imports SDK and calls a real server over stdio", async (
   registration.env.STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER = resolve(root, "tests/fixtures/fake-runner.mjs");
   registration.env.STRUCTURAL_MCP_FEMPYTHON_RUNNER = resolve(root, "tests/fixtures/fake-fempython-runner.mjs");
   registration.env.STRUCTURAL_MCP_AGGRESE_RUNNER = resolve(root, "tests/fixtures/fake-aggrese-runner.mjs");
+  registration.env.STRUCTURAL_MCP_WEBPIER_RUNNER = resolve(root, "tests/fixtures/fake-webpier-runner.mjs");
+  // As in an installation, where the server's default JRSNAP path (beside server/) does not exist.
+  registration.env.STRUCTURAL_MCP_JRSNAP_RUNNER = resolve(layout.root, "missing-jrsnap.exe");
   const capabilities = await probeMcp(layout, { sdkRoot: resolve(root, "node_modules/@modelcontextprotocol/sdk/dist/esm"), registration });
   assert.equal(capabilities.engines.capacita.enabled, true);
+  assert.equal(capabilities.engines.webpier.enabled, true);
+  assert.deepEqual(capabilities.webPierUnavailableStages, ["0711"]);
   registration.env.STRUCTURAL_MCP_FEMPYTHON_RUNNER = resolve(layout.root, "missing.exe");
   await assert.rejects(probeMcp(layout, { sdkRoot: resolve(root, "node_modules/@modelcontextprotocol/sdk/dist/esm"), registration }), /engine unavailable: fempython/);
 });
@@ -240,4 +261,142 @@ test("saved target cannot remove an unowned registration", async (t) => {
   assert.equal(result.changed, false);
   assert.equal(await readFile(layout.configPath, "utf8"), changed);
   assert.equal(JSON.parse(await readFile(resolve(layout.root, "codex-registration-state.json"), "utf8")).configPath, layout.configPath);
+});
+
+// Skills: copies into <home>/.claude/skills and <home>/.agents/skills, recorded in the installation.
+async function withSkills(t, names = ["structural-alpha", "structural-beta"]) {
+  const layout = await isolated(t);
+  for (const name of names) {
+    await mkdir(resolve(layout.skills, name, "references"), { recursive: true });
+    await writeFile(resolve(layout.skills, name, "SKILL.md"), `---\nname: ${name}\ndescription: 日本語の説明\n---\n`);
+    await writeFile(resolve(layout.skills, name, "references", "note.md"), `${name} note\n`);
+  }
+  await mkdir(resolve(layout.skills, "not-structural"), { recursive: true });
+  await writeFile(resolve(layout.skills, "not-structural", "SKILL.md"), "ignored\n");
+  return layout;
+}
+const register = (layout, options = {}) => runAction("register-codex", layout, options, { initialize: async () => {}, log: quiet });
+const placed = (layout, name, target = 0) => resolve(layout.skillTargets[target], name);
+const exists = (path) => lstat(path).then(() => true, (error) => { if (error.code === "ENOENT") return false; throw error; });
+
+test("skill targets are the Claude Code and Codex user folders; an explicit home replaces both", () => {
+  const home = resolve(tmpdir(), "some home");
+  assert.deepEqual(skillTargets(home), [resolve(home, ".claude/skills"), resolve(home, ".agents/skills")]);
+  const claude = resolve(tmpdir(), "claude config");
+  assert.equal(skillTargets(undefined, { CLAUDE_CONFIG_DIR: claude })[0], resolve(claude, "skills"));
+});
+
+test("setup copies bundled skills to both clients, health checks them, unregister removes only them", async (t) => {
+  const layout = await withSkills(t);
+  const foreign = resolve(layout.skillTargets[1], "structural-someone-else", "SKILL.md");
+  await mkdir(resolve(foreign, ".."), { recursive: true });
+  await writeFile(foreign, "foreign\n");
+  await register(layout);
+  for (const target of [0, 1]) for (const name of ["structural-alpha", "structural-beta"]) {
+    assert.equal(await readFile(resolve(placed(layout, name, target), "references", "note.md"), "utf8"), `${name} note\n`);
+  }
+  assert.equal(await exists(placed(layout, "not-structural")), false);
+  const receipt = JSON.parse(await readFile(resolve(layout.root, "skills-install-state.json"), "utf8"));
+  assert.equal(receipt.entries.length, 4);
+  assert.equal((await checkSkills({ installRoot: layout.root, sourceRoot: layout.skills })).length, 4);
+  // Setup again leaves the copies as they are.
+  await register(layout);
+  await runAction("unregister-codex", layout, {}, { log: quiet });
+  for (const target of [0, 1]) assert.equal(await exists(placed(layout, "structural-alpha", target)), false);
+  assert.equal(await readFile(foreign, "utf8"), "foreign\n");
+  assert.equal(await exists(resolve(layout.root, "skills-install-state.json")), false);
+  assert.equal(TOML.parse(await readFile(layout.configPath, "utf8")).mcp_servers, undefined);
+});
+
+test("a foreign skill or link of the same name stops setup before Codex or any skill folder changes", async (t) => {
+  const layout = await withSkills(t);
+  const other = await mkdtemp(resolve(tmpdir(), "structural other "));
+  t.after(() => rm(other, { recursive: true, force: true }));
+  for (const make of [
+    async (destination) => { await mkdir(destination, { recursive: true }); await writeFile(resolve(destination, "SKILL.md"), "mine\n"); },
+    async (destination) => { await mkdir(resolve(destination, ".."), { recursive: true }); await symlink(other, destination, "junction"); },
+  ]) {
+    const destination = placed(layout, "structural-beta", 1);
+    await make(destination);
+    await assert.rejects(register(layout), /same name already exists/);
+    await assert.rejects(readFile(layout.configPath), { code: "ENOENT" });
+    assert.equal(await exists(placed(layout, "structural-alpha", 0)), false);
+    assert.equal(await exists(resolve(layout.root, "skills-install-state.json")), false);
+    await rm(destination, { recursive: true, force: true });
+  }
+  // A development machine's junctions are left alone with --no-skills.
+  await mkdir(resolve(placed(layout, "structural-alpha", 0), ".."), { recursive: true });
+  await symlink(other, placed(layout, "structural-alpha", 0), "junction");
+  await register(layout, { noSkills: true });
+  assert.ok(TOML.parse(await readFile(layout.configPath, "utf8")).mcp_servers["structural-mcp"]);
+  assert.equal(await exists(placed(layout, "structural-beta", 1)), false);
+  assert.ok((await lstat(placed(layout, "structural-alpha", 0))).isSymbolicLink());
+});
+
+test("an edited copy fails health, stops setup and is kept by unregister", async (t) => {
+  const layout = await withSkills(t);
+  await register(layout);
+  const edited = resolve(placed(layout, "structural-alpha", 0), "SKILL.md");
+  await writeFile(edited, "edited by the user\n");
+  await assert.rejects(checkSkills({ installRoot: layout.root, sourceRoot: layout.skills }), /differs from the bundled skill/);
+  await assert.rejects(register(layout), /edited after this installation placed it/);
+  await runAction("unregister-codex", layout, {}, { log: quiet });
+  assert.equal(await readFile(edited, "utf8"), "edited by the user\n");
+  assert.equal(await exists(placed(layout, "structural-alpha", 1)), false);
+});
+
+test("setup restores a deleted copy and removes a skill that is no longer bundled", async (t) => {
+  const layout = await withSkills(t);
+  await register(layout);
+  await rm(placed(layout, "structural-alpha", 1), { recursive: true });
+  await assert.rejects(checkSkills({ installRoot: layout.root, sourceRoot: layout.skills }), /is missing/);
+  await rm(resolve(layout.skills, "structural-beta"), { recursive: true });
+  await register(layout);
+  assert.equal(await exists(placed(layout, "structural-alpha", 1)), true);
+  assert.equal(await exists(placed(layout, "structural-beta", 0)), false);
+  assert.equal((await checkSkills({ installRoot: layout.root, sourceRoot: layout.skills })).length, 2);
+});
+
+test("an interrupted copy stays ours: setup replaces it and unregister removes it", async (t) => {
+  const layout = await withSkills(t, ["structural-alpha"]);
+  await register(layout);
+  const receiptPath = resolve(layout.root, "skills-install-state.json");
+  const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
+  receipt.entries[0].pending = true;
+  await writeFile(receiptPath, JSON.stringify(receipt));
+  await rm(resolve(placed(layout, "structural-alpha", 0), "references"), { recursive: true });
+  await register(layout);
+  assert.equal(await exists(resolve(placed(layout, "structural-alpha", 0), "references", "note.md")), true);
+  receipt.entries[0].pending = true;
+  await writeFile(receiptPath, JSON.stringify(receipt));
+  await rm(resolve(placed(layout, "structural-alpha", 0), "SKILL.md"));
+  await runAction("unregister-codex", layout, {}, { log: quiet });
+  assert.equal(await exists(placed(layout, "structural-alpha", 0)), false);
+});
+
+test("--replace-existing takes over an earlier installation's unchanged copies, and only those", async (t) => {
+  const layout = await withSkills(t);
+  const older = createLayout(resolve(layout.root, "../older install"), { skillsHome: resolve(layout.skillTargets[0], "../..") });
+  await cp(layout.skills, older.skills, { recursive: true });
+  await installSkills({ installRoot: older.root, sourceRoot: older.skills, targets: older.skillTargets });
+  await assert.rejects(register(layout), /only with --replace-existing/);
+  await writeFile(resolve(placed(layout, "structural-beta", 1), "SKILL.md"), "edited\n");
+  await assert.rejects(register(layout, { replaceExisting: true }), /structural-beta \(not placed by this installation\)/);
+  await writeFile(resolve(placed(layout, "structural-beta", 1), "SKILL.md"), await readFile(resolve(layout.skills, "structural-beta", "SKILL.md")));
+  await register(layout, { replaceExisting: true });
+  assert.equal(await exists(resolve(older.root, "skills-install-state.json")), false);
+  assert.equal((await checkSkills({ installRoot: layout.root, sourceRoot: layout.skills })).length, 4);
+  // The older installation's unregister no longer touches them.
+  await runAction("unregister-codex", older, {}, { log: quiet });
+  assert.equal(await exists(placed(layout, "structural-alpha", 0)), true);
+});
+
+test("a malformed skill receipt fails closed without changing skill folders", async (t) => {
+  const layout = await withSkills(t);
+  await register(layout);
+  const receiptPath = resolve(layout.root, "skills-install-state.json");
+  await writeFile(receiptPath, "not json");
+  await assert.rejects(runAction("unregister-codex", layout, {}, { log: quiet }), /Invalid skill receipt/);
+  assert.equal(await exists(placed(layout, "structural-alpha", 0)), true);
+  assert.equal(await readFile(receiptPath, "utf8"), "not json");
 });

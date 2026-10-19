@@ -1,7 +1,7 @@
 # 解析エンジンと WebPier を MCP とグローバルスキルで公開する計画
 
-- 状態: Phase 0・1・2・3・4・5・7・8 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase4-webpier-mcp.md`・`phase5-engine-skills.md`・`phase7-structural-webpier-skill.md`・`phase8-project-cleanup.md`。残りは Phase 6（installer）。§9 の3（P7橋脚 での最終確認）は利用者が別に行う
-- 更新日: 2026-10-19
+- 状態: Phase 0・1・2・3・4・5・7・8 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase4-webpier-mcp.md`・`phase5-engine-skills.md`・`phase7-structural-webpier-skill.md`・`phase8-project-cleanup.md`。Phase 6（installer）は MSI の実インストール・修復・削除の検証（`msi-lifecycle.ps1`）を除き完了（`phase6-installer.md`。この PC の Windows Installer が全 MSI で 1603 を返すため、再起動の後に行う）。§9 の3（P7橋脚 での最終確認）は利用者が別に行う
+- 更新日: 2026-10-20
 - 対象: `structural-mcp`（新設 `skills/`、server、installer）、WebPier（橋脚自動設計アプリ）、JRSNAPHeadless、GridLayoutPdf、K:\レールウェイコンサルタント の各案件、Batch submodule
 - 対象クライアント: Codex（主）、Claude Code
 
@@ -232,6 +232,8 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
 3. `installer/tests/runtime.test.mjs`、`verify/payload-smoke.mjs`（WebPier の 0500〜0620 を実計算。JRSNAP があれば `--jrsnap` 指定時だけ 0710 以降も）、`installer/README.md`。
 4. 再頒布の確認：JRSNAP 本体は同梱しない（利用者が入れる）。JRSNAPHeadless が JRSNAP の DLL を同梱していないことを確かめる。
 
+**結果（2026-10-20、MSI の実インストールの検証を除き完了）**：利用者の判断で2点を変えた。(1) git のない PC では WebPier の `uv sync --locked` が GridLayoutPdf（git の参照）で止まると分かったので、`sasaco/grid_layout_pdf` に Release `v0.1.0`（`a8c5228` の wheel、`SOURCE_DATE_EPOCH` で同じバイト）を作り、WebPier の参照をその wheel の URL にした（WebPier `78654a2`、品質ゲート 3762 件、push 済み）。(2) JRSNAPHeadless（private repo）は MSI に**入れない**。JRSNAP の検出と `jrsnap-headless.json` の書出しは作らず、MSI では WebPier の 0710 以降は使えない（`webpier_get_contract` が `missingRunners: ["jrsnap"]` を返す）。payload に `engines/WebPier`（`run_headless.py`・`webpier/`・`uv.lock` など）と `skills/structural-*` を入れ、setup が FrameWeb と同じ `uv sync --locked` で WebPier の `.venv` を作り、スキルを `~/.claude/skills`・`~/.agents/skills` にコピーする（`installer/runtime/skills.mjs`。ファイルごとの SHA-256 の受領記録、同名の他人のスキル・リンクや編集されたコピーがあれば Codex の登録の前に何も変えずに止まる、`--no-skills`、`--replace-existing` で前の版の変更のないコピーを引き継ぐ）。unregister・アンインストールは自分が置いて変更のないコピーだけを消し、health は SHA-256 を照合する。登録に `STRUCTURAL_MCP_WEBPIER_RUNNER` と `tool_timeout_sec = 1800`。installer のテスト 34 件・npm test 66 件。`-Preview` の MSI を作り、`payload-smoke.mjs --initialize --relocate`（PATH は System32 だけ）で 0500〜0622 を1段階ずつ実計算、スキルの配置と解除も通った。`msi-lifecycle.ps1` は、この PC の Windows Installer が旧 MSI の管理用の展開を含め全 MSI で即 1603 を返すため未完（サービスか PC の再起動の後にやり直す）。詳細は `phase6-installer.md`。
+
 ### ✅ Phase 7：`structural-webpier` スキル
 
 1. SKILL.md：何を作るアプリか（0500〜0910 の段階）、MCP での流れ（`webpier_get_contract` で使える段階を確かめる → 入力を作る／直す → `webpier_validate` → `webpier_generate` → 成果物を `output/`・`post/` に置く）、スイッチの選び方、入力エディタ（GUI）の起動方法、判定（engineering_status）と実行の成否を混同しないこと。
@@ -285,7 +287,7 @@ Phase 0 ─┬─ Phase 1 ── Phase 2 ── Phase 5 ─┐
 2. 開発機の Claude Code と Codex の新しいセッションで、26_関内・26_桑園高架橋・WebPier のどこから開いても、同じ `structural-*` が読み込まれる。
 3. `K:\ニュージャパンコンサルタンツ\26_LRT鉄道照査\P7橋脚` の新しいセッション（WebPier の repo を開かない）で「線路方向の基礎の照査まで作って」と頼むと、MCP の `webpier_generate` 経由で 0612 の計算書が `P7橋脚\output\` に置かれる（Phase 7 の4）。決定的な成果物は CLI で作ったものとバイトが一致する。
 4. 各プロジェクトに、エンジン・WebPier の知識を重複して持つスキルが残っていない。
-5. MSI のセットアップで WebPier・JRSNAPHeadless・スキルが使えるようになり、JRSNAP がない PC でも 0500〜0620 は動く。アンインストールで消え、他人のスキルを上書きしない。
+5. MSI のセットアップで WebPier・JRSNAPHeadless・スキルが使えるようになり、JRSNAP がない PC でも 0500〜0620 は動く。アンインストールで消え、他人のスキルを上書きしない。（2026-10-19、利用者の判断で JRSNAPHeadless は MSI に入れない。Phase 6 の結果を参照）
 
 ## 10. 決定事項（2026-10-19、すべて推奨どおり）
 

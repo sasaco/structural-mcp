@@ -16,12 +16,16 @@ const { values } = parseArgs({ options: {
   "skip-fempython": { type: "boolean", default: false },
   // JRSNAP results (*.DB1) are not in git, so the Aggre-SE calculation runs only on a supplied project.
   "aggrese-xml": { type: "string" },
+  // WebPier's own sample input (schema 2) unless another one is given.
+  "webpier-input": { type: "string", default: join(import.meta.dirname, "..", "..", "WebPier", "pre", "input.json") },
+  "skip-webpier": { type: "boolean", default: false },
   "work-directory": { type: "string" },
 } });
 const progress = message => process.stderr.write(`[payload verification] ${message}\n`);
 assert(values.payload && isAbsolute(values.payload), "--payload must be an absolute staged/extracted/installed payload directory");
 if (values["work-directory"]) assert(isAbsolute(values["work-directory"]), "--work-directory must be absolute and new");
 if (values["aggrese-xml"]) assert(isAbsolute(values["aggrese-xml"]), "--aggrese-xml must be an absolute Aggre-SE project XML path");
+assert(isAbsolute(values["webpier-input"]), "--webpier-input must be an absolute WebPier input (schema 2) path");
 const work = values["work-directory"] ? resolve(values["work-directory"]) : await mkdtemp(join(tmpdir(), "structural-mcp-verify-"));
 if (values["work-directory"]) await mkdir(work);
 const sourcePayload = resolve(values.payload);
@@ -109,6 +113,26 @@ try {
     assert(!relative(dataRoot, resolve(python.basePrefix)).startsWith(".."), `CPython home resolved outside isolated data root: ${python.basePrefix}`);
     evidence.python = python;
   }
+  if (!values["skip-webpier"]) {
+    // GridLayoutPdf comes from its release wheel, so the environment is built without git (PATH has only System32).
+    const probe = "import sys,json,gridlayoutpdf,pymupdf,reportlab;print(json.dumps({'executable':sys.executable,'prefix':sys.prefix,'basePrefix':sys.base_prefix,'modules':{'gridlayoutpdf':gridlayoutpdf.__file__,'pymupdf':pymupdf.__file__,'reportlab':reportlab.__file__}}))";
+    const python = await new Promise((accept, reject) => {
+      const child = spawn(layout.webPierPython, ["-I", "-c", probe], { cwd: work, env, windowsHide: true, timeout: 60_000 });
+      let stdout = "", stderr = "";
+      child.stdout.on("data", data => { stdout += data; });
+      child.stderr.on("data", data => { stderr += data; });
+      child.on("error", reject);
+      child.on("close", code => {
+        if (code !== 0) return reject(new Error(`WebPier Python path probe failed: ${stderr}`));
+        try { accept(JSON.parse(stdout)); } catch (error) { reject(error); }
+      });
+    });
+    for (const [name, location] of Object.entries({ executable: python.executable, prefix: python.prefix, ...python.modules })) {
+      assert(location && !relative(layout.webPier, resolve(location)).startsWith(".."), `WebPier ${name} resolved outside engines/WebPier: ${location}`);
+    }
+    assert(!relative(dataRoot, resolve(python.basePrefix)).startsWith(".."), `WebPier CPython home resolved outside isolated data root: ${python.basePrefix}`);
+    evidence.webPierPython = python;
+  }
   const { Client } = await import(pathToFileURL(requireFromPayload.resolve("@modelcontextprotocol/sdk/client/index.js")));
   const { StdioClientTransport } = await import(pathToFileURL(requireFromPayload.resolve("@modelcontextprotocol/sdk/client/stdio.js")));
   client = new Client({ name: "structural-mcp-payload-smoke", version: "1.0.0" });
@@ -128,23 +152,16 @@ try {
 
   const capabilities = await call("get_capabilities");
   evidence.capabilities = capabilities;
-  for (const key of ["capacita", "soilstructure", "aggrese", ...(!values["skip-fempython"] ? ["fempython"] : [])]) {
+  for (const key of ["capacita", "soilstructure", "aggrese", ...(!values["skip-fempython"] ? ["fempython"] : []), ...(!values["skip-webpier"] ? ["webpier"] : [])]) {
     assert.equal(capabilities.engines[key].enabled, true, `${key} must be enabled`);
   }
   const listed = await client.listTools();
-  for (const name of ["get_capabilities", "webdan_calculate", "soilstructure_calculate", "fempython_calculate", "aggrese_inspect", "aggrese_calculate", "read_artifact"]) {
+  for (const name of ["get_capabilities", "webdan_calculate", "soilstructure_calculate", "fempython_calculate", "aggrese_inspect", "aggrese_calculate", "webpier_get_contract", "webpier_generate", "read_artifact"]) {
     assert(listed.tools.some(tool => tool.name === name), `Missing tool ${name}`);
   }
   evidence.checks.push("MCP initialization, tool discovery, engine availability");
 
-  async function calculate(tool, fixture, toolArgs, expectedNames, inspect) {
-    progress(`Running ${tool} and checking its artifacts...`);
-    const source = fixture === null ? {} : { input: await readFile(join(import.meta.dirname, "fixtures", fixture), "utf8") };
-    const result = await call(tool, { ...source, ...toolArgs });
-    assert.equal(result.ok, true, `${tool} failed`);
-    assert.equal(result.executionStatus, "success", `${tool} did not execute successfully`);
-    const metadata = await call("get_job", { jobId: result.jobId });
-    assert.equal(metadata.jobId, result.jobId);
+  async function download(result) {
     const artifacts = new Map();
     for (const artifact of result.artifacts) {
       const chunks = [];
@@ -166,6 +183,18 @@ try {
       if (artifact.name.endsWith(".pdf")) assert.equal(contents.subarray(0, 5).toString("ascii"), "%PDF-");
       artifacts.set(artifact.name, contents);
     }
+    return artifacts;
+  }
+
+  async function calculate(tool, fixture, toolArgs, expectedNames, inspect) {
+    progress(`Running ${tool} and checking its artifacts...`);
+    const source = fixture === null ? {} : { input: await readFile(join(import.meta.dirname, "fixtures", fixture), "utf8") };
+    const result = await call(tool, { ...source, ...toolArgs });
+    assert.equal(result.ok, true, `${tool} failed`);
+    assert.equal(result.executionStatus, "success", `${tool} did not execute successfully`);
+    const metadata = await call("get_job", { jobId: result.jobId });
+    assert.equal(metadata.jobId, result.jobId);
+    const artifacts = await download(result);
     for (const name of expectedNames) assert(artifacts.has(name), `${tool} missing ${name}`);
     const parsed = JSON.parse(artifacts.get("result.json").toString("utf8"));
     if (inspect) inspect(parsed);
@@ -194,6 +223,54 @@ try {
     const inspected = await call("aggrese_inspect", { inputPath });
     assert(inspected.summary.cases.length > 0, "Aggre-SE inspect found no cases");
     await calculate("aggrese_calculate", null, { inputPath, generateSummaryExcel: true }, ["result.json", "summary.xlsx"]);
+  }
+  if (!values["skip-webpier"]) {
+    // JRSNAPHeadless is not bundled: the stages before 0710 are generated, the JRSNAP ones are reported missing.
+    const contract = await call("webpier_get_contract");
+    const direct = new Map(contract.selections.filter(selection => selection.stage !== "all").map(selection => [selection.stage, selection]));
+    const withoutJrsnap = ["0500", "0600", "0610", "0611", "0612", "0620", "0621", "0622"];
+    for (const stage of withoutJrsnap) assert.equal(direct.get(stage)?.available, true, `WebPier ${stage} must be available without JRSNAP`);
+    for (const stage of ["0710", "0720"]) assert.deepEqual(direct.get(stage)?.missingRunners, ["jrsnap"], `WebPier ${stage} must report JRSNAP missing`);
+    evidence.webPier = { engineVersion: contract.engineVersion, unavailableStages: contract.unavailableStages };
+    const inputPath = join(inputs, "webpier", "input.json");
+    await mkdir(dirname(inputPath));
+    await cp(values["webpier-input"], inputPath);
+    evidence.webPier.input = { source: values["webpier-input"], sha256: createHash("sha256").update(await readFile(inputPath)).digest("hex") };
+    const validated = await call("webpier_validate", { inputPath, stage: "all", frameAnalysis: true });
+    assert.equal(validated.ok, true, "WebPier input did not validate");
+    for (const stage of withoutJrsnap) {
+      progress(`Running webpier_generate (stage ${stage}) and checking its artifacts...`);
+      const result = await call("webpier_generate", { inputPath, stage });
+      assert.equal(result.ok, true, `webpier_generate ${stage} failed: ${JSON.stringify(result.errors ?? result.messages)}`);
+      assert.equal(result.executionStatus, "success");
+      const artifacts = await download(result);
+      assert([...artifacts.keys()].some(name => name.endsWith(".pdf")), `webpier_generate ${stage} returned no report PDF`);
+      assert([...artifacts.keys()].some(name => name.endsWith(".json")), `webpier_generate ${stage} returned no result JSON`);
+      evidence.engines.push({ tool: "webpier_generate", stage, jobId: result.jobId, executionStatus: result.executionStatus,
+        engineeringStatus: result.engineeringStatus, artifacts: result.artifacts.map(({ relativePath, name, bytes, sha256 }) => ({ path: relativePath ?? name, bytes, sha256 })) });
+      progress(`webpier_generate ${stage} complete: ${result.artifacts.length} verified artifacts.`);
+    }
+    evidence.checks.push("WebPier stages 0500-0622 without JRSNAP, artifacts SHA-256/PDF checks");
+  }
+  {
+    // Skills are copied into an isolated home and removed again; the real Claude Code / Codex folders are not used.
+    progress("Placing and removing the bundled skills in an isolated home...");
+    const { runAction } = await import(pathToFileURL(launcher));
+    const { checkSkills, listSkills } = await import(pathToFileURL(join(payload, "skills.mjs")));
+    const skillsHome = join(work, "skills-home");
+    const skillLayout = createLayout(payload, { dataRoot, allowedRoot: inputs, codexHome, skillsHome }, env);
+    const bundled = await listSkills(skillLayout.skills);
+    assert(bundled.length > 0, "Payload has no skills");
+    try {
+      await runAction("register-codex", skillLayout, {}, { initialize: async () => {}, log: () => {} });
+      const placed = await checkSkills({ installRoot: payload, sourceRoot: skillLayout.skills });
+      assert.equal(placed.length, bundled.length * skillLayout.skillTargets.length);
+      evidence.skills = { bundled: bundled.map(skill => skill.name), placed };
+    } finally {
+      await runAction("unregister-codex", skillLayout, {}, { log: () => {} });
+    }
+    for (const path of evidence.skills.placed) await assert.rejects(readFile(join(path, "SKILL.md")), { code: "ENOENT" }, `Skill remained after unregister: ${path}`);
+    evidence.checks.push("Skills copied to both clients' folders with matching SHA-256 and removed by unregister");
   }
   const outside = join(work, "outside.json");
   await writeFile(outside, await readFile(join(import.meta.dirname, "fixtures", "soilstructure.json")));

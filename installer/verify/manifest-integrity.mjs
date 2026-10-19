@@ -33,7 +33,7 @@ async function walk(directory) {
     if (entry.isDirectory()) await walk(target);
     else {
       const relativeName = relative(root, target).replaceAll("\\", "/");
-      if (mode === "--allow-runtime-state" && relativeName === "codex-registration-state.json") {
+      if (mode === "--allow-runtime-state" && ["codex-registration-state.json", "skills-install-state.json"].includes(relativeName)) {
         assert(entry.isFile());
         runtimeStateFiles.push(relativeName);
         continue;

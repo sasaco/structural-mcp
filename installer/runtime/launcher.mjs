@@ -5,9 +5,10 @@ import { homedir } from "node:os";
 import { resolve, dirname, relative, isAbsolute, basename } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { updateCodexConfig, withLock } from "./codex-config.mjs";
+import { checkSkills, installSkills, skillTargets, uninstallSkills } from "./skills.mjs";
 
 export const PYTHON_VERSION = "3.12.12";
-const requiredTools = ["get_capabilities", "webdan_calculate", "fempython_calculate", "soilstructure_calculate", "aggrese_calculate"];
+const requiredTools = ["get_capabilities", "webdan_calculate", "fempython_calculate", "soilstructure_calculate", "aggrese_calculate", "webpier_get_contract", "webpier_generate"];
 const registrationStateName = "codex-registration-state.json";
 const samePath = (left, right) => resolve(left).toLowerCase() === resolve(right).toLowerCase();
 
@@ -15,12 +16,17 @@ export function createLayout(installRoot, options = {}, environment = process.en
   const root = resolve(installRoot);
   const dataRoot = resolve(options.dataRoot ?? resolve(environment.LOCALAPPDATA ?? resolve(homedir(), "AppData/Local"), "structural-mcp"));
   const frameWeb = resolve(root, "engines/FEMPython/FrameWeb");
+  // structural-mcp starts WebPier's run_headless.py with the .venv beside it.
+  const webPier = resolve(root, "engines/WebPier");
   return {
-    root, dataRoot, frameWeb,
+    root, dataRoot, frameWeb, webPier,
     node: resolve(root, "runtime/node/node.exe"),
     uv: resolve(root, "runtime/uv/uv.exe"),
     server: resolve(root, "server/dist/src/index.js"),
     python: resolve(frameWeb, ".venv/Scripts/python.exe"),
+    webPierPython: resolve(webPier, ".venv/Scripts/python.exe"),
+    skills: resolve(root, "skills"),
+    skillTargets: skillTargets(options.skillsHome, environment),
     allowedRoot: resolve(options.allowedRoot ?? resolve(homedir(), "Documents/structural-mcp")),
     configPath: resolve(options.codexHome ?? environment.CODEX_HOME ?? resolve(homedir(), ".codex"), "config.toml"),
     runners: {
@@ -29,18 +35,22 @@ export function createLayout(installRoot, options = {}, environment = process.en
       fempython: resolve(root, "engines/FEMPython/FrameWebforCS/Headless/FrameWebforCS.Headless.exe"),
       aggrese: resolve(root, "engines/Aggre-SE/AggreSE.Headless.exe"),
     },
+    webPierRunner: resolve(webPier, "run_headless.py"),
   };
 }
 
+// JRSNAPHeadless is not bundled, so WebPier's JRSNAP stages (0710 and later) stay unavailable.
 export function registrationFor(layout) {
   return {
     command: layout.node, args: [layout.server], cwd: layout.root,
-    startup_timeout_sec: 60, tool_timeout_sec: 300,
+    // A WebPier generation may run for STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS (30 minutes by default).
+    startup_timeout_sec: 60, tool_timeout_sec: 1800,
     env: {
       STRUCTURAL_MCP_WEBDAN_RUNNER: layout.runners.capacita,
       STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER: layout.runners.soilstructure,
       STRUCTURAL_MCP_FEMPYTHON_RUNNER: layout.runners.fempython,
       STRUCTURAL_MCP_AGGRESE_RUNNER: layout.runners.aggrese,
+      STRUCTURAL_MCP_WEBPIER_RUNNER: layout.webPierRunner,
       STRUCTURAL_MCP_JOB_ROOT: resolve(layout.dataRoot, "jobs"),
       STRUCTURAL_MCP_ALLOWED_ROOTS: layout.allowedRoot,
       STRUCTURAL_MCP_ENABLE_STEELDAN: "true",
@@ -75,9 +85,9 @@ async function prepareDirectories(layout) {
   await mkdir(resolve(layout.dataRoot, "jobs"), { recursive: true });
 }
 
-async function ensureProjectInsideInstall(layout) {
+async function ensureProjectInsideInstall(layout, projectRoot) {
   const install = await realpath(layout.root);
-  const project = await realpath(layout.frameWeb);
+  const project = await realpath(projectRoot);
   const rel = relative(install, project);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new Error("Python project must be inside this installation.");
   try {
@@ -85,33 +95,39 @@ async function ensureProjectInsideInstall(layout) {
   } catch (error) { if (error.code !== "ENOENT") throw error; }
 }
 
+// FrameWeb (FEMPython) and WebPier each get their own .venv from their uv.lock.
+const pythonProjects = (layout) => [layout.frameWeb, layout.webPier];
+
 export async function bootstrapPython(layout, { log = console.log, execute = runProcess } = {}) {
-  await ensureProjectInsideInstall(layout);
-  log(`Python ${PYTHON_VERSION} and locked packages will be downloaded from the uv-managed Python releases / Python package index.`);
-  log(`Python environment: ${resolve(layout.frameWeb, ".venv")}`);
+  for (const project of pythonProjects(layout)) await ensureProjectInsideInstall(layout, project);
+  log(`Python ${PYTHON_VERSION} and locked packages will be downloaded from the uv-managed Python releases / Python package index / GitHub releases.`);
   log(`Downloads/cache: ${layout.dataRoot}`);
-  const env = {
-    ...process.env,
-    UV_PROJECT_ENVIRONMENT: resolve(layout.frameWeb, ".venv"),
-    UV_PYTHON_INSTALL_DIR: resolve(layout.dataRoot, "python"),
-    UV_CACHE_DIR: resolve(layout.dataRoot, "uv-cache"),
-    UV_PYTHON_DOWNLOADS: "automatic",
-    UV_LINK_MODE: "copy",
-  };
-  delete env.VIRTUAL_ENV;
-  delete env.PYTHONHOME;
-  delete env.PYTHONPATH;
-  await execute(layout.uv, ["sync", "--no-config", "--project", layout.frameWeb, "--locked", "--no-dev", "--managed-python", "--python", PYTHON_VERSION], {
-    cwd: layout.frameWeb, env, visible: true, timeout: 30 * 60_000,
-  });
+  for (const project of pythonProjects(layout)) {
+    log(`Python environment: ${resolve(project, ".venv")}`);
+    const env = {
+      ...process.env,
+      UV_PROJECT_ENVIRONMENT: resolve(project, ".venv"),
+      UV_PYTHON_INSTALL_DIR: resolve(layout.dataRoot, "python"),
+      UV_CACHE_DIR: resolve(layout.dataRoot, "uv-cache"),
+      UV_PYTHON_DOWNLOADS: "automatic",
+      UV_LINK_MODE: "copy",
+    };
+    delete env.VIRTUAL_ENV;
+    delete env.PYTHONHOME;
+    delete env.PYTHONPATH;
+    await execute(layout.uv, ["sync", "--no-config", "--project", project, "--locked", "--no-dev", "--managed-python", "--python", PYTHON_VERSION], {
+      cwd: project, env, visible: true, timeout: 30 * 60_000,
+    });
+  }
 }
 
 export async function probePython(layout, execute = runProcess) {
   const env = { ...process.env };
   delete env.PYTHONHOME;
   delete env.PYTHONPATH;
-  const probe = `import sys; assert sys.version_info[:3] == (${PYTHON_VERSION.split(".").join(",")}), sys.version; import fem, numpy, scipy, flask; print(sys.version)`;
-  const result = await execute(layout.python, ["-I", "-c", probe], { cwd: layout.frameWeb, env });
+  const version = `import sys; assert sys.version_info[:3] == (${PYTHON_VERSION.split(".").join(",")}), sys.version`;
+  const result = await execute(layout.python, ["-I", "-c", `${version}; import fem, numpy, scipy, flask; print(sys.version)`], { cwd: layout.frameWeb, env });
+  await execute(layout.webPierPython, ["-I", "-c", `${version}; import gridlayoutpdf, pymupdf, pypdf, reportlab, openpyxl, tksheet`], { cwd: layout.webPier, env });
   return result.stdout.trim();
 }
 
@@ -131,10 +147,12 @@ export async function probeMcp(layout, { sdkRoot = resolve(layout.root, "server/
     const result = await client.callTool({ name: "get_capabilities", arguments: {} }, undefined, { timeout: 60_000 });
     if (result.isError) throw new Error("MCP get_capabilities returned an error.");
     const capabilities = result.structuredContent ?? JSON.parse(result.content.find((entry) => entry.type === "text").text);
-    for (const engine of ["capacita", "soilstructure", "fempython", "aggrese"]) {
+    for (const engine of ["capacita", "soilstructure", "fempython", "aggrese", "webpier"]) {
       if (!capabilities.engines?.[engine]?.enabled) throw new Error(`MCP engine unavailable: ${engine}`);
     }
-    return capabilities;
+    const contract = await client.callTool({ name: "webpier_get_contract", arguments: {} }, undefined, { timeout: 60_000 });
+    if (contract.isError || !Array.isArray(contract.structuredContent?.unavailableStages)) throw new Error("MCP webpier_get_contract returned an error.");
+    return { ...capabilities, webPierUnavailableStages: contract.structuredContent.unavailableStages };
   } catch (error) {
     throw new Error(`MCP health check failed: ${error.message}${stderr ? `\n${stderr}` : ""}`);
   } finally { await client.close(); await transport.close(); }
@@ -153,9 +171,24 @@ export async function health(layout, { log = console.log, execute = runProcess }
     if (name === "capacita" && (result.code !== 0 || !envelope.ok)) throw new Error("Capacita capabilities probe failed.");
     if (envelope.errors.some((entry) => /internal|execution_failed/i.test(`${entry.category} ${entry.code}`))) throw new Error(`${name} runner reported an internal error.`);
   }
-  log("Connecting to MCP and calling get_capabilities...");
+  const webPier = await execute(layout.webPierPython, ["-X", "utf8", layout.webPierRunner, "contract"], { cwd: layout.webPier, acceptFailure: true });
+  let contract;
+  try { contract = JSON.parse(webPier.stdout); } catch { throw new Error(`WebPier runner did not return protocol JSON. ${webPier.stderr}`); }
+  if (webPier.code !== 0 || contract.protocolVersion !== 1 || contract.engine !== "webpier" || !contract.ok) throw new Error("WebPier contract probe failed.");
+  log("Connecting to MCP and calling get_capabilities and webpier_get_contract...");
   const capabilities = await probeMcp(layout);
+  const unavailable = capabilities.webPierUnavailableStages;
+  log(`WebPier stages unavailable here: ${unavailable.length ? unavailable.join(", ") : "none"} (JRSNAPHeadless is not bundled, so JRSNAP stages 0710 and later need a separate runner).`);
   log(`Health check succeeded. Python: ${pythonVersion.split("\n")[0]}`);
+  return capabilities;
+}
+
+// Setup restores missing or changed copies, so only the health action checks them.
+async function healthWithSkills(layout, dependencies) {
+  const capabilities = await (dependencies.health ?? health)(layout, dependencies);
+  const log = dependencies.log ?? console.log;
+  const skills = await checkSkills({ installRoot: layout.root, sourceRoot: layout.skills });
+  log(skills ? `Skills placed by this installation match the bundled copies (SHA-256): ${skills.length}` : "Skills: none placed by this installation (setup with --no-skills, or setup has not run).");
   return capabilities;
 }
 
@@ -230,17 +263,37 @@ async function unregisterCodex(layout, options) {
 export async function runAction(action, layout, options = {}, dependencies = {}) {
   const log = dependencies.log ?? console.log;
   if (action === "initialize") return (dependencies.initialize ?? initialize)(layout, dependencies);
-  if (action === "health") return (dependencies.health ?? health)(layout, dependencies);
+  if (action === "health") return healthWithSkills(layout, dependencies);
   if (action === "register-codex") {
+    const skills = options.noSkills ? null : { installRoot: layout.root, sourceRoot: layout.skills, targets: layout.skillTargets, replaceExisting: options.replaceExisting };
+    // A conflicting skill folder stops setup before the long download and before Codex is changed.
+    if (skills) await withLock(resolve(layout.root, ".skills.lock"), () => installSkills({ ...skills, dryRun: true }));
     await (dependencies.initialize ?? initialize)(layout, dependencies);
     const result = await registerCodex(layout, options);
-    log(`${result.reason}\nConfig: ${layout.configPath}\nInput folder: ${layout.allowedRoot}\nRestart Codex and open a new conversation to use structural-mcp.`);
+    log(`${result.reason}\nConfig: ${layout.configPath}\nInput folder: ${layout.allowedRoot}`);
+    if (skills) {
+      let actions;
+      try {
+        actions = await withLock(resolve(layout.root, ".skills.lock"), () => installSkills(skills));
+      } catch (error) {
+        throw new Error(`Codex registration was saved, but the skills were not placed. Fix the problem below and run setup again, or run setup with --no-skills.\n${error.message}`);
+      }
+      for (const { action: done, destination } of actions) log(`Skill ${done}: ${destination}`);
+    } else log("Skills were not placed (--no-skills).");
+    log("Restart Codex (and Claude Code) and open a new conversation to use structural-mcp.");
     return result;
   }
   if (action === "unregister-codex") {
-    const result = await unregisterCodex(layout, options);
-    log(result.reason);
-    return result;
+    // The skills are removed even when the Codex configuration cannot be changed (uninstall continues either way).
+    const [registration, skills] = await Promise.allSettled([
+      unregisterCodex(layout, options),
+      withLock(resolve(layout.root, ".skills.lock"), () => uninstallSkills({ installRoot: layout.root })),
+    ]);
+    if (registration.status === "fulfilled") log(registration.value.reason);
+    if (skills.status === "fulfilled") for (const { action: done, destination } of skills.value) log(`Skill ${done}: ${destination}`);
+    if (registration.status === "rejected") throw registration.reason;
+    if (skills.status === "rejected") throw skills.reason;
+    return registration.value;
   }
   throw new Error(`Unknown action: ${action}`);
 }
@@ -248,12 +301,13 @@ export async function runAction(action, layout, options = {}, dependencies = {})
 function parseArguments(args) {
   const action = args.shift() ?? "register-codex";
   const options = {};
-  const names = { "--codex-home": "codexHome", "--data-root": "dataRoot", "--allowed-root": "allowedRoot" };
+  const names = { "--codex-home": "codexHome", "--data-root": "dataRoot", "--allowed-root": "allowedRoot", "--skills-home": "skillsHome" };
   while (args.length) {
     const flag = args.shift();
     if (flag === "--replace-existing") { options.replaceExisting = true; continue; }
+    if (flag === "--no-skills") { options.noSkills = true; continue; }
     if (flag === "--quiet") { options.quiet = true; continue; }
-    if (!names[flag] || !args[0] || !isAbsolute(args[0])) throw new Error(`Expected an absolute path for ${flag}; supported flags: --codex-home, --data-root, --allowed-root, --replace-existing.`);
+    if (!names[flag] || !args[0] || !isAbsolute(args[0])) throw new Error(`Expected an absolute path for ${flag}; supported flags: --codex-home, --data-root, --allowed-root, --skills-home, --replace-existing, --no-skills.`);
     options[names[flag]] = args.shift();
   }
   return { action, options };
