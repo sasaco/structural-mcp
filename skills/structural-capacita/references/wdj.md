@@ -16,7 +16,9 @@
 - 正の Md が下側引張（`rebar2`）、負が上側引張。
 - 返る節は断面力表の行で決まる。並びは bending/shear/torsion_safety_destruction、bending/shear_safety_fatigue、bending/shear/torsion_durability、（外観の照査を行えば bending_serviceability）、bending/shear/torsion_restorability、bending/shear/torsion_restorability_eq。`section_forces` は `print_section_force_checked: true` でも出ない。
 - 断面力の欠けた行は warn の WD-408/409/410（例：最小鉄筋量 Md8 を空欄にすると WD-408 が1つ出る）。
-- **せん断スパンは `shear[]` の行の `La`**（`index`・`m_no`・`p_name`・`g_name` で着目点に結び付く）。`points[].La` は今の RcDan では読まない（旧 WebDan の WDJ にはある）。単位：RcDan のコードは m（`OrganizedInputData/MemberGroup.cs:367` の「せん断スパン長(m)」）。mm で書いた例でも見本の値が再現したという記録があり、単位の扱いは**未確認**（2026-10-19、コードで確認したのはコメントまで）。
+- **せん断スパンは `shear[]` の行の `La`**（`index`・`m_no`・`p_name`・`g_name` で着目点に結び付く）。`points[].La` は今の RcDan では読まない（旧 WebDan の WDJ にはある）。
+- **La の単位は mm**（2026-10-19、コードと本物の runner で確認）。計算は `CalcResult_ShearCapacity.cs` の「せん断スパン長La(mm)」で、せん断スパン比を `La / 有効高さ d（mm）` で求める。計算書も「せん断スパン長 (mm)」と印字する。読み取り側の `OrganizedInputData/MemberGroup.cs:367` のコメント「せん断スパン長(m)」は誤り。m の値（例：1.55）を書くと 1.55 mm として計算され、せん断スパン比が 0.001 になって βa が上限 5.000 に張り付き、ディープビームの耐力 Vdd を大きく見積もる（例：11134.6 kN が 15179.9 kN に、照査値 0.566 が 0.415 に。安全側でない）。エラーにも警告にもならない。
+- **La＝1（ちょうど 1.0）は「自動算定」**（`CommonDataClass.cs` の `ShearVerification`）。そのときは断面力から `|1000 × Md / Vd|`（mm）を使う（`ModelDataForCalc.GetShearSpan`）。旧 WebDan の WDJ の `La: 1` はこの意味。1 mm のつもりで 1 を書かない。`shear` の表がない（La が null）着目点は、せん断スパン比を考えない。
 - **La は着目点ごとに1つ**なので、限界状態ごとに La を変えるには着目点を分ける。各節はその節の断面力を持つ点だけを印刷する（1点だけの表になる）。旧 WebDan は照査ごとの La を持っていた。
 - 上側鉄筋なしは `rebar1` を全部 null（`enable` は true のまま）で通る。
 - 疲労は WDJ の `fatigues`（`train_A_count`・`train_B_count`・`service_life` は文字列、`fatigue_list[0]` の M1/V1 に SA・SB・NA06・NB06・NA12・NB12・r1）から Capacita が ΣN を計算する（`RcDan/Calculation/Calc_NRepetition.cs`）。外部プログラム（N-EQUIVALENT など）で求めた値を使う見本と比べるときは、その入力を写す。

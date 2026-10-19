@@ -37,6 +37,7 @@ dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォ
 - **旧 WebDan の WDJ はそのままでは計算できないことがある。** `members[].shape` が `"矩形"` のような文字だと、RcDan は 1〜4 の番号しか読まず（`MemberGroup.cs`、1＝矩形）、断面のない部材として飛ばして「有効な算出点がありません」（WD-1001）で失敗する。試すときは複製の `shape` を `"1"` にする。
 - **整数の項目は JSON の整数で書く。** RcDan は b・h・鉄筋径・ε'csd・環境条件を int で読み、`300.0` は内部エラー WD-9999 になる。
 - **RC の WDJ に `steel` キーがあると拒否される**（WDJ-FORMAT-CONFLICT）。旧 WebDan の WDJ にはある。
+- **せん断スパン `shear[].La` は mm で書く。** m の値を書いてもエラーにならず、極端に小さいせん断スパン比で計算されて耐力を過大に見積もる。`La: 1` は「自動算定」の意味（`references/wdj.md`、2026-10-19 に本物の runner で確認）。
 - **`--pickup` で取り込むなら `bar[].position` を書かない。** 取込みは着目点の `position` と照合し、`"6.250"` のような値は不一致になる。
 - `calc.print_section_force_checked: true` で断面力一覧表（曲げ・せん断の2頁）が先頭に付く（節 `section_forces`）。断面力入力モードでは効かない。
 - `conditions_list`（JR-001・JR-004）は RcDan が読むが計算に使わない。入力しても結果は変わらない。

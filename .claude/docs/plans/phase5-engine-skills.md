@@ -1,6 +1,6 @@
 # Phase 5：JRSNAP・Capacita・FEMPython・SoilStructure のスキル
 
-- 状態: 完了（2026-10-19）。残り：「ほかの作業者へ」の判断待ち1件（フーチングの WDJ の La の単位）
+- 状態: 完了（2026-10-19）。残り：WebPier の 0910 の La の単位の不具合（「ほかの作業者へ」）
 - 更新日: 2026-10-19
 - 親の計画: global-engine-skills-plan.md の Phase 5
 - 型: phase2-aggrese-skill-split.md（エンジンは structural-*、WebPier の決定・実装・受入は webpier-*、受入が固定している WebPier の scripts は動かさず複製を置く）
@@ -94,7 +94,14 @@ Codex の low・medium は本文を開かずに答えることがある（Phase 
 ## 新しく分かったこと
 
 - **5つ目のコピー**：`K:\ニュージャパンコンサルタンツ\26_上越新幹線(固有周期)\.claude\skills` に jrsnap-input-launch・-open-save・-ndu-edit・-soil-analysis がある（親の計画書 §2.1 の表にない）。桑園と同じ旧系統で、ndu-edit は桑園よりさらに古い。ほかにない記述はない。Phase 8 の片付けの表に加える。
-- **Capacita のせん断スパン La の単位**：RcDan は `shear[].La` を m として読む（`Capacita/RcDan/OrganizedInputData/MemberGroup.cs:367` のコメント「せん断スパン長(m)」）。WebPier の 0910（片持ち梁）は m で書くが、0810・0820（フーチング）は mm の整数で書いている（`webpier/export/capacita/footing_wdj.py`、`FootingCheckResult.la` は mm）。元のスキルは「見本 p258 の Vdd 4337.2 が再現する」と記録しているので、La が結果に効かない範囲なのかもしれないが、確かめていない。**WebPier の決定60 の担当に確認が要る**（このスキルの作業ではコードを変えていない）。
+- **Capacita のせん断スパン La の単位は mm**（2026-10-19、調査して確定）。
+  - コード：計算（`Capacita/RcDan/CalcResult/CalcResult_ShearCapacity.cs` の「せん断スパン長La(mm)」）はせん断スパン比を `La / 有効高さ d（mm）` で求め、自動算定の値も `|1000 × Md / Vd|`（mm、`ModelDataForCalc.GetShearSpan`）、計算書の印字も「せん断スパン長 (mm)」。読み取り側の `OrganizedInputData/MemberGroup.cs:367` のコメント「(m)」が誤りで、最初はこれを見て m と書いてしまった。
+  - `La` がちょうど 1.0 のときは「自動算定」（`CommonDataClass.cs` の `ShearVerification`）。旧 WebDan の見本の `points[0].La: 1` はこの意味だった。
+  - 本物の runner（Release、markdown 出力）で、WebPier の `post/` の WDJ の La だけを変えた複製を比べた（scratchpad の `la/`）。
+    - フーチング（`post/線路方向フーチング.wdj`、La 1096・1942 mm）：mm のままが正しい（せん断スパン比 0.422・0.747、Vdd 4374.7・3307.1 kN）。m にすると比 0.000・0.001、βa 5.000、Vdd 5152.1 kN になる。**0810・0820 は正しい**。
+    - 片持ち梁（`post/片持ち梁.wdj`、La 1.55）：いまの値では「せん断スパン長 (mm) 1.6」「比 0.001」で βa が上限 5.000、安全性（破壊）の Vdd 15179.9 kN・照査値 0.415。1550 にすると比 0.603、βa 3.668、Vdd 11134.6 kN・照査値 0.566（ほかの2つの照査も 0.382→0.520、0.383→0.522）。**0910 は耐力を約36%過大に見積もっていて、安全側でない不具合**。`webpier/export/capacita/cantilever.py` が `check.shear_span`（m、`LENGTH`）をそのまま `La` に書いているのが原因。
+    - 柱（0611・0621）の WDJ には `shear` の表がないので影響しない。
+  - スキルは `structural-capacita`（La は mm、1 は自動算定）、`webpier-capacita`・`cantilever-check`（0910 の不具合、未修正）に反映した。WebPier のコードは直していない。
 - JRSNAPHeadless に `run --input <.ndt>`（書出しを飛ばして `.ndt` を直接解析する入口）が加わっている（9e3c8fe）。元のスキルにはなかったので、README から `structural-jrsnap-input` に足した。
 - MCP の `webdan_calculate` は `--pickup` を公開していない。WebPier は runner を直接呼んでいる。
 - `run-analysis.ps1` などの `.ps1` は UTF-8 の BOM 付き（日本語の文字列を Windows PowerShell 5.1 が読むため）。テストの BOM の検査は `.md` だけなので問題ない。scripts はバイト列のまま複製した。
@@ -106,7 +113,8 @@ Codex の low・medium は本文を開かずに答えることがある（Phase 
 
 ## ほかの作業者へ
 
-- **判断待ち1**：WebPier のフーチングの WDJ の La の単位（上の「新しく分かったこと」）。
+- ✅ WebPier のフーチングの WDJ の La の単位：mm で正しい（上の「新しく分かったこと」）。
+- **要修正（WebPier、決定59）**：0910 の片持ち梁の WDJ が La を m で書いていて、Capacita が mm として読むため耐力を過大に見積もる。`export/capacita/cantilever.py` で mm にし、テストの期待値と受入を取り直す。修正するかは利用者の判断待ち。
 - ✅ WebPier を Codex で開いても WebPier のスキル（`webpier-*` など）は見えない（`.agents/skills` がない。Phase 2 の記録）。**決定（2026-10-19、利用者）：WebPier の開発に Codex は使わない（Claude Code だけ）。** WebPier に `.agents/skills`・`AGENTS.md` は作らない。設計案件の作業は WebPier の repo を開かず、グローバルの `structural-*` と MCP で行うので影響しない。
 - Phase 8 の片付けで、26_桑園高架橋 の `jrsnap-ndu-edit` を消す前に、L3 などの編集の記録と総括表の転記の規則を、桑園の案件のスキル（`slab-shear-summary` など）へ移すこと。
 - 26_関内 の `capacita-column-check`・`jrsnap-*` と Batch submodule の `.agents/skills/jrsnap-*` は、この Phase では消していない（Phase 8）。
