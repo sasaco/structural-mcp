@@ -20,6 +20,16 @@
 | いつ | 何を | 返事 | 結果 |
 |---|---|---|---|
 | 2026-10-19 | Phase 7 をこのセッションで行う | 「次のPhase 7 もこのセッションで実施して」 | 着手 |
+| 2026-10-19 | 最終確認（P7橋脚）の進め方 | 「自分で Codex を開く」 | 利用者が P7橋脚 で Codex の新しいセッションを開いて頼む。下の「最終確認の手順」を渡した。結果を聞いて記録する |
+
+## 最終確認の手順（利用者が行う。2026-10-19 に渡したもの）
+
+前提（2026-10-19 に確かめた）：Codex の `structural-mcp` の登録はこの repo の `dist/src/index.js`（`df4b395` で build 済み）、job root は `%LOCALAPPDATA%\structural-mcp\jobs`（浅い）、FEMPython・WebPier（venv）・Capacita（`.exe`）の runner は既定の場所にある。`STRUCTURAL_MCP_ALLOWED_ROOTS` はドキュメントのフォルダーだけなので、K: の入力は `input` に中身を渡す（スキルに書いてある）。`structural-webpier` は `~/.agents/skills` にジャンクションで置いた。
+
+1. P7橋脚 のフォルダーで Codex の新しいセッションを開く（WebPier の repo は開かない）。
+2. 「線路方向の基礎の照査まで作って」とだけ頼む（ヒントを足さない。グローバルのスキルだけで進められるかの確認）。資料が見つからないようなら、資料は `..\NJC→ささこう` にあると伝える。
+3. 見る点：`structural-webpier` を読む／`webpier_get_contract` で 0612 が使えると確かめる／`P7橋脚\pre\input.json` を資料から作り `出典` に出どころを書く／資料で決まらない値を推測で埋めずに聞く／`webpier_validate` で直す／`webpier_generate` を `stage: "0612"` で呼ぶ／`place-webpier-outputs.mjs` で `P7橋脚\output\0612_線路方向基礎.pdf`・`.json` と `post\` のピックアップ3つと付帯JSONを置く／`engineeringStatus` を報告する。
+4. 終わったら結果（うまくいかなかった所、聞かれた値、かかった時間）を伝えてもらい、ここと親の計画書に記録する。
 
 ## 設計の考え方と背景
 
