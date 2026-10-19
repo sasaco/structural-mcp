@@ -436,6 +436,9 @@ export function createServer(config: AppConfig): McpServer {
     configurationTool: "get_environment_template",
     pathPolicy: {
       allowedInputRoots: config.allowedInputRoots,
+      // Read-only for clients on the same PC: a job is <jobRoot>/<date>/<jobId> with its manifest.json, so a client
+      // script can copy many or large artifacts after checking them against the manifest instead of read_artifact.
+      jobRoot: config.jobRoot,
     },
     limits: { timeoutMs: config.timeoutMs, maxInputBytes: config.maxInputBytes, maxBundleBytes: config.maxBundleBytes, maxArtifactBytes: config.maxArtifactBytes },
   }, `FEMPythonは${femPythonEnabled ? "利用可能" : "利用不可"}、Capacitaは${capacitaEnabled ? "利用可能" : "利用不可"}、SoilStructureは${soilStructureEnabled ? "利用可能" : "利用不可"}、Aggre-SEは${aggreSeEnabled ? "利用可能" : "利用不可"}、WebPierは${webPierEnabled ? "利用可能" : "利用不可"}です。`));

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
 import { after, before, test } from "node:test";
@@ -828,6 +828,9 @@ test("the WebPier contract says which stages the detected runners can generate",
   assert.deepEqual(engines.webpier?.tools,
     ["webpier_get_input_schema", "webpier_get_contract", "webpier_validate", "webpier_generate"]);
   assert.equal(engines.jrsnap?.enabled, false);
+  // The skill's placement script reads a job from <jobRoot>/<date>/<jobId> on the same PC.
+  const pathPolicy = (capabilities.structuredContent as { pathPolicy: { jobRoot: string } }).pathPolicy;
+  assert.equal(pathPolicy.jobRoot, await realpath(jobRoot));
   const template = await client.callTool({ name: "get_environment_template", arguments: { engine: "webpier" } });
   assert.deepEqual((template.structuredContent as { variables: Array<{ name: string; value: string }> }).variables
     .map(({ name, value }) => [name, value]), [["STRUCTURAL_MCP_WEBPIER_RUNNER", fakeWebPierRunner]]);
