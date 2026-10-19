@@ -6,3 +6,4 @@ config/structural-mcp.local.json
 installer/packaging/bin/
 installer/packaging/obj/
 .agents/logs/
+HANDOFF.md
