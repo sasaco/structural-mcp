@@ -125,11 +125,10 @@
 
 ## ほかの作業者へ
 
-
-- 案件の repo（26_関内・26_桑園高架橋・26_上越新幹線）の commit は **push していない**（push の確認を取っていない）。
+- ✅ 案件の repo の commit を push した（2026-10-19、利用者の指示「残っていることをやって」）：26_関内 `32ab410..fe04335`（別のセッションの commit `eea92b6`・`fe04335` も一緒に push された）、26_桑園高架橋 `b9b3344..1ed0e31`、26_上越新幹線 `2386abe..0a9e4cf`。structural-mcp の `sassa/skills` も GitHub へ push した（Phase 3〜8 の commit。main への取り込みはしていない。submodule の pointer の commit はすべて各リモートにあることを確かめてから）。
 - 26_関内 は別のセッションが CLAUDE.md・CONTEXT.md・`.claude/docs/DESIGN.md`・`.claude/skills/evpit-design/SKILL.md`・EVピット部 を編集中（0510 底版）。Phase 8 の commit は `6861bbc` の自分の変更だけ。
-- 26_上越新幹線 の `.agents/` → `.claude/` の移動（geology-column-log-*・jrsnap-operator）は未コミットのまま残っている。Phase 8 では jrsnap-* だけを片付けた。CLAUDE.md・AGENTS.md はない（利用者の判断で作らない）。
-- 26_桑園高架橋 の案件のスキル `slab-shear-summary`（name は `jrsnap-slab-shear-summary`）は `.agents/skills` にだけあるので Codex にしか見えない。Claude Code で使うなら `.claude/skills` にも要る（K: はリンクが作れない）。
-- 26_桑園高架橋 の `slab-shear-summary/references/` に以前から切れているリンクがある：`../../../../L3/総括表.xlsx`（実物は `L3/L3総括表.xlsx`。input-sources.md・l3-example.md・ndu-section-material-geometry-rebar.md・spt-review.md）、support-condition-c2.md の `C:/Users/sasai/Documents/Batch/Aggre-SE/…`（Batch はいま structural-mcp の submodule）。Phase 8 では直していない。
+- ✅ 26_上越新幹線 の `.agents/` → `.claude/` の移動を commit した（`da19df7`、利用者の判断で 2026-10-19 の geology-column-log-analyze の更新と no453 の資料も含めた。121 ファイルは内容のまま）。移したスキルの中の `.agents/skills/geology-column-log-*` のパスを `.claude/skills/…` に直した（`0a9e4cf`）。`outputs/no453-analysis-20261019/` と `sdc2ndu/scripts/sdc_converter_app.py` の変更は別の作業なので commit していない。`sdc2ndu/` の中には別の `.agents/skills/sdc-ndu-format` がある（触っていない）。CLAUDE.md・AGENTS.md はない（利用者の判断で作らない）。
+- 26_桑園高架橋 の案件のスキル `slab-shear-summary`（name は `jrsnap-slab-shear-summary`）は `.agents/skills` にだけあるので Codex にしか見えない。**利用者の判断で今のまま**（Codex 専用）。
+- ✅ 26_桑園高架橋 の `slab-shear-summary/references/` の切れていたリンクを直した（`1ed0e31`）：`L3/総括表.xlsx` は `dd5351e` で `L3/L3総括表.xlsx` に改名されていた（4か所）。support-condition-c2.md の Aggre-SE のソースは `C:/Users/sasai/Documents/structural-mcp/Batch/…` に（行番号が同じ箇所を指すことを Batch `c15b3c4` で確かめた）。
 - `jrsnap-operator`（JRSNAP の操作説明書 PDF とマニュアル比較）は Batch・関内・桑園・上越に残した（利用者の判断）。桑園の NDU の記録がこの PDF のページへリンクしている。
 - Batch の submodule は `sasa/dev` にいる（Phase 8 の前は detached HEAD）。
