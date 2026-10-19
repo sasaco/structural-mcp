@@ -271,7 +271,17 @@ codex mcp add structural-mcp `
 
 登録後に Codex を新しい session で開き、`get_capabilities` で状態を確認してください。
 
-開発中はrelease用の `structural-mcp` と分けて `structural-mcp-dev` を登録し、build後に新しいCodex sessionから実際のtoolを呼びます。具体的な登録command、反復手順、MSI配布方針は[配布・開発中MCPテスト計画](./.agents/docs/plans/distribution-and-development-testing-plan.md)を参照してください。
+開発中はrelease用の `structural-mcp` と分けて `structural-mcp-dev` を登録し、build後に新しいCodex sessionから実際のtoolを呼びます。具体的な登録command、反復手順、MSI配布方針は[配布・開発中MCPテスト計画](./.claude/docs/plans/distribution-and-development-testing-plan.md)を参照してください。
+
+## エージェント用スキル
+
+各エンジンを扱うための Claude Code・Codex 用のスキルを `skills/structural-*` に置き、ユーザー全体のスキルとして配ります（案件ごとにコピーしません）。書き方と追記の規則は [skills/README.md](./skills/README.md)。
+
+```powershell
+npm run skills:install     # ~/.claude/skills と ~/.agents/skills にジャンクションを作る
+npm run skills:status
+npm run skills:uninstall   # このスクリプトが置いたものだけを消す
+```
 
 ## セキュリティ境界と既知の制約
 
@@ -288,7 +298,8 @@ codex mcp add structural-mcp `
 - [Capacita](./Capacita/README.md)
 - [SoilStructure](./SoilStructure/README.md)
 - [Aggre-SE Headless](./Batch/Aggre-SE/Headless/README.md)
-- [配布・開発中MCPテスト計画](./.agents/docs/plans/distribution-and-development-testing-plan.md)
-- [統合 MCP server 実装プラン](./.agents/docs/plans/structural-mcp-server-plan.md)（旧名称を含む歴史的計画）
-- [旧 WebDan2 headless 計画](./.agents/docs/plans/webdan2-headless-mcp-plan.md)（現在の Capacita）
-- [旧 SoilDisp headless 計画](./.agents/docs/plans/soildisp-headless-mcp-plan.md)（現在の SoilStructure）
+- [配布・開発中MCPテスト計画](./.claude/docs/plans/distribution-and-development-testing-plan.md)
+- [エンジンと WebPier の MCP・グローバルスキル公開計画](./.claude/docs/plans/global-engine-skills-plan.md)
+- [統合 MCP server 実装プラン](./.claude/docs/plans/structural-mcp-server-plan.md)（旧名称を含む歴史的計画）
+- [旧 WebDan2 headless 計画](./.claude/docs/plans/webdan2-headless-mcp-plan.md)（現在の Capacita）
+- [旧 SoilDisp headless 計画](./.claude/docs/plans/soildisp-headless-mcp-plan.md)（現在の SoilStructure）

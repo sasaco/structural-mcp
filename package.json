@@ -12,7 +12,10 @@
     "smoke": "npm run build && node scripts/smoke-test.mjs",
     "smoke:soilstructure": "npm run build && node scripts/smoke-soilstructure.mjs",
     "smoke:fempython": "npm run build && node scripts/smoke-fempython.mjs",
-    "smoke:aggrese": "npm run build && node scripts/smoke-aggrese.mjs"
+    "smoke:aggrese": "npm run build && node scripts/smoke-aggrese.mjs",
+    "skills:install": "node scripts/install-skills.mjs install",
+    "skills:status": "node scripts/install-skills.mjs status",
+    "skills:uninstall": "node scripts/install-skills.mjs uninstall"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",

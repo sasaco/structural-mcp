@@ -40,7 +40,9 @@ Aggre-SE (`Batch`) is .NET Framework 4.8 VB.NET with licensed vendor components 
 
 Installer (MSI) has its own tests and build: `npm ci --prefix installer/runtime; node --test installer/tests/*.test.mjs` and `installer/build/build-installer.ps1 -Preview`. See `installer/README.md`.
 
-Server changes only take effect in Codex after rebuilding and starting a **new** Codex session. The dev registration is named `structural-mcp-dev` (separate from the release `structural-mcp`); see `.agents/docs/plans/distribution-and-development-testing-plan.md`.
+Agent skills for the engines (and, per the plan, WebPier) live in `skills/structural-*` — the single source, installed user-wide rather than copied into design projects. `npm run skills:install` junctions them into `~/.claude/skills` and `~/.agents/skills` (Codex); `skills:status` / `skills:uninstall` manage them. `tests/skills.test.ts` enforces the rules in `skills/README.md` (no BOM — Codex silently skips such skills; skill-relative `scripts/`/`references/` paths; no machine-specific paths). New engine knowledge goes into `skills/`, not into a project's copy. Plan: `.claude/docs/plans/global-engine-skills-plan.md`.
+
+Server changes only take effect in Codex after rebuilding and starting a **new** Codex session. The dev registration is named `structural-mcp-dev` (separate from the release `structural-mcp`); see `.claude/docs/plans/distribution-and-development-testing-plan.md`.
 
 ## Architecture
 
