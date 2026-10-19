@@ -1,6 +1,6 @@
 # 解析エンジンと WebPier を MCP とグローバルスキルで公開する計画
 
-- 状態: Phase 0・1・2・3・4・5・7 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase4-webpier-mcp.md`・`phase5-engine-skills.md`・`phase7-structural-webpier-skill.md`。§9 の3（P7橋脚 での最終確認）は利用者が別に行う
+- 状態: Phase 0・1・2・3・4・5・7・8 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase4-webpier-mcp.md`・`phase5-engine-skills.md`・`phase7-structural-webpier-skill.md`・`phase8-project-cleanup.md`。残りは Phase 6（installer）。§9 の3（P7橋脚 での最終確認）は利用者が別に行う
 - 更新日: 2026-10-19
 - 対象: `structural-mcp`（新設 `skills/`、server、installer）、WebPier（橋脚自動設計アプリ）、JRSNAPHeadless、GridLayoutPdf、K:\レールウェイコンサルタント の各案件、Batch submodule
 - 対象クライアント: Codex（主）、Claude Code
@@ -245,19 +245,21 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
 
 **結果（2026-10-19、完了）**：`skills/structural-webpier/` を作った（structural-mcp `df4b395`）。SKILL.md（MCP での流れ、段階とスイッチの選び方、成果物を置く、入力エディタ、runner を直接呼ぶ方法）と references（`input-schema2.md`・`stages.md`・`checks.md`・`outputs.md`・`troubleshooting.md`）。段階の表は WebPier の `run_headless.py contract` の出力から写し、項目の一覧は書かずに `webpier_get_input_schema` を正とした。3（WebPier の開発用スキルの利用者向けの部分）は `checks.md` に移した（WebPier 側から消すのは Phase 8）。成果物の受け渡しは §5.2 の「`read_artifact` で1つずつ」から変え、job の `manifest.json` のバイト数と SHA-256 を確かめて案件の `output/`・`post/` に複写する Node のスクリプト `scripts/place-webpier-outputs.mjs` を付けた（計算書は1つ最大 2MB、JRSNAP の結果は数十MB で、Base64 で文脈に通せないため。server は `get_capabilities` の `pathPolicy.jobRoot` を返すようにした）。`npm test` 66件、`npm run skills:install`、Claude Code と Codex の新しいセッションで `structural-webpier` が選ばれ、0612・FEMPython・スクリプトでの配置と正しく答えた。4（P7橋脚 での最終確認）は利用者の判断で Phase 7 から外し、§9 の3 の確認として利用者が別に行う（手順は `phase7-structural-webpier-skill.md`）。
 
-### Phase 8：各プロジェクトの片付け
+### ✅ Phase 8：各プロジェクトの片付け
 
 ファイルを消す作業なので、各 repo で差分を確認してから行う。
 
 | プロジェクト | 消す | 残す |
 |---|---|---|
-| WebPier | （`jrsnap-*`・`aggrese-project`・`capacita-column-check` は Phase 2・5 で済み）`foundation-check`・`webpier-capacita` のうち使い方の部分（Phase 7 で `structural-webpier` へ） | 開発用：`webpier-aggrese`、`webpier-capacita`、`webpier-foundation`（実装と受入）、`pier-report-style`、汎用スキル |
+| WebPier | （`jrsnap-*`・`aggrese-project`・`capacita-column-check` は Phase 2・5 で済み）`foundation-check`・`webpier-capacita` のうち使い方の部分（Phase 7 で `structural-webpier` へ）→ 使い方だけの節はなく、削らずに参照を足した | 開発用：`webpier-aggrese`、`webpier-capacita`、`webpier-foundation`（実装と受入）、`webpier-footing`、`webpier-cantilever`、`webpier-jrsnap`、`pier-report-style`、汎用スキル |
 | 26_関内 | `jrsnap-*`、`aggrese-project`、`capacita-column-check`、`foundation-check`、`pier-report-style` | 案件固有のもの |
 | 26_桑園高架橋 | `jrsnap-*`（4本。消す前に `jrsnap-ndu-edit` の L3 などの記録と総括表の転記の規則を案件のスキルへ移す） | `slab-shear-summary`（§10） |
 | 26_上越新幹線(固有周期) | `jrsnap-*`（4本） | `geology-column-log-*` |
 | Batch submodule | `.claude/skills/jrsnap-*`（3本） | なし（submodule 内で commit し、pointer を更新） |
 
 各案件の CLAUDE.md・AGENTS.md に「解析エンジンと WebPier の知識は `structural-*` のグローバルスキルにある。エンジン・WebPier の新しい知見は structural-mcp の `skills/` に書く」と1行加える。26_関内 の CLAUDE.md の「WebPier 由来のスキルは実体がない」という注意は削除する。
+
+**結果（2026-10-19、完了）**：各コピーを Phase 5 で基準にした WebPier の版と改行を除いて比べ、グローバルの `structural-*` に無い記述は 26_桑園高架橋 の案件の記録（`jrsnap-ndu-edit` の references 2つ）だけと確かめた。それを内容を変えずに桑園の `slab-shear-summary/references/ndu-*.md` へ移してから、26_関内 の10本（`jrsnap-*` 6本・`aggrese-project`・`capacita-column-check`・`foundation-check`・`pier-report-style`、関内 `6861bbc`）、26_桑園高架橋 の `.agents/skills/jrsnap-*` 4本（`512cad2`）、26_上越新幹線(固有周期) の `jrsnap-*` 4本（`1ad5d30`）、Batch の `.claude/skills/jrsnap-*` 3本（Batch `c15b3c4`、sasa/dev、push 済み）を消した。関内 CLAUDE.md・AGENTS.md と桑園 AGENTS.md に知識の置き場を書き、関内の古い注意を消した（上越には CLAUDE.md・AGENTS.md がなく、利用者の判断で作らない）。WebPier の開発用スキルは、使い方だけの節がなかったので削らず、structural-webpier への参照を足し、§10 のとおり `foundation-check`・`footing-check`・`cantilever-check` を `webpier-foundation`・`webpier-footing`・`webpier-cantilever` に改名した（WebPier `2652cad`、push 済み。スキルのファイルだけで品質ゲートは不要）。structural-mcp は Batch・WebPier の pointer と checks.md の名前を更新し、`npm test` 66件成功。Claude Code と Codex の新しいセッションで、26_関内・26_桑園高架橋・WebPier のどこからも同じ `structural-*` 7本が読まれ、消したスキルが一覧に出ないことを確かめた（§9 の2・4）。案件の repo の commit は push していない。`jrsnap-operator`（JRSNAP の操作説明書の PDF、スキルではない）は利用者の判断で残した。詳細は `phase8-project-cleanup.md`。
 
 ## 7. 知見の追記の規則（各 SKILL.md の末尾に入れる文）
 
@@ -289,7 +291,7 @@ Phase 0 ─┬─ Phase 1 ── Phase 2 ── Phase 5 ─┐
 
 - **Python の runner の起動方法**：`.py` の runner を、その project の `.venv\Scripts\python.exe` で起動する（`uv run` は使わない）。Phase 0 で最小の環境で動かないと分かった場合だけ見直す。
 - **JRSNAPHeadless のリモート**：GitHub に private で作る（Phase 3）。
-- **WebPier の開発用スキル名**：`webpier-*` に改名する（`webpier-aggrese`、`webpier-capacita`、`webpier-foundation`）。
+- **WebPier の開発用スキル名**：`webpier-*` に改名する（`webpier-aggrese`、`webpier-capacita`、`webpier-foundation`）。Phase 8 で、後から加わった `footing-check`・`cantilever-check` も `webpier-footing`・`webpier-cantilever` にした（2026-10-19、利用者）。
 - **slab-shear-summary**：今回は移さない（26_桑園高架橋 に残す）。2つ目の案件で使うときに、参考資料の PDF の再頒布の可否を確かめてから判断する。
 - **JRSNAPHeadless 単体の MCP ツール**：今回は作らない。`config.ts` での検出と WebPier への受け渡しまで。
 - **WebPier の入力の受け渡し**：inline の JSON と `inputPath` の両方を受ける。案件の `pre/input.json` を `inputPath` で渡すのを主な使い方とする。

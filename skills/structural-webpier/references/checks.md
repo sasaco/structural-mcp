@@ -1,6 +1,6 @@
 # 照査の中身と結果の読み方
 
-WebPier の README・CONTEXT.md と WebPier の開発用スキル（foundation-check・webpier-capacita・webpier-aggrese・footing-check・cantilever-check）のうち、計算書を使う人に要る部分。確かめた版：WebPier `b6c349c`（2026-10-19）。式や定数を変えるのは WebPier の開発の作業（WebPier の repo）。
+WebPier の README・CONTEXT.md と WebPier の開発用スキル（webpier-foundation・webpier-capacita・webpier-aggrese・webpier-footing・webpier-cantilever。2026-10-19 に foundation-check・footing-check・cantilever-check から改名）のうち、計算書を使う人に要る部分。確かめた版：WebPier `b6c349c`（2026-10-19）。式や定数を変えるのは WebPier の開発の作業（WebPier の repo）。
 
 ## 共通の考え方
 
