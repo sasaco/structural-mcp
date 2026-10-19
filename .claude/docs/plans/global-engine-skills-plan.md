@@ -208,6 +208,7 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
 
 ### Phase 4：WebPier の runner と MCP ツール（§5.1・§5.2）
 
+0. **Batch の pointer を `9c70f54` 以降に進める**（Batch submodule の中で sasa/dev の commit を確かめ、MSBuild で build し、`Batch/tests/Aggre-SE.Test` を通してから）。いま固定している `47d1654` の runner は `--foundation-steps` を知らず `INVALID_ARGUMENT`（Unknown option）で止まるので、WebPier の 0711・0721（常に `--foundation-steps true` を付ける）が固定版の runner では動かない。MSI（Phase 6）も固定版から作るので、Phase 6 より前に必須。
 1. WebPier に `webpier/headless.py`（run・validate・contract・schema）とテスト。層の規則（pipeline 層）と品質ゲート（pipeline 100%）を守る。WebPier 側で commit。
 2. structural-mcp に config・runner・server・contracts・テストの変更。submodule の pointer を更新。
 3. 実物での確認：`npm run smoke:webpier -- <input.json> [--frame-analysis] [--nonlinear-analysis]`（新設）で、CLI で作った `output/` と MCP で作ったもののうち、決定的な PDF・JSON のバイトが一致すること（差し込みページを含む PDF と、毎回変わる帳票は除く）。
@@ -288,6 +289,7 @@ Phase 0 ─┬─ Phase 1 ── Phase 2 ── Phase 5 ─┐
 - **WebPier の入力の受け渡し**：inline の JSON と `inputPath` の両方を受ける。案件の `pre/input.json` を `inputPath` で渡すのを主な使い方とする。
 
 - **`aggrese_project_roundtrip.cs`（Phase 2）**：移さずに**複製**を `skills/structural-aggrese/scripts/` に置く。WebPier の受入（`scripts/accept_aggrese_project.py` の `HELPER`、`tests/fixtures/acceptance/aggrese/record.json` の helpers の SHA）が WebPier の `scripts/` のファイルを固定しているので、WebPier 側は動かさない。複製との違いは1行目のコメントの決定番号だけ。
+- **`--foundation-steps` と MCP**（2026-10-19、推奨どおり）：Batch の pointer は Phase 4 の前に `9c70f54` 以降へ進める。MCP の `aggrese_calculate` には今は足さない（ステップ表を使うのは WebPier の決定60だけで、WebPier は runner を直接呼ぶ）。WebPier 以外の案件で要るようになったら `generateFoundationSteps` を足す。
 - **WebPier の開発のクライアント**：Claude Code だけ（Codex は使わない。2026-10-19、利用者）。WebPier に `.agents/skills`・`AGENTS.md` は作らず、WebPier の開発用スキル（`webpier-*`）は `.claude/skills` にだけ置く。Codex が主に使われるのは設計案件で、そこではグローバルの `structural-*` と MCP を使う。
 - **Codex の配置先**：`~/.agents/skills`（Phase 0 の結果。`~/.codex/skills` も読まれるが、両方に置くと重複する）。
 

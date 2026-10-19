@@ -120,7 +120,7 @@
 
 ## 新しく分かったこと
 
-- `--foundation-steps` は Batch の 9c70f54（ブランチ sasa/dev、2026-10-19 17:21）で入った。structural-mcp が固定している Batch は 47d1654 で、その Headless README にも runner にもまだない。MCP の `aggrese_calculate` も公開していない（`src/server.ts`、2026-10-19）。WebPier は `.env` の runner（Batch の作業ツリーで build したもの）で使っている。→ Batch の pointer を進めるときに、MCP に公開するか（`aggrese_calculate` に `generateFoundationSteps` を足す）を決める必要がある。
+- `--foundation-steps` は Batch の 9c70f54（ブランチ sasa/dev、2026-10-19 17:21）で入った。structural-mcp が固定している Batch は 47d1654 で、その Headless README にも runner にもまだない。MCP の `aggrese_calculate` も公開していない（`src/server.ts`、2026-10-19）。WebPier は `.env` の runner（Batch の作業ツリーで build したもの）で使っている。→ 決定（2026-10-19、利用者、推奨どおり）：Batch の pointer は Phase 4 の前に進める（固定版の runner は未知の引数で `INVALID_ARGUMENT` になるため）。MCP には今は足さない（親の計画書 §10）。
 - runner の `--spectral-ductility` は JSON の文字列ではなく**ファイルのパス**（`RunOptions.cs` の `AbsolutePath`）。MCP は `caseNumber`（1 始まり）を 0 始まりに直して `input/spectral-ductility.json` を書く（`src/jobs.ts`）。
 - WebPier は作業の開始時に `sasa/test`（main と同じ f64e060）にいて、途中で `main` に戻っていた。別のセッションがブランチを切り替えている。
 - WebPier のスキルのファイルは index では LF、作業ツリーでは CRLF（`core.autocrlf`）。`.gitattributes` で固定されているのは `jrsnap-input-open-save/scripts/` だけで、ほかのスキルは受入のハッシュの対象外。WebPier の `tests/`・`scripts/`・`webpier/` に `aggrese-project` の参照はない。
