@@ -1,6 +1,6 @@
 # Phase 5：JRSNAP・Capacita・FEMPython・SoilStructure のスキル
 
-- 状態: 完了（2026-10-19）。残り：「ほかの作業者へ」の判断待ち2件
+- 状態: 完了（2026-10-19）。残り：「ほかの作業者へ」の判断待ち1件（フーチングの WDJ の La の単位）
 - 更新日: 2026-10-19
 - 親の計画: global-engine-skills-plan.md の Phase 5
 - 型: phase2-aggrese-skill-split.md（エンジンは structural-*、WebPier の決定・実装・受入は webpier-*、受入が固定している WebPier の scripts は動かさず複製を置く）
@@ -107,7 +107,7 @@ Codex の low・medium は本文を開かずに答えることがある（Phase 
 ## ほかの作業者へ
 
 - **判断待ち1**：WebPier のフーチングの WDJ の La の単位（上の「新しく分かったこと」）。
-- **判断待ち2**：WebPier を Codex で開いても WebPier のスキル（`webpier-*` など）は見えない（`.agents/skills` がない。Phase 2 の記録）。
+- ✅ WebPier を Codex で開いても WebPier のスキル（`webpier-*` など）は見えない（`.agents/skills` がない。Phase 2 の記録）。**決定（2026-10-19、利用者）：WebPier の開発に Codex は使わない（Claude Code だけ）。** WebPier に `.agents/skills`・`AGENTS.md` は作らない。設計案件の作業は WebPier の repo を開かず、グローバルの `structural-*` と MCP で行うので影響しない。
 - Phase 8 の片付けで、26_桑園高架橋 の `jrsnap-ndu-edit` を消す前に、L3 などの編集の記録と総括表の転記の規則を、桑園の案件のスキル（`slab-shear-summary` など）へ移すこと。
 - 26_関内 の `capacita-column-check`・`jrsnap-*` と Batch submodule の `.agents/skills/jrsnap-*` は、この Phase では消していない（Phase 8）。
 - WebPier の `.claude/docs/plans/jrsnap-load-diagram-plan.md` は、消したスキル `jrsnap-data-check`・`jrsnap-load-diagram` の名前を経緯として書いている（スキル以外のファイルなので直していない）。

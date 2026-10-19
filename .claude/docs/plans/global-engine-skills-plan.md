@@ -288,6 +288,7 @@ Phase 0 ─┬─ Phase 1 ── Phase 2 ── Phase 5 ─┐
 - **WebPier の入力の受け渡し**：inline の JSON と `inputPath` の両方を受ける。案件の `pre/input.json` を `inputPath` で渡すのを主な使い方とする。
 
 - **`aggrese_project_roundtrip.cs`（Phase 2）**：移さずに**複製**を `skills/structural-aggrese/scripts/` に置く。WebPier の受入（`scripts/accept_aggrese_project.py` の `HELPER`、`tests/fixtures/acceptance/aggrese/record.json` の helpers の SHA）が WebPier の `scripts/` のファイルを固定しているので、WebPier 側は動かさない。複製との違いは1行目のコメントの決定番号だけ。
+- **WebPier の開発のクライアント**：Claude Code だけ（Codex は使わない。2026-10-19、利用者）。WebPier に `.agents/skills`・`AGENTS.md` は作らず、WebPier の開発用スキル（`webpier-*`）は `.claude/skills` にだけ置く。Codex が主に使われるのは設計案件で、そこではグローバルの `structural-*` と MCP を使う。
 - **Codex の配置先**：`~/.agents/skills`（Phase 0 の結果。`~/.codex/skills` も読まれるが、両方に置くと重複する）。
 
 ## 11. 対象外

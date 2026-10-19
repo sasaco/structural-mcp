@@ -1,6 +1,6 @@
 # Phase 2：Aggre-SE のスキルを structural-aggrese と webpier-aggrese に分ける
 
-- 状態: 完了（2026-10-19）。残り：WebPier を Codex で開いたときに webpier-aggrese が見えない件（「ほかの作業者へ」）
+- 状態: 完了（2026-10-19）
 - 更新日: 2026-10-19
 - 親の計画: global-engine-skills-plan.md の Phase 2
 - 引継ぎ元: HANDOFF.md
@@ -134,5 +134,5 @@
 ## ほかの作業者へ
 
 - WebPier に新しく加わった `footing-check`・`cantilever-check` は、親の計画書 §2.1 の表にない。どちらも WebPier の段階（0800〜0820、0900・0910）の照査で、Aggre-SE の総括表・ステップ表と Capacita を使う。Phase 5・7 で「WebPier の使い方（`structural-webpier/references/checks.md`）」と「開発（`webpier-footing`・`webpier-cantilever` など）」に分ける対象になる。
-- **WebPier を Codex で開いたとき、WebPier のスキルが見えない**（上の確認）。直すなら WebPier に `.agents/skills`（`.claude/skills` と同じものを Codex にも見せる仕組み）が要るが、WebPier のスキル以外の構成を変えるので、この Phase ではしていない。利用者の判断待ち。
+- **WebPier を Codex で開いたとき、WebPier のスキルが見えない**（上の確認）。直すなら WebPier に `.agents/skills`（`.claude/skills` と同じものを Codex にも見せる仕組み）が要るが、WebPier のスキル以外の構成を変えるので、この Phase ではしていない。**決定（2026-10-19、利用者）：WebPier の開発に Codex は使わない（Claude Code だけ）。** WebPier に `.agents/skills`・`AGENTS.md` は作らない。設計案件の作業は WebPier の repo を開かず、グローバルの `structural-*` と MCP で行うので影響しない。
 - 案件 26_関内 の `.claude/skills/aggrese-project` はこの Phase では消していない（Phase 8）。
