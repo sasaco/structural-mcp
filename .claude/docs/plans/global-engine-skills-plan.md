@@ -1,6 +1,6 @@
 # 解析エンジンと WebPier を MCP とグローバルスキルで公開する計画
 
-- 状態: Phase 0・1・2・5 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase5-engine-skills.md`
+- 状態: Phase 0・1・2・3・5 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase5-engine-skills.md`
 - 更新日: 2026-10-19
 - 対象: `structural-mcp`（新設 `skills/`、server、installer）、WebPier（橋脚自動設計アプリ）、JRSNAPHeadless、GridLayoutPdf、K:\レールウェイコンサルタント の各案件、Batch submodule
 - 対象クライアント: Codex（主）、Claude Code
@@ -43,18 +43,18 @@
 
 ### 2.2 WebPier
 
-- 別 repo（`github.com/sasaco/WebPier`）。structural-mcp の作業ツリーに git 管理外で置かれ、structural-mcp の CLAUDE.md は「無関係、無視する」としている。未コミットの変更がある。
+- 別 repo（`github.com/sasaco/WebPier`）。structural-mcp の作業ツリーに git 管理外で置かれ、structural-mcp の CLAUDE.md は「無関係、無視する」としている。未コミットの変更がある。→ Phase 3 で structural-mcp の submodule にした。
 - Python 3.12・uv（`uv.lock`）。CLI は `python -m webpier --stage ... [--frame-analysis] [--nonlinear-analysis] --input <json> --output-dir <dir> --post-dir <dir> --overwrite`。終了コードは 0（公開完了）、2（入力・環境のエラーで何も公開していない）、3（公開失敗・一部未復元）。入力エディタ（Tkinter）もある。
 - 入力は `pre/input.json`（schema 2）。項目表は `webpier/inputs/fields.py`。
 - 成果物は `output/`（計算書 PDF・結果 JSON）と `post/`（FrameWeb 入力、NDU、PIK・CSV、WDJ、Aggre-SE の XML・PIK・XLSX・CSV、JRSNAP の結果**フォルダー**、付帯JSON `*.provenance.json`）。結果 JSON に段階ごとの `engineering_status` がある（0612・0622 は ok/not_ok、断面照査は not_evaluated）。
 - runner は環境変数、なければ repo のルートの `.env` から読む：`STRUCTURAL_MCP_FEMPYTHON_RUNNER`、`STRUCTURAL_MCP_WEBDAN_RUNNER`、`STRUCTURAL_MCP_AGGRESE_RUNNER`、`STRUCTURAL_MCP_JRSNAP_RUNNER`。**既定の `--stage all` でも 0710・0720 が JRSNAP の runner（figures）を要する**ので、JRSNAP なしでは 0500・0600・0610・0620 しか作れない。
-- `pyproject.toml` の `gridlayoutpdf = { path = "C:/Users/sasai/Documents/GridLayoutPdf" }` が**手元の絶対パス**。GridLayoutPdf は `github.com/sasaco/grid_layout_pdf`。
+- `pyproject.toml` の `gridlayoutpdf = { path = "C:/Users/sasai/Documents/GridLayoutPdf" }` が**手元の絶対パス**。GridLayoutPdf は `github.com/sasaco/grid_layout_pdf`。→ Phase 3 で git の参照（commit の SHA）にした。
 - `--nonlinear-analysis` は1方向数分かかり、JRSNAP の画面が出る。server の既定のタイムアウトは 180 秒（`STRUCTURAL_MCP_TIMEOUT_MS`）。
 - 帳票に Windows の書体（MS明朝・MSゴシック・Calibri・Times Italic）が必須。
 
 ### 2.3 JRSNAPHeadless
 
-- structural-mcp の作業ツリーにある、git 管理外の別 repo。**リモートなし**。`config.ts` に未登録で、MCP のツールもない。WebPier だけが直接呼んでいる。
+- structural-mcp の作業ツリーにある、git 管理外の別 repo。**リモートなし**。`config.ts` に未登録で、MCP のツールもない。WebPier だけが直接呼んでいる。→ Phase 3 で GitHub の private repo（`sasaco/JRSNAPHeadless`）を作り、structural-mcp の submodule にした。
 - JRSNAP 本体（鉄道総研、ライセンス品）は利用者が別に入れる。インストール先は runner の横の `jrsnap-headless.json` に書く。
 
 ## 3. 目標の構成
@@ -202,9 +202,11 @@ JRSNAPHeadless 単体の MCP ツール（`jrsnap_run`、`jrsnap_figures`）は W
 
 **結果（2026-10-19、完了）**：`skills/structural-aggrese/`（SKILL.md、`references/` の project-xml・outputs・foundation-steps、`scripts/aggrese_project_roundtrip.cs` の複製）と、WebPier の `webpier-aggrese`（`aggrese-project` を改名して WebPier の実装・決定・受入だけに絞った）。元の箇条ごとの移し先の対応表、型として決めたこと、確認の結果は `phase2-aggrese-skill-split.md`。Phase 7 で `structural-webpier/references/outputs.md` へ移す候補（0711・0721 の post のファイルの意味）は、いまは `webpier-aggrese` にある。
 
-### Phase 3：リポジトリの準備（§5.3）
+### ✅ Phase 3：リポジトリの準備（§5.3）
 
 GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebPier の submodule の順。完了条件：別の場所に clone した structural-mcp で `git submodule update --init --recursive` と WebPier の `uv sync --locked` が通る。
+
+**結果（2026-10-19、完了）**：WebPier の `pyproject.toml` の GridLayoutPdf を `{ git = "https://github.com/sasaco/grid_layout_pdf", rev = "a8c52284…" }`（完全な SHA。いまの `origin/main`）にして `uv.lock` を作り直した（WebPier `f4aabca`、push 済み）。品質ゲートは変更の前後とも 3714 件通過し、受入のテスト（生成物のバイトの照合）も通ったので**受入記録の取り直しは不要**。ただし uv の git の取り出しが `core.autocrlf` に従ってインストールされるファイルの改行が変わり、`implementation_sha256` は変わる（照合はしていない）。手元の GridLayoutPdf を試す手順（`uv pip install` と `uv run --no-sync`。`--locked` の実行は lock の版に戻す）と取り込む手順を WebPier の CLAUDE.md に書いた。JRSNAPHeadless は追跡ファイルに JRSNAP 本体（DLL・exe・逆コンパイルしたソース）が履歴を含めてないことを確かめてから、GitHub の private repo `sasaco/JRSNAPHeadless` を作って push した。2つとも作業ツリーの既存の repo のまま submodule に登録し（`.git` は動かしていない）、CLAUDE.md・README を直した（structural-mcp `e1f65e8`、push はしていない）。別の場所に clone して `git submodule update --init --recursive`（深いフォルダーでは `-c core.longpaths=true` が要る）と WebPier の `uv sync --locked` が通り、clone と元の作業ツリーで 0500 の PDF のバイトが一致した。Batch（GitLab）はこの PC では認証なしで取れた。詳細は `phase3-repository-preparation.md`。
 
 ### Phase 4：WebPier の runner と MCP ツール（§5.1・§5.2）
 
