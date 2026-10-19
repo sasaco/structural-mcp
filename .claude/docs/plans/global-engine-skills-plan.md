@@ -1,6 +1,6 @@
 # 解析エンジンと WebPier を MCP とグローバルスキルで公開する計画
 
-- 状態: Phase 0・1・2 完了（2026-10-19）。Phase 2 の記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`
+- 状態: Phase 0・1・2・5 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase5-engine-skills.md`
 - 更新日: 2026-10-19
 - 対象: `structural-mcp`（新設 `skills/`、server、installer）、WebPier（橋脚自動設計アプリ）、JRSNAPHeadless、GridLayoutPdf、K:\レールウェイコンサルタント の各案件、Batch submodule
 - 対象クライアント: Codex（主）、Claude Code
@@ -34,6 +34,7 @@
 | foundation-check | WebPier, 26_関内 | 同一 | WebPier の使い方（0612・0622 の照査の中身）＋開発 |
 | pier-report-style | WebPier, 26_関内 | 同一 | WebPier の開発 |
 | slab-shear-summary | 26_桑園 のみ | — | 判断保留（§10） |
+| jrsnap-input-launch / -open-save / -ndu-edit / -soil-analysis | 26_上越新幹線(固有周期)（K:\ニュージャパンコンサルタンツ） | 旧系統（Phase 5 で見つけた。ほかにない記述はない） | エンジン |
 
 - `jrsnap-*` には `scripts/`（ps1・cs）と `references/` がある。SKILL.md はスクリプトを**プロジェクトのルートからのパス**（`.claude\skills\...`）で呼んでいる。
 - 絶対パス（`C:\Users\sasai\Documents\...`、`C:\RTRI_Program\JRSNAP(...)`）が書かれている。
@@ -211,11 +212,13 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
 2. structural-mcp に config・runner・server・contracts・テストの変更。submodule の pointer を更新。
 3. 実物での確認：`npm run smoke:webpier -- <input.json> [--frame-analysis] [--nonlinear-analysis]`（新設）で、CLI で作った `output/` と MCP で作ったもののうち、決定的な PDF・JSON のバイトが一致すること（差し込みページを含む PDF と、毎回変わる帳票は除く）。
 
-### Phase 5：JRSNAP・Capacita・FEMPython・SoilStructure のスキル
+### ✅ Phase 5：JRSNAP・Capacita・FEMPython・SoilStructure のスキル
 
 1. JRSNAP：4つのコピーの差分を取り、新系統（WebPier・26_関内）を基準に旧系統にしかない記述を併合する。§3 の4本に再編し、WebPier の決定番号（47・50・51）は WebPier の開発用スキルへ移す。`example-pier2-seismic-verification.md` は WebPier の開発用、`sect-frange-jiku.md`・`section-material-geometry-rebar.md` はグローバルへ移す。
 2. Capacita：`capacita-column-check` の2版を併合してから3つに分ける。エンジン（WDJ、`run-rc --pickup`、reportSections、WD-1901〜1908・WD-9999）は `structural-capacita`、0611・0621 の利用者向けの説明は `structural-webpier/references/checks.md`、決定48と実装は WebPier の開発用。
 3. FEMPython・SoilStructure：MCP のツール説明と README で足りているかを、案件のセッションでの使われ方を見て判断し、足りない場合だけ作る。
+
+**結果（2026-10-19、完了）**：`structural-jrsnap-input`・`-figures`・`-ndu`・`-soil` と `structural-capacita`。WebPier は `webpier-jrsnap`（新規）と `webpier-capacita`（`capacita-column-check` を改名）にし、WebPier の `jrsnap-*` は前倒しで消した（受入の補助 `jrsnap-input-open-save/scripts/` は残す）。FEMPython・SoilStructure は作らない（どの案件にもエンジンの知識を持つスキルがなく、MCP のツール説明と契約で足りている）。26_桑園 の案件の記録はグローバルに入れず、桑園のコピーに残した。詳細・判断待ち（フーチングの WDJ の La の単位）は `phase5-engine-skills.md`。
 
 ### Phase 6：installer
 
@@ -241,9 +244,10 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
 
 | プロジェクト | 消す | 残す |
 |---|---|---|
-| WebPier | `jrsnap-*`、`aggrese-project`・`capacita-column-check`・`foundation-check` のうちエンジンと使い方の部分 | 開発用：`webpier-aggrese`、`webpier-capacita`、`webpier-foundation`（実装と受入）、`pier-report-style`、汎用スキル |
+| WebPier | （`jrsnap-*`・`aggrese-project`・`capacita-column-check` は Phase 2・5 で済み）`foundation-check`・`webpier-capacita` のうち使い方の部分（Phase 7 で `structural-webpier` へ） | 開発用：`webpier-aggrese`、`webpier-capacita`、`webpier-foundation`（実装と受入）、`pier-report-style`、汎用スキル |
 | 26_関内 | `jrsnap-*`、`aggrese-project`、`capacita-column-check`、`foundation-check`、`pier-report-style` | 案件固有のもの |
-| 26_桑園高架橋 | `jrsnap-*`（4本） | `slab-shear-summary`（§10） |
+| 26_桑園高架橋 | `jrsnap-*`（4本。消す前に `jrsnap-ndu-edit` の L3 などの記録と総括表の転記の規則を案件のスキルへ移す） | `slab-shear-summary`（§10） |
+| 26_上越新幹線(固有周期) | `jrsnap-*`（4本） | `geology-column-log-*` |
 | Batch submodule | `.claude/skills/jrsnap-*`（3本） | なし（submodule 内で commit し、pointer を更新） |
 
 各案件の CLAUDE.md・AGENTS.md に「解析エンジンと WebPier の知識は `structural-*` のグローバルスキルにある。エンジン・WebPier の新しい知見は structural-mcp の `skills/` に書く」と1行加える。26_関内 の CLAUDE.md の「WebPier 由来のスキルは実体がない」という注意は削除する。
