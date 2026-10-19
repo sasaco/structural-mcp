@@ -1,6 +1,6 @@
 # 解析エンジンと WebPier を MCP とグローバルスキルで公開する計画
 
-- 状態: Phase 0・1・2・3・5 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase5-engine-skills.md`
+- 状態: Phase 0・1・2・3・4・5 完了（2026-10-19）。記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`・`phase3-repository-preparation.md`・`phase4-webpier-mcp.md`・`phase5-engine-skills.md`
 - 更新日: 2026-10-19
 - 対象: `structural-mcp`（新設 `skills/`、server、installer）、WebPier（橋脚自動設計アプリ）、JRSNAPHeadless、GridLayoutPdf、K:\レールウェイコンサルタント の各案件、Batch submodule
 - 対象クライアント: Codex（主）、Claude Code
@@ -208,12 +208,14 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
 
 **結果（2026-10-19、完了）**：WebPier の `pyproject.toml` の GridLayoutPdf を `{ git = "https://github.com/sasaco/grid_layout_pdf", rev = "a8c52284…" }`（完全な SHA。いまの `origin/main`）にして `uv.lock` を作り直した（WebPier `f4aabca`、push 済み）。品質ゲートは変更の前後とも 3714 件通過し、受入のテスト（生成物のバイトの照合）も通ったので**受入記録の取り直しは不要**。ただし uv の git の取り出しが `core.autocrlf` に従ってインストールされるファイルの改行が変わり、`implementation_sha256` は変わる（照合はしていない）。手元の GridLayoutPdf を試す手順（`uv pip install` と `uv run --no-sync`。`--locked` の実行は lock の版に戻す）と取り込む手順を WebPier の CLAUDE.md に書いた。JRSNAPHeadless は追跡ファイルに JRSNAP 本体（DLL・exe・逆コンパイルしたソース）が履歴を含めてないことを確かめてから、GitHub の private repo `sasaco/JRSNAPHeadless` を作って push した。2つとも作業ツリーの既存の repo のまま submodule に登録し（`.git` は動かしていない）、CLAUDE.md・README を直した（structural-mcp `e1f65e8`、push はしていない）。別の場所に clone して `git submodule update --init --recursive`（深いフォルダーでは `-c core.longpaths=true` が要る）と WebPier の `uv sync --locked` が通り、clone と元の作業ツリーで 0500 の PDF のバイトが一致した。Batch（GitLab）はこの PC では認証なしで取れた。詳細は `phase3-repository-preparation.md`。
 
-### Phase 4：WebPier の runner と MCP ツール（§5.1・§5.2）
+### ✅ Phase 4：WebPier の runner と MCP ツール（§5.1・§5.2）
 
 0. **Batch の pointer を `9c70f54` 以降に進める**（Batch submodule の中で sasa/dev の commit を確かめ、MSBuild で build し、`Batch/tests/Aggre-SE.Test` を通してから）。いま固定している `47d1654` の runner は `--foundation-steps` を知らず `INVALID_ARGUMENT`（Unknown option）で止まるので、WebPier の 0711・0721（常に `--foundation-steps true` を付ける）が固定版の runner では動かない。MSI（Phase 6）も固定版から作るので、Phase 6 より前に必須。
 1. WebPier に `webpier/headless.py`（run・validate・contract・schema）とテスト。層の規則（pipeline 層）と品質ゲート（pipeline 100%）を守る。WebPier 側で commit。
 2. structural-mcp に config・runner・server・contracts・テストの変更。submodule の pointer を更新。
 3. 実物での確認：`npm run smoke:webpier -- <input.json> [--frame-analysis] [--nonlinear-analysis]`（新設）で、CLI で作った `output/` と MCP で作ったもののうち、決定的な PDF・JSON のバイトが一致すること（差し込みページを含む PDF と、毎回変わる帳票は除く）。
+
+**結果（2026-10-19、完了）**：Batch の pointer を `9c70f54` に進めた（MSBuild の build、Aggre-SE.Test 22件 skip なし、npm test、smoke:aggrese。structural-mcp `1423773`）。WebPier に headless runner を加えた（WebPier の決定61、`webpier/pipeline/headless.py` と `run_headless.py`、`b6c349c`、push 済み、品質ゲート 3762 件・pipeline 100%）：`run`・`validate`・`contract`・`schema`、runner は環境変数だけ（欠けていれば `RUNNER_UNAVAILABLE`、`.env` を読まない）、artifacts の kind は役割の `.` を `-` にしたもの（`0612-pdf`。JRSNAP の結果フォルダーは中のファイルを1つずつ）、入力エラーは項目のパス付き、engineeringStatus は段階ごとと全体（not_ok が1つでもあれば not_ok、判定した段階がすべて ok なら ok、なければ not_evaluated）。structural-mcp に `webpier_get_input_schema`・`webpier_get_contract`（いまの環境で生成できる選択を足す）・`webpier_validate`・`webpier_generate`、`STRUCTURAL_MCP_WEBPIER_RUNNER`・`STRUCTURAL_MCP_JRSNAP_RUNNER`・`STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS` を加えた（`91d7aca`、npm test 61件、push はしていない）。`.py` の runner は横の `.venv\Scripts\python.exe -X utf8` で起動し、WebPier には検出した runner のパスだけを渡す（Capacita の `.dll` は横の `.exe`）。入力は名前とバイトのまま job にコピーする（WebPier が入力名と SHA-256 を記録するため）。smoke:webpier で 0612 を MCP と CLI（同じ venv）で作り、**8ファイルすべてバイトが一致**した。0610・0611 は、差し込みページを含む PDF とその SHA-256 を記録する付帯JSONだけが違う（0611 の Capacita のページは書体のサブセット名が毎回変わり、CLI 同士でも違う）。Claude Code の新しいセッション（`claude -p --strict-mcp-config --mcp-config`、`structural-mcp-dev` の名前で、登録は変えずに）から `webpier_get_contract` と `webpier_generate`（0612）を呼べた。job root が深いと WebPier の一時ファイルのパスが 260 文字を超えて `IO_ERROR` になる（README に記載）。`--nonlinear-analysis` の実物は動かしていない（利用者の判断）。installer は Phase 6。詳細は `phase4-webpier-mcp.md`。
 
 ### ✅ Phase 5：JRSNAP・Capacita・FEMPython・SoilStructure のスキル
 
@@ -294,6 +296,7 @@ Phase 0 ─┬─ Phase 1 ── Phase 2 ── Phase 5 ─┐
 - **`--foundation-steps` と MCP**（2026-10-19、推奨どおり）：Batch の pointer は Phase 4 の前に `9c70f54` 以降へ進める。MCP の `aggrese_calculate` には今は足さない（ステップ表を使うのは WebPier の決定60だけで、WebPier は runner を直接呼ぶ）。WebPier 以外の案件で要るようになったら `generateFoundationSteps` を足す。
 - **WebPier の開発のクライアント**：Claude Code だけ（Codex は使わない。2026-10-19、利用者）。WebPier に `.agents/skills`・`AGENTS.md` は作らず、WebPier の開発用スキル（`webpier-*`）は `.claude/skills` にだけ置く。Codex が主に使われるのは設計案件で、そこではグローバルの `structural-*` と MCP を使う。
 - **Codex の配置先**：`~/.agents/skills`（Phase 0 の結果。`~/.codex/skills` も読まれるが、両方に置くと重複する）。
+- **WebPier の headless の契約の細部**（Phase 4、2026-10-19。詳細は WebPier の決定61 と `phase4-webpier-mcp.md`）：artifacts の kind は WebPier の役割の `.` を `-` にしたもの（MCP の artifact の ID になる）。JRSNAP の結果フォルダーは中のファイルを1つずつ同じ kind で並べる。engineeringStatus は段階ごと（0612・0622 は ok/not_ok、ほかは not_evaluated）と全体（not_ok が1つでもあれば not_ok、判定した段階がすべて ok なら ok、判定した段階がなければ not_evaluated）。生成物の受け渡しは `read_artifact` で1つずつ（zip は遅いと分かってから）。`STRUCTURAL_MCP_MAX_*` は変えない（全段階の出力で最大のファイルは JRSNAP の `.DB2` 約40MB、artifact 単体の上限 128MB に収まる）。`webpier_generate` のタイムアウトは `nonlinearAnalysis` によらず `STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS`（既定30分）。
 
 ## 11. 対象外
 

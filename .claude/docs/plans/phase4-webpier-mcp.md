@@ -1,6 +1,6 @@
 # Phase 4：WebPier の runner と MCP ツール
 
-- 状態: 作業中
+- 状態: 完了（2026-10-19）
 - 更新日: 2026-10-19
 - 親の計画: global-engine-skills-plan.md の Phase 4（§5.1・§5.2）
 - 引継ぎ元: HANDOFF.md
@@ -15,8 +15,8 @@
 - ✅ 2. structural-mcp：代役 fake-webpier-runner.mjs と mcp.test.ts、npm test（61件すべて成功）
 - ✅ 2. structural-mcp：README・CLAUDE.md、（確認）WebPier の pointer の更新（`b6c349c`）、commit
 - ✅ 3. smoke:webpier を作り、CLI と MCP の出力のバイトを比べる（0612 は全8ファイル一致。下の「実物での確認」）
-- [ ] structural-mcp-dev で新しいセッションから呼べることを確かめる
-- [ ] 親の計画書の Phase 4 に ✅ と結果
+- ✅ structural-mcp-dev で新しいセッションから呼べることを確かめる（下の「新しいセッションからの確認」）
+- ✅ 親の計画書の Phase 4 に ✅ と結果
 
 ## 始めたときの状態（2026-10-19）
 
@@ -83,6 +83,15 @@ schema                   入力の JSON Schema（fields.py の FIELDS から作�
 
 - smoke は、他のプログラムのページを差し込む計算書（0610・0620 の FEMPython、0611・0621・0810・0820・0910 の Capacita、0710・0720 の JRSNAP、0711・0721 の Aggre-SE）、Aggre-SE の xlsx、JRSNAP の結果フォルダーと、それらの SHA-256 を中に含む JSON を「違っても失敗にしない」に分ける（JSON の判定は、違ったファイルの SHA-256 が中に現れるか）。
 
+## 新しいセッションからの確認（2026-10-19、完了条件6）
+
+Codex の登録（`~/.codex/config.toml`）は変えずに、Claude Code の新しいセッションをその場限りの MCP 設定で開いた：`claude -p --strict-mcp-config --mcp-config <scratchpad>/phase4/devsession/mcp.json --allowedTools mcp__structural-mcp-dev__webpier_get_contract,mcp__structural-mcp-dev__webpier_generate < prompt.txt`（サーバー名 `structural-mcp-dev`、`node <repo>/dist/src/index.js`、`STRUCTURAL_MCP_ALLOWED_ROOTS` は `WebPier/pre`）。
+
+1. 1回目は job root を scratchpad の深いフォルダーにしたため、`webpier_generate` が `IO_ERROR`（`…\output\output\.webpier-xzwd4uz7\.0612_線路方向基礎.pdf.70amm1tg.tmp` で No such file or directory。約264文字）。セッションのエージェントは `get_job` で原因を読み、260文字を超えていると報告した。
+2. job root を浅くして2回目：`webpier_get_contract`（unavailableStages なし、4つの runner すべて available）→ `webpier_generate`（stage 0612）が ok・success・engineeringStatus ok・artifacts 8件（`0612-pdf`・`0612-json`・`0612-pik`・`0612-displacement`・`0612-reaction` と付帯JSON3つ）。
+   - 2回目の設定ファイルを Git Bash の `node -e` で書き換えたら `\` が落ち、job root が `C:\Users\sasai\AppData\Localstructural-mcp-devjobs` になった（パスは短いので成功した）。このセッションで作ったそのフォルダーと空の `%LOCALAPPDATA%\structural-mcp-dev` は消した。
+- → README の WebPier の節に「`STRUCTURAL_MCP_JOB_ROOT` は浅い場所に（既定で足りる）」を書いた。
+
 ## 新しく分かったこと
 
 - Batch：`9c70f54` を Docu-SE.sln で MSBuild（VS 18 Community）して `AggreSE.Headless.exe` を作り直した（2026-10-19 21:22）。`dotnet test tests\Aggre-SE.Test\… --no-build -c Release` は **22 件すべて成功、skip 0**（この PC には `Batchテスト` の DB1 がある）。structural-mcp の `npm test`（55件）と `smoke:aggrese`（`Batchテスト/JRSNAP_Ver5.2-L03/01_サンプル(V53)：RC橋脚L：PHC/…xml`、31秒、成果物7件）も通った。
@@ -92,7 +101,8 @@ schema                   入力の JSON Schema（fields.py の FIELDS から作�
 - 項目表にない構造の規則：空き支承枠は枠ごと `null`（`B支点`・`C支点` は10枠）、柱の `side_rows`・`band_rows` は空（帯鉄筋は `column_hoops`）、`manual_basis` は省略か `null`。schema に足し、`current.json` と `pre/input.json` が schema に合うことをテストで確かめた。
 - Node の `spawn` は環境を明示しても、Windows では libuv が `USERPROFILE`・`WINDIR`・`HOMEDRIVE` などを足す（既存の runner も同じ）。
 - Codex の MCP の tool 呼び出しには既定の timeout がある（`config.toml` の `tool_timeout_sec`）。静的非線形解析を含む `webpier_generate` は数分かかるので、README に `tool_timeout_sec = 1800` を書いた。
-- いまの Codex の登録は `structural-mcp`（この repo の `dist/src/index.js`、`STRUCTURAL_MCP_WEBDAN_RUNNER` に `.dll`）だけで、`structural-mcp-dev` はない。
+- いまの Codex の登録は `structural-mcp`（この repo の `dist/src/index.js`、`STRUCTURAL_MCP_WEBDAN_RUNNER` に `.dll`）だけで、`structural-mcp-dev` はない。release 用の登録が開発の作業ツリーを指しているので、Codex の新しいセッションでは Phase 4 の `webpier_*` がすでに見える（WebPier・JRSNAP の runner は既定のパスで検出される）。
+- WebPier の job の中のパスは長い：`<job root>\<日付>\<日付>_<uuid>\output\output\.webpier-<8文字>\.<ファイル名>.<8文字>.tmp`（publication.py の一時ファイル）。JRSNAP の結果は `post\線路直角方向_JRSNAP\線路直角方向(Case1_ρm10_αf1_正向).DB2` のように長い。WebPier の Python は Windows の長いパスを使えないので、job root が深いと失敗する。
 
 ## Tips
 
@@ -101,6 +111,10 @@ schema                   入力の JSON Schema（fields.py の FIELDS から作�
 - Git Bash の heredoc や `node -e '…'` に日本語・`\n`・`'` を含むコードを書くと崩れることがある。複数行のコードは Write ツールでファイルにする（scratchpad の `phase4/replace.mjs` は「ちょうど1回ある文字列を置き換え、CRLF を保つ」）。
 
 ## ほかの作業者へ
+
+- structural-mcp は **push していない**（`1423773` Batch の pointer、`91d7aca` Phase 4、この記録の commit）。WebPier は `b6c349c` を push 済み。
+- Phase 7（`structural-webpier` スキル）へ：MCP のツール名は `webpier_get_input_schema`・`webpier_get_contract`・`webpier_validate`・`webpier_generate`。成果物は job の `output/output/…`・`output/post/…` で、`read_artifact` で取って案件の `output/`・`post/` に置く（JRSNAP のフォルダーは中のファイルごと。`.DB2` は約40MB で、64KB ずつだと数百回の呼び出しになるので `maxBytes` を上限の 256KB にする）。`engineeringStatus` は段階ごとに見る（0611 などの Capacita の照査は not_evaluated のまま）。Codex は `tool_timeout_sec` を長くしないと非線形解析の生成が切れる。
+- Phase 6（installer）へ：WebPier の runner は `run_headless.py` と横の `.venv`。server は WebPier に Capacita の `.exe`（apphost）を渡すので、payload に `WebDanforCS.Headless.exe` が要る。
 
 - **WebPier の CLAUDE.md の「PDF は毎回同じバイト。例外は FEMPython と JRSNAP のページ」は、本物の Capacita の runner では足りない**：0611・0621（と同じ仕組みの 0810・0820・0910）の計算書は、Capacita のページの書体のサブセット名が毎回変わるのでバイトが変わる（テストは代役の runner なので出ない）。WebPier の受入や比較で 0611 の PDF のバイトを使うときは注意。WebPier の文書はまだ直していない。
 

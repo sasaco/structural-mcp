@@ -263,6 +263,7 @@ npm run smoke:aggrese -- 'C:\path\to\project.xml' --outputs summary,report
 - `engineeringStatus` は段階ごと（`summary.stages`。0612・0622 の基礎の照査は ok／not_ok、ほかは not_evaluated）と全体（not_ok が1つでもあれば not_ok、判定した段階がすべて ok なら ok）。Capacita・Aggre-SE の照査は判定を返さないので not_evaluated です。
 - `webpier_generate` の timeout は `STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS`（既定30分）。`nonlinearAnalysis` は1方向数分かかり、JRSNAP の画面が出ます。JRSNAP は同じインストール先で同時に解析できません（JRSNAPHeadless が直列にする）。クライアント側の tool の timeout も長くしてください（Codex は `config.toml` の `[mcp_servers.<名前>]` に `tool_timeout_sec = 1800`）。
 - JRSNAPHeadless の runner（`STRUCTURAL_MCP_JRSNAP_RUNNER`）は検出して WebPier に渡すだけで、単体の MCP ツールはありません。
+- WebPier は job の下に `output/output/.webpier-xxxxxxxx/` の一時ファイルや JRSNAP の長いファイル名を作ります。`STRUCTURAL_MCP_JOB_ROOT` は浅い場所にしてください（既定の `%LOCALAPPDATA%\structural-mcp\jobs` なら足ります）。Windows の長いパスが有効でない PC では、パスが 260 文字を超えると `IO_ERROR` で失敗します。
 
 実 runner と MCP の接続確認は次のコマンドで行います。MCP で作った成果物と、同じ venv・入力・runner で CLI が作ったものをバイトで比べます（他のプログラムのページを差し込む計算書、Aggre-SE の xlsx、JRSNAP の結果と、それらの SHA-256 を記録する JSON は違っても失敗にしません）。
 
