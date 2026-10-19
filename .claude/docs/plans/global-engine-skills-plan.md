@@ -1,6 +1,6 @@
 # 解析エンジンと WebPier を MCP とグローバルスキルで公開する計画
 
-- 状態: Phase 0・1 完了（2026-10-19）。Phase 2 は別の作業者へ引継ぎ（`.claude/docs/plans/phase2-aggrese-skill-split.md`）
+- 状態: Phase 0・1・2 完了（2026-10-19）。Phase 2 の記録は `.claude/docs/plans/phase2-aggrese-skill-split.md`
 - 更新日: 2026-10-19
 - 対象: `structural-mcp`（新設 `skills/`、server、installer）、WebPier（橋脚自動設計アプリ）、JRSNAPHeadless、GridLayoutPdf、K:\レールウェイコンサルタント の各案件、Batch submodule
 - 対象クライアント: Codex（主）、Claude Code
@@ -193,11 +193,13 @@ JRSNAPHeadless 単体の MCP ツール（`jrsnap_run`、`jrsnap_figures`）は W
 3. `tests/skills.test.ts`（`npm test` に含める）：BOM がないこと（Codex が読まないため）、frontmatter、`name` とフォルダー名の一致、`description` 1024 文字以内、相対リンク・`scripts/`・`references/` の参照先の実在、禁止パターン（`C:\Users\<名前>`、`K:\`、`.claude\skills\`・`.agents\skills\` から始まるパス、`synced`）、install の link／copy／uninstall／衝突時の停止。
 4. CLAUDE.md の計画書の置き場所（`.agents/docs/plans/`）を `.claude/docs/plans/` に直す。
 
-### Phase 2：Aggre-SE（最初の1本、型を決める）
+### ✅ Phase 2：Aggre-SE（最初の1本、型を決める）
 
 1. `aggrese-project` を `structural-aggrese`（エンジン）と WebPier の開発用スキル `webpier-aggrese`（決定49・56〜58、受入、post の出力を作る・確かめる手順）に分ける。WebPier の使い方に当たる部分（0711・0721 の成果物の意味）は Phase 7 で `structural-webpier/references/outputs.md` へ移す。
 2. `aggrese_project_roundtrip.cs` はエンジンの道具なので `skills/structural-aggrese/scripts/` へ移し、WebPier はそれを参照する（WebPier の `.gitattributes` と受入記録の helpers の SHA に影響するので、移すか参照のままかをここで決める）。
 3. `npm run skills:install`。26_関内 と WebPier の新しいセッションで `structural-aggrese` が選ばれることを確かめる。
+
+**結果（2026-10-19、完了）**：`skills/structural-aggrese/`（SKILL.md、`references/` の project-xml・outputs・foundation-steps、`scripts/aggrese_project_roundtrip.cs` の複製）と、WebPier の `webpier-aggrese`（`aggrese-project` を改名して WebPier の実装・決定・受入だけに絞った）。元の箇条ごとの移し先の対応表、型として決めたこと、確認の結果は `phase2-aggrese-skill-split.md`。Phase 7 で `structural-webpier/references/outputs.md` へ移す候補（0711・0721 の post のファイルの意味）は、いまは `webpier-aggrese` にある。
 
 ### Phase 3：リポジトリの準備（§5.3）
 
@@ -281,6 +283,7 @@ Phase 0 ─┬─ Phase 1 ── Phase 2 ── Phase 5 ─┐
 - **JRSNAPHeadless 単体の MCP ツール**：今回は作らない。`config.ts` での検出と WebPier への受け渡しまで。
 - **WebPier の入力の受け渡し**：inline の JSON と `inputPath` の両方を受ける。案件の `pre/input.json` を `inputPath` で渡すのを主な使い方とする。
 
+- **`aggrese_project_roundtrip.cs`（Phase 2）**：移さずに**複製**を `skills/structural-aggrese/scripts/` に置く。WebPier の受入（`scripts/accept_aggrese_project.py` の `HELPER`、`tests/fixtures/acceptance/aggrese/record.json` の helpers の SHA）が WebPier の `scripts/` のファイルを固定しているので、WebPier 側は動かさない。複製との違いは1行目のコメントの決定番号だけ。
 - **Codex の配置先**：`~/.agents/skills`（Phase 0 の結果。`~/.codex/skills` も読まれるが、両方に置くと重複する）。
 
 ## 11. 対象外
