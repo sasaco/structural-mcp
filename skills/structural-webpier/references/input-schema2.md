@@ -53,12 +53,31 @@
 - 支持層の `内部摩擦角_φd` は 25 度以上 90 度未満、`変形係数_Ed` は正。表層の湿潤・水中の単位体積重量は必須。
 - 0612・0622 の基礎の照査は支持層が砂質土・砂礫のときだけ。
 
-### 鉄筋（`鉄筋.梁`・`鉄筋.柱`・`鉄筋.フーチング`）
+### 鉄筋（`鉄筋.version` 3：`鉄筋.梁`・`鉄筋.柱`・`鉄筋.フーチング`）
 
+確かめた版：WebPier `1f5c8de`（`webpier/inputs/fields.py` の `_column`・`_beam`・`_footing`・`_rebar`、`webpier/inputs/rebar.py`、`tests/fixtures/inputs/current.json`、WebPier 決定68。コードで確認、2026-10-20）。
+
+- `鉄筋.version` は 3。旧形式（version 2 の `main_rows`・`side_rows`・`band_rows`・`position_mode`・`manual_positions`・`manual_basis`・`stack_order`）は読み替えず、入力エラーになる。
 - 全部のキーが要るが、値は空欄（`null`）で保存できる。値を要する段階でパス付きの入力エラーになる。`concrete_strength_mpa` は3部材とも必須。
-- 柱：`main_rows`（面・段・片面本数・配置の方法）、`column_hoops`（帯鉄筋。方向ごとの有効本数・間隔）、`aggregate_max_mm`（柱のコンクリートの粗骨材最大寸法。0611・0621 と JRSNAP の入力の両方が使う）。`side_rows`・`band_rows` は柱では空の配列。`manual_basis` は詳細位置を使うときだけ。
+- 共通（3部材とも）：材質は部材ごとの `materials.main`（主鉄筋・側面筋）と `materials.transverse`（帯鉄筋・スターラップ）だけ（SD295・SD345・SD390）。`pure_cover_mm`（純かぶり：コンクリート面から最も外側の鉄筋の外面まで）、`aggregate_max_mm`（粗骨材の最大寸法）。段の芯かぶりは `cover_mode`（自動・指定）と `center_mm`（指定のときの値）。自動の決め方は部材ごとに下に書く。2段目以降の芯かぶりは、同じ並びのひとつ前の段＋径＋あき。
+- 柱：
+  - `main_bars.{線路,直角}`：1段目の `diameter_mm`・`per_face_count`（片面本数）・`cover_mode`・`center_mm`、並べ方 `distribution`（`mode` は 等分・中央ピッチ・両端＋中央ピッチ、`edge_center_mm` は端の芯距離 e、`pitch_mm` は p）、`endpoints`（等分のとき e の位置に鉄筋を置くか：含む・含めない）。`inner_layers` は2段目以降の `per_face_count` と `clear_gap_mm`（前の段とのあき）だけで、径と並べ方は1段目と同じ。内側の段は1段目の位置のうち中央の本数分に置く。芯かぶりの自動＝純かぶり＋外側の帯鉄筋の径（`column_hoops.enclosing_diameter_mm`）＋径／2。
+  - `table_overrides.{線路,直角}`：方向別の鉄筋配置表で変えた芯位置・径（`center_mm`・`diameter_mm`）を、元の芯位置・径（`source_center_mm`・`source_diameter_mm`。生成した鉄筋を引き当てる鍵）と一緒に持つ。元の鉄筋がない変更は使われず、警告になる。同じ元の鉄筋への変更が2つあるもの・中身のない変更は入力エラー。
+  - `column_hoops`：`enclosing_diameter_mm` と、方向ごとの範囲の行 `direction_rows`（`direction`・`diameter_mm`・`effective_legs`・`pitch_mm`・`start_mm`・`end_mm`。開始・終了は柱の下端から）。
+  - `aggregate_max_mm`（柱のコンクリートの粗骨材最大寸法）は 0611・0621 と JRSNAP の入力の両方が使う。
+- 梁（0900・0910。柱前面の断面 B1 ×（H2＋H3））：
+  - `faces.{上,下}`：1段目の `diameter_mm`・`count`（2本以上）・`cover_mode`・`center_mm` と、`inner_layers`（`count`・`clear_gap_mm`）。上面だけ形状 `bar_type`（ループ筋・直筋）があり、下面は常に直筋。下面の2段目以降は、エディタに出ないがデータと計算に残る。芯かぶりの自動＝純かぶり＋スターラップの径＋径／2。
+  - 段の本数とあきは Capacita の段の割り方（総本数を1段目の本数で割る）に合わせる：最後の段を除いて1段目と同じ、最後の段は1段目以下、あきは一定。外れるとパス付きの入力エラー（例：[17, 8, 8] は Capacita が 17・16 と読む）。
+  - `side_bars`：なしは `null`。`diameter_mm`・`per_face_count`（1つの面の本数）・`start_mm`（上面から1本目の芯まで）・`pitch_mm`・`stirrup_position`（スターラップの内側・外側）・`cover_mode`・`center_mm`。芯かぶりの自動＝純かぶり＋（内側なら）スターラップの径＋径／2。
+  - `stirrups`：`diameter_mm`・`effective_legs`（効く脚の本数）・`pitch_mm`（間隔）。
+- フーチング（0800〜0820）：
+  - `faces.{上,下}`：`outer_direction`（その面で1段目が外側になる方向。線路・直角）と、方向ごとの1段目（`diameter_mm`・`pitch_mm`・`cover_mode`・`center_mm`）と `inner_layers`（`pitch_mm` と、同じ方向のひとつ前の段とのあき `clear_gap_mm`。径は1段目と同じ）。芯かぶりの自動＝外側の方向は純かぶり＋径／2、もう一方は純かぶり＋外側の方向の径＋径／2。
+  - 0800〜0820 は下面だけを読む（上面は空欄でも計算できる。エディタは上面の `outer_direction` を出さないが、データに残す）。
+  - 1 m 当たり本数は 1000／ピッチで、端数を許す（小数2桁。1000／130 ＝ 7.69）。下面の複数段は Capacita の段の割り方に合わせる（最後の段を除いて1段目と同じ本数、最後の段は1段目以下、あきは一定。外れるとパス付きの入力エラー）。
+  - `stirrups.{線路,直角}`：`diameter_mm`・`pitch_mm`（張出しに沿う間隔）・`distribution_mode`（幅方向の指定：間隔・密度）・`width_pitch_mm`（間隔のとき）・`density_per_m`（密度のとき。幅 1 m 当たりの本数、小数1桁）。
 - 梁（片持ち梁）・フーチングは 0900〜0910・0800〜0820 を作るときに実体が要る。WDJ で表せない配筋はパス付きの入力エラー。
-- 配筋は入力エディタの鉄筋の画面で入れると、配置図で確かめながら書ける（SKILL.md「入力エディタ」）。
+- 警告（計算は止めない。入力エディタと「入力チェック」が示す）：柱の元の鉄筋のない配置表の変更、梁の鉄筋の重なり（芯の距離が2本の径の平均より近い）、フーチングの段の交差（同じ面で |c_a − c_b| ＜ (d_a ＋ d_b)/2）。
+- 配筋は入力エディタの「05 鉄筋」で、部材ごとのカードに入れる。柱は「断面図・配置表」、梁とフーチングは「配筋略図」のウィンドウで確かめながら書ける（SKILL.md「入力エディタ」）。
 
 ### 照査の条件
 

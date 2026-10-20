@@ -66,7 +66,7 @@ node <このスキルのフォルダー>\scripts\place-webpier-outputs.mjs --job
 
 ## 入力エディタ（GUI）
 
-開発機のみ。structural-mcp の repo の `WebPier\` フォルダーの中から `uv run --project . --locked python -m webpier.gui --input <案件>\pre\input.json`（`<案件>` は絶対パス）。repo のルートから `--project ".\WebPier"` で起動すると `No module named 'webpier'` で失敗する（WebPier `78654a2` の実アプリで確認、2026-10-20）。数値を入力の時点で印字桁に丸め、空欄・入力エラーを赤で示す。「入力チェック」で最初の入力エラーをパス付きで示す。保存の前のファイルは `input.json.<日時>.bak` に残る。
+開発機のみ。structural-mcp の repo の `WebPier\` フォルダーの中から `uv run --project . --locked python -m webpier.gui --input <案件>\pre\input.json`（`<案件>` は絶対パス）。repo のルートから `--project ".\WebPier"` で起動すると `No module named 'webpier'` で失敗する（WebPier `78654a2` の実アプリで確認、2026-10-20）。数値を入力の時点で印字桁に丸め、空欄・入力エラーを赤で示す。「入力チェック」で最初の入力エラーをパス付きで示し、入力エラーがなくても鉄筋の警告（柱の元の鉄筋のない配置表の変更、梁の鉄筋の重なり、フーチングの段の交差。計算は止めない）があれば示す（WebPier `1f5c8de`）。保存の前のファイルは `input.json.<日時>.bak` に残る。
 
 ## runner を直接呼ぶ（スクリプトから使うとき）
 
