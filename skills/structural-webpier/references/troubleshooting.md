@@ -9,7 +9,7 @@
 | `INPUT_ERROR` | 入力が読めない・足りない・範囲外。`path` に項目のパス（パスのないものは選択の誤りなど） | `path` の項目を資料で確かめて直す。資料で決まらなければ利用者に聞く。直したら `webpier_validate` で次のエラーを見る（1件ずつ返る） |
 | `RUNNER_UNAVAILABLE` | 選んだ段階が要る runner がない（`summary.missingRunners`） | 足りない runner を利用者に伝える。回り道はしない。`webpier_get_contract` で使える段階を選び直す |
 | `ENGINE_FAILED` | runner（FEMPython・Capacita・JRSNAP・Aggre-SE）が失敗した | メッセージにエンジンの理由がある。入力が原因（解析できない形、照査できない配筋）なら入力を見直す。エンジンそのものはそのエンジンのスキル（`structural-capacita`・`structural-aggrese`・`structural-jrsnap-input`） |
-| `GENERATION_FAILED` | 計算書が組めない、生成中に入力や WebPier が変わった | 入力を生成中に書き換えていないか確かめて、もう一度生成する。帳票が組めないのは WebPier の不具合なので開発者に伝える |
+| `GENERATION_FAILED` | 計算書が組めない、生成中に入力や WebPier が変わった | 入力を生成中に書き換えていないか確かめて、もう一度生成する。帳票が組めないのは WebPier の不具合なので開発者に伝える（例：`0600の帳票を作成できません: … needs 509.85 pt; available width is 406.32 pt` は式が1行に入らない。P7橋脚の 61.39 m の桁に 12 軸が載ったときで、WebPier で直した）。0710・0720 の `組合せ … の荷重図に CASE-… のページがありません` は JRSNAP の荷重図のページが足りない（荷重のないケース。WebPier で直した） |
 | `IO_ERROR` | ファイルの読み書きの失敗 | 下の「パスが長い」 |
 | `INVALID_ARGUMENT` | runner の引数の誤り | MCP からは起きない想定。起きたら開発者に伝える |
 | `RECOVERY_REQUIRED` | 公開に失敗して戻せないファイルがある | MCP の出力先は空なので起きない想定 |
@@ -24,6 +24,8 @@ MCP の側で止まったとき（`ok: false`、`category`）：`engine_unavaila
 - 印字桁より細かい値（`m` で4桁以上など）：丸めた値を書く（何桁で丸めたかを `出典` に）。
 - `杭種`：「直接基礎」以外は計算できない。
 - 支持層の `内部摩擦角_φd` が 25 度未満、支持層が粘性土（0612・0622）。
+- `地盤データ.層: …の層厚の合計 … m が Df（…）を超えます`：支持層より上の層厚の合計が Df（H6＋H5＋min(df1, df2)）より大きい。資料の層厚を、上載土算定の地表面からの深さで写したか確かめる。
+- `鉄筋.柱: La/d = … が1.25未満`：低せん断スパン部材の M-θ の適用範囲（1.25≦La/d＜2）より短い。寸法・桁の高さを確かめる。
 
 ## runner がない
 

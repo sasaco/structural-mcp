@@ -7,7 +7,7 @@ description: WebPier（直接基礎の鉄道 RC 橋脚の設計計算アプリ�
 
 WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 RC 橋脚の荷重計算・照査を行い、A4 白黒の計算書 PDF と結果 JSON（`output/`）、各エンジンの入力と解析結果（`post/`）を作る。骨組解析は FEMPython、柱・フーチング・片持ち梁の断面照査は Capacita、静的非線形解析は JRSNAP、耐震性能照査は Aggre-SE に任せる。structural-mcp はその生成を MCP のツールで公開している。
 
-- 確認した版：WebPier `b6c349c`（headless runner、WebPier の決定61）、structural-mcp `91d7aca`、2026-10-19。
+- 確認した版：WebPier `b6c349c`（headless runner、WebPier の決定61）、structural-mcp `91d7aca`、2026-10-19。決定62〜67（雪荷重・qu の空欄、Df の範囲の複数層、桁の高さが違う橋脚の制御節点、La/d＜2 の柱、節点番号）は WebPier `4ccae9f` で P7橋脚の全段階を実アプリで確認、2026-10-20。決定69（雪のない橋脚は雪荷重のケースを作らない）は `86188f6`（テストのみ、実アプリは未確認）。
 - ソース（開発機のみ。structural-mcp の repo のルートから）：`WebPier/`。仕様は `WebPier/README.md`、用語は `WebPier/CONTEXT.md`。
 - **WebPier の repo の `output/`・`post/`・`pre/` は案件の成果物ではない**（WebPier の開発用の見本 Example橋脚2）。案件の成果物は案件のフォルダーに置く。
 

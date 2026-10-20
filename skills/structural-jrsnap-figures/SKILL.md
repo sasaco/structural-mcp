@@ -24,6 +24,7 @@ JRSNAP の帳票アプリ（`S_DataCheck.exe`・`S_LoadPicture.exe`）には PDF
 - データ確認図：図ごとに `<名前>.pdf`（kind `data-check`）を `--data-check` の順に返す。組合せは `--data-check-combination <n>`（既定 1）。番号図・断面・節点ばねは組合せで変わらないので、ふつうは組合せ1で足りる。
 - 荷重図：組合せごとに `load-diagram-<組合せ>.pdf`（kind `load-diagram`）。その `.ndt` の全ケースを CASE の順に1ケース1ページ。`summary.loadDiagram[].pages` に `{page, case, title}`（`title` は `CASE-<番号> <タイトル>`）。
 - **基本ケースは、それを使う組合せの `.ndt` のページから取る**。JRSNAP は組合せに使わない基本ケースの荷重を0にして `.ndt` を書くので、どのケースをどの組合せのページから取るかは呼び出し側が決める。荷重が0のページもそのまま返る。
+- **荷重の行が1つもない基本ケースのページは作られず、次のページに前のケースの題名が付く**（5.2-L03、2026-10-20、WebPier の P7橋脚で雪荷重が空欄のとき、本物の runner で観測）。「CASE-4 雪荷重」の題名のページに CASE-5 列車荷重の図が描かれ、ページが1枚足りなくなる。ケースとページを番号で照合し、荷重のないケースは `.ndu` に作らないか、値0の荷重を1行書く（WebPier 決定62・69）。
 - `--timeout-seconds` はコマンド全体の時間（既定 600）。補助は順に起動し、それぞれに残りの時間を渡す。所要時間の例：1回の起動は1組合せにつき 6〜7 秒、データ確認図5つと荷重図で `figures` 全体 26〜43 秒（2026-10-18、5.2-L03）。
 - 版は runner の横の `jrsnap-headless.json` で決まる。別の版で試すときは `{"installDir": "C:\\RTRI_Program\\JRSNAP(Ver5.3-L01体験版2)"}` を書いた JSON を `--config <絶対パス>` で渡す。
 - **荷重図は 5.2-L03 だけ**。5.3-L01体験版2 の `S_LoadPicture.exe` は単独では起動するが、補助の2つ目のドメインでは `frmMain` ができる前にアクセス違反になり、`LOAD_DIAGRAM_FAILED`（`AccessViolationException`）を返す。IL を比べても違いは見つからず、原因は調べていない。データ確認図は 5.3 でも動く。
