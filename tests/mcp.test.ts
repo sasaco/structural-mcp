@@ -913,6 +913,30 @@ test("WebPier reports a stage whose runner is missing, and input errors with the
   }
 });
 
+test("WebPier passes a load model's add-in inside the allowed roots by its real path (decision 70)", async () => {
+  const folder = resolve(fixtureRoot, "webpier");
+  const generated = await client.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, stage: "0500", addin: folder } });
+  assert.equal(generated.isError, undefined);
+  assert.equal((generated.structuredContent as unknown as { summary: { addin: string } }).summary.addin, folder);
+  const validated = await client.callTool({ name: "webpier_validate", arguments: { inputPath: webPierInput, addin: folder } });
+  assert.equal((validated.structuredContent as unknown as { summary: { addin: string } }).summary.addin, folder);
+  const plain = await client.callTool({ name: "webpier_validate", arguments: { inputPath: webPierInput } });
+  assert.equal((plain.structuredContent as unknown as { summary: { addin: string | null } }).summary.addin, null);
+  const contract = await client.callTool({ name: "webpier_get_contract", arguments: { addin: folder } });
+  assert.deepEqual((contract.structuredContent as { addin: unknown }).addin,
+    { name: "fake-addin", version: "1", contract: 1, folder });
+  const schema = await client.callTool({ name: "webpier_get_input_schema", arguments: { addin: folder } });
+  assert.equal((schema.structuredContent as { inputSchema: Record<string, unknown> }).inputSchema["x-addin"], folder);
+  for (const [addin, pattern] of [[jobRoot, /outside STRUCTURAL_MCP_ALLOWED_ROOTS/], [webPierInput, /not a folder/],
+    [resolve(fixtureRoot, "missing-addin"), /ENOENT|no such file/]] as const) {
+    for (const name of ["webpier_generate", "webpier_get_contract"]) {
+      const rejected = await client.callTool({ name, arguments: name === "webpier_generate" ? { inputPath: webPierInput, addin } : { addin } });
+      assert.equal(rejected.isError, true);
+      assert.match(JSON.stringify(rejected.structuredContent ?? rejected.content), pattern);
+    }
+  }
+});
+
 test("WebPier lists a JRSNAP folder file by file with distinct artifact IDs", async () => {
   const isolated = await connect({ STRUCTURAL_MCP_JRSNAP_RUNNER: fakeRunner });
   try {

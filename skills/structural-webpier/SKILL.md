@@ -1,6 +1,6 @@
 ---
 name: structural-webpier
-description: WebPier（直接基礎の鉄道 RC 橋脚の設計計算アプリ。structural-mcp の WebPier サブモジュール）で計算書を作るときに使う。0500 直接基礎の地盤ばね・0600 上部工反力・0610/0620 線路方向/直角方向の荷重・0611/0621 柱の断面照査・0612/0622 基礎の照査・0710/0720 地震時荷重・0711/0721 静的非線形解析と耐震性能照査・0800〜0820 フーチング・0900/0910 片持ち梁を、MCP の webpier_get_contract／webpier_get_input_schema／webpier_validate／webpier_generate で作り、成果物を案件の output/・post/ に置く。設計資料から入力 pre/input.json（schema 2）を作る・直す、項目の意味・単位・印字桁を調べる、どの段階とスイッチ（frameAnalysis・nonlinearAnalysis）を選ぶか、要る runner（FEMPython・Capacita・JRSNAP・Aggre-SE）、engineeringStatus（ok・not_ok・not_evaluated）と実行の成否の読み分け、付帯JSONで成果物の新旧を確かめる、入力エラー・RUNNER_UNAVAILABLE・IO_ERROR で失敗したときにも使う。WebPier の実装を直すときは WebPier の repo の開発用スキルを使う。
+description: WebPier（直接基礎の鉄道 RC 橋脚の設計計算アプリ。structural-mcp の WebPier サブモジュール）で計算書を作るときに使う。0500 直接基礎の地盤ばね・0600 上部工反力・0610/0620 線路方向/直角方向の荷重・0611/0621 柱の断面照査・0612/0622 基礎の照査・0710/0720 地震時荷重・0711/0721 静的非線形解析と耐震性能照査・0800〜0820 フーチング・0900/0910 片持ち梁を、MCP の webpier_get_contract／webpier_get_input_schema／webpier_validate／webpier_generate で作り、成果物を案件の output/・post/ に置く。設計資料から入力 pre/input.json（schema 2）を作る・直す、項目の意味・単位・印字桁を調べる、どの段階とスイッチ（frameAnalysis・nonlinearAnalysis）を選ぶか、要る runner（FEMPython・Capacita・JRSNAP・Aggre-SE）、engineeringStatus（ok・not_ok・not_evaluated）と実行の成否の読み分け、付帯JSONで成果物の新旧を確かめる、入力エラー・RUNNER_UNAVAILABLE・IO_ERROR・ADDIN_ERROR で失敗したとき、列車荷重でない橋脚（LRT の車荷重など）を荷重モデルのアドイン（addin、--addin）で計算するときにも使う。WebPier の実装を直すときは WebPier の repo の開発用スキルを使う。
 ---
 
 # WebPier で橋脚の計算書を作る
@@ -51,6 +51,18 @@ WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 R
 - 0711・0721 を含む生成（`nonlinearAnalysis`、0800〜0910）は1方向数分かかり、JRSNAP の画面が出て、JRSNAP のインストール先の共用ファイルを書く。**実行の前に利用者に確かめる**。同じ PC で JRSNAP を同時に動かせない。
 - 段階・依存・成果物の一覧は `references/stages.md`、照査の中身は `references/checks.md`。
 
+## 荷重モデルのアドイン（車荷重など。`addin`）
+
+列車荷重でない橋脚（LRT の車荷重など）は、案件の repo に置く荷重モデルのアドインで計算する（WebPier の決定70、ADR-0010）。`webpier_validate`・`webpier_generate`・`webpier_get_contract`・`webpier_get_input_schema` に `addin`（アドインのフォルダーの絶対パス。`allowedInputRoots` の中）を渡す。CLI・runner は `--addin <フォルダー>`。
+
+- **`addin` を付けないと、エラーにならずに列車荷重で計算される**。アドインのある案件では毎回付ける（付けるのは呼ぶ側の責任）。入力エディタの「計算・印刷」はアドインに対応しない（列車荷重になる）ので、アドインの案件の計算書は MCP か CLI で作る。
+- アドインが持つもの：死荷重以外の支承作用（基本ケースごと・支承ごとの鉛直力、線路方向・直角方向の水平力と作用高さ）、ばねの区分、地震時の固定・増分・限定増分、骨組・地震時・片持ち梁の作用の組合せ、根拠の節、来歴。アプリが持つもの：D1・D2・浮力・躯体の風・橋脚自重の慣性力 EQ2、骨組と片持ち梁の荷重への変換、各 runner、照査、計算書。
+- アドインのとき、入力の荷重モデルの項目（`列車`、各側の `衝撃係数_単線終局`・`曲線半径`・`列車速度`・`遠心作用方向`、支点・支承の雪荷重と `列車分担`）は読まない（値が残っていても空でもよい。`webpier_get_input_schema` に `addin` を付けると `x-webpier-load-model` の印が付く）。アドインの入力（P7 なら `input.addin.json`）はアドインが読む。
+- 組合せのない抽出ケースは断面力0で通り、計算書に「該当する組合せなし（断面力0）」と出る。その抽出ケースで Vd を割る照査（基礎の照査・フーチング）は、抽出ケースの名前を入れた入力エラーになる。
+- 来歴：`summary.addin`、全結果 JSON・全付帯 JSON の `addin` に、アドインの名前・版・約束の版と、アドインが返した来歴がそのまま入る。新旧の確かめに使う。
+- 失敗：`ADDIN_ERROR`（宣言 `webpier-addin.toml` がない、約束の版が違う、import や計算が失敗）はアドインの作者（案件の repo）が直す。`INPUT_ERROR` で場所が `アドイン:<基本ケースの id>…` のものはアドインが返した値の誤り、それ以外の場所のものはアドインの入力か `input.json` の誤り。
+- 確認した版：WebPier（決定70 ①、2026-10-21）。代役の runner で全段階を通した。実際の FEMPython で、組合せのない抽出ケース（ty = 0 の1行）のピックアップ・反力が0になることを確かめた（2026-10-20）。
+
 ## 成果物を置く
 
 `webpier_generate` の成果物は job の中にある（`output/output/…` が案件の `output/`、`output/post/…` が案件の `post/`）。数が多く大きい（計算書 1 つで最大 2MB、JRSNAP の結果は数十MB）ので、MCP サーバーと同じ PC なら補助スクリプトで job から複写する。スクリプトは job の `manifest.json` のバイト数と SHA-256 を全件確かめてから書く。
@@ -70,7 +82,7 @@ node <このスキルのフォルダー>\scripts\place-webpier-outputs.mjs --job
 
 ## runner を直接呼ぶ（スクリプトから使うとき）
 
-`WebPier\run_headless.py`（protocol v1）を、その横の `.venv\Scripts\python.exe -X utf8` で起動する。コマンドは `run --input <JSON> --output-dir <空のフォルダー> [--stage …] [--frame-analysis true|false] [--nonlinear-analysis true|false]`・`validate`・`contract`・`schema`。runner の場所は環境変数（`STRUCTURAL_MCP_FEMPYTHON_RUNNER`・`STRUCTURAL_MCP_WEBDAN_RUNNER`（`.exe`）・`STRUCTURAL_MCP_JRSNAP_RUNNER`・`STRUCTURAL_MCP_AGGRESE_RUNNER`）だけから読む（`.env` は読まない）。値は `get_environment_template`。MCP があるなら MCP を使う。
+`WebPier\run_headless.py`（protocol v1）を、その横の `.venv\Scripts\python.exe -X utf8` で起動する。コマンドは `run --input <JSON> --output-dir <空のフォルダー> [--stage …] [--frame-analysis true|false] [--nonlinear-analysis true|false] [--addin <フォルダー>]`・`validate`・`contract`・`schema`（どれも `--addin` を取る）。runner の場所は環境変数（`STRUCTURAL_MCP_FEMPYTHON_RUNNER`・`STRUCTURAL_MCP_WEBDAN_RUNNER`（`.exe`）・`STRUCTURAL_MCP_JRSNAP_RUNNER`・`STRUCTURAL_MCP_AGGRESE_RUNNER`）だけから読む（`.env` は読まない）。値は `get_environment_template`。MCP があるなら MCP を使う。
 
 ## うまくいかないとき
 

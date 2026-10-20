@@ -12,6 +12,7 @@ import {
   loadManifest,
   readArtifact,
   readTextArtifact,
+  resolveAddinFolder,
   resolveInputPath,
   saveManifest,
   verifyArtifacts,
@@ -293,9 +294,16 @@ const webPierContractSchema = z.object({
   switches: z.array(z.unknown()),
   runners: z.array(z.unknown()),
   selections: z.array(webPierSelectionSchema),
+  addin: z.object({ name: z.string(), version: z.string(), contract: z.number() }).passthrough().optional(),
 }).passthrough();
 
+const webPierAddinShape = {
+  addin: z.string().min(1).optional()
+    .describe("荷重モデルのアドインのフォルダー（webpier-addin.tomlのあるフォルダー、STRUCTURAL_MCP_ALLOWED_ROOTSの中のパス。CLIの--addin）。付けなければ列車荷重（標準の荷重モデル）で計算する。付けたときは入力の荷重モデルの項目（列車・衝撃係数・曲線半径・列車速度・遠心作用方向・支承の雪荷重と列車分担）は読まない"),
+};
+
 const webPierSelectionShape = {
+  ...webPierAddinShape,
   stage: z.string().regex(/^(?:all|\d{4})$/).default("all")
     .describe("計算段階（0500・0610・0612 など、またはall）。使える段階はwebpier_get_contractで確認する"),
   frameAnalysis: z.boolean().default(false)
@@ -304,8 +312,18 @@ const webPierSelectionShape = {
     .describe("stage=allに静的非線形解析（JRSNAP・Aggre-SE）の選択式の段階を加える（CLIの--nonlinear-analysis）。1方向数分かかり、JRSNAPの画面が出る"),
 };
 
-function webPierOptions(stage: string, frameAnalysis: boolean, nonlinearAnalysis: boolean): string[] {
-  return ["--stage", stage, "--frame-analysis", String(frameAnalysis), "--nonlinear-analysis", String(nonlinearAnalysis)];
+function webPierOptions(stage: string, frameAnalysis: boolean, nonlinearAnalysis: boolean, addin?: string): string[] {
+  return ["--stage", stage, "--frame-analysis", String(frameAnalysis), "--nonlinear-analysis", String(nonlinearAnalysis),
+    ...webPierAddinOptions(addin)];
+}
+
+/** --addin with the real path of the add-in folder, which must be inside STRUCTURAL_MCP_ALLOWED_ROOTS (decision 70). */
+async function webPierAddin(addin: string | undefined, config: AppConfig): Promise<string | undefined> {
+  return addin === undefined ? undefined : await resolveAddinFolder(addin, config);
+}
+
+function webPierAddinOptions(addin?: string): string[] {
+  return addin === undefined ? [] : ["--addin", addin];
 }
 
 function invalidSourceSelection(inputPath: string | undefined, input: string | undefined) {
@@ -796,14 +814,15 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("webpier_get_input_schema", {
     title: "Get WebPier input schema",
-    description: "WebPier（鉄道橋脚の設計計算）の入力 schema 2 のJSON Schemaを返します。項目表（fields.py）から作った項目・型・選択肢・範囲・単位（x-webpier-unit）・印字桁（x-webpier-digits）で、必須の項目と項目間の規則は書いていません（webpier_validateで確かめる）。空欄はnullで、資料から決まらない値は推測せずユーザーに確認してください。",
-    inputSchema: {},
+    description: "WebPier（鉄道橋脚の設計計算）の入力 schema 2 のJSON Schemaを返します。項目表（fields.py）から作った項目・型・選択肢・範囲・単位（x-webpier-unit）・印字桁（x-webpier-digits）で、必須の項目と項目間の規則は書いていません（webpier_validateで確かめる）。空欄はnullで、資料から決まらない値は推測せずユーザーに確認してください。addin（荷重モデルのアドイン）を付けると、荷重モデルの項目にx-webpier-load-modelの印が付きます（読まない項目）。",
+    inputSchema: { ...webPierAddinShape },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-  }, async () => {
+  }, async ({ addin }) => {
     if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
     try {
-      const envelope = await runEngine(config.webPierRunner, "schema", "webpier", null, null, [], config,
-        { environment: webPierEnvironment(config) });
+      const folder = await webPierAddin(addin, config);
+      const envelope = await runEngine(config.webPierRunner, "schema", "webpier", null, null,
+        webPierAddinOptions(folder), config, { environment: webPierEnvironment(config) });
       const summary = z.object({ schema: z.record(z.string(), z.unknown()) }).passthrough().parse(envelope.summary);
       return textResponse({
         schemaVersion: 1,
@@ -816,14 +835,15 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("webpier_get_contract", {
     title: "Get WebPier stages and their runners",
-    description: "WebPierの段階（0500〜0910）の依存・選択式のスイッチ・必要なrunner・公開するファイルと、いまの環境で各選択（stage=allとスイッチの4通り、各段階の直接選択）を生成できるか（available、missingRunners）を返します。webpier_generateの前に呼んでください。",
-    inputSchema: {},
+    description: "WebPierの段階（0500〜0910）の依存・選択式のスイッチ・必要なrunner・公開するファイルと、いまの環境で各選択（stage=allとスイッチの4通り、各段階の直接選択）を生成できるか（available、missingRunners）を返します。webpier_generateの前に呼んでください。addin（荷重モデルのアドイン）を付けると、アドインを読めるかを確かめ、その宣言（名前・版・約束の版）も返します。",
+    inputSchema: { ...webPierAddinShape },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-  }, async () => {
+  }, async ({ addin }) => {
     if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
     try {
-      const envelope = await runEngine(config.webPierRunner, "contract", "webpier", null, null, [], config,
-        { environment: webPierEnvironment(config) });
+      const folder = await webPierAddin(addin, config);
+      const envelope = await runEngine(config.webPierRunner, "contract", "webpier", null, null,
+        webPierAddinOptions(folder), config, { environment: webPierEnvironment(config) });
       const contract = webPierContractSchema.parse(envelope.summary);
       const runners = webPierRunners(config);
       const detected = new Set(runners.filter((runner) => runner.path !== null).map((runner) => runner.engine as string));
@@ -841,6 +861,7 @@ export function createServer(config: AppConfig): McpServer {
         switches: contract.switches,
         selections,
         unavailableStages,
+        ...(contract.addin === undefined ? {} : { addin: contract.addin }),
         generationTool: "webpier_generate",
       }, unavailableStages.length === 0
         ? "WebPierの全段階を生成できます。"
@@ -853,15 +874,16 @@ export function createServer(config: AppConfig): McpServer {
     description: "WebPierの入力（schema 2のJSON）を、runnerを呼ばずに決まる範囲（厳密な解析、選んだ段階と依存段階の計算、外部出力・Aggre-SEプロジェクトの入力）で検証します。入力エラーはmessages・errorsのpathに項目のパス（例: 下部構造.寸法.側面.B1）が入ります。summary.requiredRunnersにこの選択が呼ぶrunnerを返します。inputPath（案件のpre/input.json）またはinputのどちらか一方だけを指定してください。",
     inputSchema: { ...sourceShape, ...webPierSelectionShape },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis }) => {
+  }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis, addin }) => {
     const sourceError = invalidSourceSelection(inputPath, input);
     if (sourceError) return sourceError;
     if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
     try {
+      const folder = await webPierAddin(addin, config);
       return await calculate({
         tool: "webpier_validate", engine: "webpier", runnerPath: config.webPierRunner,
         command: "validate", extensions: [".json"], jobExtension: ".json",
-        runnerOptions: webPierOptions(stage, frameAnalysis, nonlinearAnalysis), label: "WebPier 入力検証",
+        runnerOptions: webPierOptions(stage, frameAnalysis, nonlinearAnalysis, folder), label: "WebPier 入力検証",
         environment: webPierEnvironment(config),
         prepareJob: () => createNamedJsonJob(inputPath, input, "input.json", config),
       }, undefined, undefined, config);
@@ -873,15 +895,16 @@ export function createServer(config: AppConfig): McpServer {
     description: "WebPierで橋脚の設計計算をし、計算書PDF・結果JSON（output/）と外部プログラムの入力・解析結果・付帯JSON（post/）をjob成果物として返します。CLIと同じ生成で、同じバイトです。artifactsのrelativePathはoutput/output/…・output/post/…で、案件のoutput/・post/へはread_artifactで取得しSHA-256を確かめてからclient側で置きます。engineeringStatusは段階ごと（summary.stages。0612・0622はok/not_ok、ほかはnot_evaluated）と全体で、実行の成否（ok）とは別です。先にwebpier_get_contractで使える段階を確かめ、webpier_validateで入力を検証してください。inputPathまたはinputのどちらか一方だけを指定してください。",
     inputSchema: { ...sourceShape, ...webPierSelectionShape },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis }) => {
+  }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis, addin }) => {
     const sourceError = invalidSourceSelection(inputPath, input);
     if (sourceError) return sourceError;
     if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
     try {
+      const folder = await webPierAddin(addin, config);
       return await calculate({
         tool: "webpier_generate", engine: "webpier", runnerPath: config.webPierRunner,
         command: "run", extensions: [".json"], jobExtension: ".json",
-        runnerOptions: webPierOptions(stage, frameAnalysis, nonlinearAnalysis), label: "WebPier 計算書作成",
+        runnerOptions: webPierOptions(stage, frameAnalysis, nonlinearAnalysis, folder), label: "WebPier 計算書作成",
         requiredArtifacts: [], timeoutMs: config.webPierTimeoutMs, environment: webPierEnvironment(config),
         prepareJob: () => createNamedJsonJob(inputPath, input, "input.json", config),
       }, undefined, undefined, config);

@@ -56,10 +56,11 @@ if (command === "contract") {
     runners: Object.entries(runnerKeys).map(([engine, environmentVariable]) => ({ engine, environmentVariable })),
     selections: [selection("all", false, false), selection("all", true, false), selection("all", false, true),
       selection("all", true, true), ...stages.map((item) => selection(item.id, false, false))],
+    ...(options.has("--addin") ? { addin: { name: "fake-addin", version: "1", contract: 1, folder: options.get("--addin") } } : {}),
   });
 } else if (command === "schema") {
   envelope(true, { command, schema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object",
-    properties: { schema_version: { const: 2 } } } });
+    properties: { schema_version: { const: 2 } }, ...(options.has("--addin") ? { "x-addin": options.get("--addin") } : {}) } });
 } else if (command === "run" || command === "validate") {
   const inputPath = options.get("--input");
   const outputDirectory = options.get("--output-dir");
@@ -70,7 +71,7 @@ if (command === "contract") {
   const document = JSON.parse(bytes.toString("utf8"));
   const chosen = selected(stage, frame, nonlinear);
   const summary = {
-    command, stage, frameAnalysis: frame, nonlinearAnalysis: nonlinear,
+    command, stage, frameAnalysis: frame, nonlinearAnalysis: nonlinear, addin: options.get("--addin") ?? null,
     input: { file: basename(inputPath), sha256: createHash("sha256").update(bytes).digest("hex") },
     environment: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith("STRUCTURAL_MCP_"))),
     environmentKeys: Object.keys(process.env).filter((key) => !/^(?:=|COVERAGE)/.test(key)).sort(),

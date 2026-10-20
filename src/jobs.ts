@@ -25,6 +25,16 @@ export async function resolveInputPath(inputPath: string, config: AppConfig): Pr
   return resolved;
 }
 
+/** A WebPier load model's add-in folder (decision 70): a directory inside STRUCTURAL_MCP_ALLOWED_ROOTS, by its real path. */
+export async function resolveAddinFolder(folder: string, config: AppConfig): Promise<string> {
+  const resolved = await realpath(resolve(folder));
+  if (!config.allowedInputRoots.some((root) => isInside(root, resolved))) {
+    throw new Error("addin folder is outside STRUCTURAL_MCP_ALLOWED_ROOTS");
+  }
+  if (!(await stat(resolved)).isDirectory()) throw new Error("addin is not a folder");
+  return resolved;
+}
+
 export interface PreparedJob {
   jobId: string;
   directory: string;
