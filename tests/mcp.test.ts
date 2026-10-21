@@ -778,10 +778,10 @@ test("a missing Aggre-SE runner disables only its tools", async () => {
   } finally { await isolated.close(); }
 });
 
-// It chooses the 出力項目 ground_model, reactions, longitudinal and longitudinal_frame_analysis (WebPier decision 72),
-// which are the fake runner's 0500, 0610 and 0612.
+// It chooses the 出力項目 detailing, ground_model, reactions, longitudinal and longitudinal_frame_analysis (WebPier
+// decisions 72 and 73), which are the fake runner's 0400, 0500, 0610 and 0612.
 const webPierInput = resolve(fixtureRoot, "webpier/pier-input.json");
-const webPierItems = ["ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis", "transverse",
+const webPierItems = ["detailing", "ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis", "transverse",
   "transverse_frame_analysis", "longitudinal_seismic", "longitudinal_nonlinear_analysis", "transverse_seismic",
   "transverse_nonlinear_analysis", "footing", "cantilever"];
 
@@ -824,7 +824,7 @@ test("the WebPier contract says which output items the detected runners can gene
   assert.deepEqual(contract.runners.map(({ engine, available }) => [engine, available]),
     [["fempython", true], ["jrsnap", false], ["webdan2", true], ["aggrese", true]]);
   assert.deepEqual(contract.outputs.map((output) => output.key), webPierItems);
-  assert.deepEqual(contract.stages.map(({ id, output }) => [id, output]), [["0500", "ground_model"],
+  assert.deepEqual(contract.stages.map(({ id, output }) => [id, output]), [["0400", "detailing"], ["0500", "ground_model"],
     ["0610", "longitudinal"], ["0612", "longitudinal_frame_analysis"], ["0711", "longitudinal_nonlinear_analysis"]]);
   // An item needs the runners of the items it uses too: the footing and the cantilever use the nonlinear analysis.
   assert.deepEqual(contract.unavailableOutputs, ["longitudinal_nonlinear_analysis", "footing", "cantilever"]);
@@ -863,8 +863,10 @@ test("WebPier generates the input's output items from the project's input with o
   const manifest = result.structuredContent as unknown as WebPierManifest;
   assert.equal(manifest.engine, "webpier");
   assert.equal(manifest.engineeringStatus, "not_ok");
-  assert.deepEqual(manifest.summary.outputs, ["ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis"]);
+  assert.deepEqual(manifest.summary.outputs,
+    ["detailing", "ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis"]);
   assert.deepEqual(manifest.summary.stages, [
+    { id: "0400", stem: "0400_照査の前提", engineeringStatus: "ok" },
     { id: "0500", stem: "0500_直接基礎", engineeringStatus: "not_evaluated" },
     { id: "0610", stem: "0610_線路方向荷重", engineeringStatus: "not_evaluated" },
     { id: "0612", stem: "0612_線路方向基礎", engineeringStatus: "not_ok" },
@@ -885,6 +887,8 @@ test("WebPier generates the input's output items from the project's input with o
     ...Object.keys(manifest.summary.environment)]);
   assert.deepEqual(manifest.summary.environmentKeys.filter((key) => !allowed.has(key)), []);
   assert.deepEqual(manifest.artifacts.map(({ artifactId, relativePath }) => [artifactId, relativePath]), [
+    ["0400-pdf", "output/output/0400_照査の前提.pdf"],
+    ["0400-json", "output/output/0400_照査の前提.json"],
     ["0500-pdf", "output/output/0500_直接基礎.pdf"],
     ["0500-json", "output/output/0500_直接基礎.json"],
     ["0610-pdf", "output/output/0610_線路方向荷重.pdf"],
@@ -908,6 +912,14 @@ test("WebPier generates the input's output items from the project's input with o
   const plain = inline.structuredContent as unknown as WebPierManifest;
   assert.equal(plain.summary.input.file, "input.json");
   assert.deepEqual(plain.summary.stages.map((stage) => stage.id), ["0500"]);
+  assert.equal(plain.engineeringStatus, "not_evaluated");
+
+  // The 照査の前提 (0400, decision 73) uses no other item and no runner, and judges ok or not_ok.
+  const detailing = await client.callTool({ name: "webpier_generate", arguments: { input: await webPierChoosing("detailing") } });
+  assert.equal(detailing.isError, undefined);
+  const premises = detailing.structuredContent as unknown as WebPierManifest;
+  assert.deepEqual(premises.summary.stages, [{ id: "0400", stem: "0400_照査の前提", engineeringStatus: "ok" }]);
+  assert.equal(premises.engineeringStatus, "ok");
 });
 
 test("WebPier reports an output item whose runner is missing, and input errors with their path", async () => {

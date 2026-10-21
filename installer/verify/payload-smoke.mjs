@@ -225,12 +225,12 @@ try {
     await calculate("aggrese_calculate", null, { inputPath, generateSummaryExcel: true }, ["result.json", "summary.xlsx"]);
   }
   if (!values["skip-webpier"]) {
-    // JRSNAPHeadless is not bundled: the 出力項目 before the seismic ones (0500-0622) are generated in one generation of
-    // the input choosing them (WebPier decision 72), and the JRSNAP ones are reported missing.
+    // JRSNAPHeadless is not bundled: the 出力項目 before the seismic ones (0400-0622) are generated in one generation of
+    // the input choosing them (WebPier decisions 72 and 73), and the JRSNAP ones are reported missing.
     const contract = await call("webpier_get_contract");
     const items = new Map(contract.outputs.map(output => [output.key, output]));
-    const withoutJrsnap = ["ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis", "transverse",
-      "transverse_frame_analysis"];
+    const withoutJrsnap = ["detailing", "ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis",
+      "transverse", "transverse_frame_analysis"];
     for (const key of withoutJrsnap) assert.equal(items.get(key)?.available, true, `WebPier ${key} must be available without JRSNAP`);
     for (const key of ["longitudinal_seismic", "transverse_seismic"]) {
       assert.deepEqual(items.get(key)?.missingRunners, ["jrsnap"], `WebPier ${key} must report JRSNAP missing`);
@@ -245,9 +245,9 @@ try {
       sha256: createHash("sha256").update(await readFile(inputPath)).digest("hex") };
     const validated = await call("webpier_validate", { inputPath });
     assert.equal(validated.ok, true, "WebPier input did not validate");
-    const stages = ["0500", "0600", "0610", "0611", "0612", "0620", "0621", "0622"];
-    assert.deepEqual(validated.summary.stages, stages, "WebPier input must choose the stages 0500-0622");
-    progress("Running webpier_generate (0500-0622) and checking its artifacts...");
+    const stages = ["0400", "0500", "0600", "0610", "0611", "0612", "0620", "0621", "0622"];
+    assert.deepEqual(validated.summary.stages, stages, "WebPier input must choose the stages 0400-0622");
+    progress("Running webpier_generate (0400-0622) and checking its artifacts...");
     const result = await call("webpier_generate", { inputPath });
     assert.equal(result.ok, true, `webpier_generate failed: ${JSON.stringify(result.errors ?? result.messages)}`);
     assert.equal(result.executionStatus, "success");
@@ -259,7 +259,7 @@ try {
     evidence.engines.push({ tool: "webpier_generate", outputs: withoutJrsnap, jobId: result.jobId, executionStatus: result.executionStatus,
       engineeringStatus: result.engineeringStatus, artifacts: result.artifacts.map(({ relativePath, name, bytes, sha256 }) => ({ path: relativePath ?? name, bytes, sha256 })) });
     progress(`webpier_generate complete: ${result.artifacts.length} verified artifacts.`);
-    evidence.checks.push("WebPier stages 0500-0622 without JRSNAP, artifacts SHA-256/PDF checks");
+    evidence.checks.push("WebPier stages 0400-0622 without JRSNAP, artifacts SHA-256/PDF checks");
   }
   {
     // Skills are copied into an isolated home and removed again; the real Claude Code / Codex folders are not used.

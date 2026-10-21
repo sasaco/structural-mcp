@@ -423,7 +423,7 @@ export function createServer(config: AppConfig): McpServer {
         inputFormats: [".json（schema 2）", "inline-json"],
         outputFormats: ["pdf", "json", "pik", "csv", "ndu", "wdj", "xml", "xlsx", "JRSNAPの解析結果"],
         runners: webPierRunners(config).map(({ engine, environmentVariable, path }) => ({ engine, environmentVariable, available: path !== null })),
-        stageAvailability: "段階ごとに要るrunnerが違います。webpier_get_contractで使える段階を確かめてください（JRSNAPがなければ0500・0600・0610〜0622だけ）。",
+        stageAvailability: "段階ごとに要るrunnerが違います。webpier_get_contractで使える段階を確かめてください（JRSNAPがなければ0400・0500・0600・0610〜0622だけ）。",
         timeoutMs: config.webPierTimeoutMs,
         tools: ["webpier_get_input_schema", "webpier_get_contract", "webpier_validate", "webpier_generate"],
       },
@@ -819,7 +819,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("webpier_get_contract", {
     title: "Get WebPier stages and their runners",
-    description: "WebPierの段階（0500〜0910）と、入力のoutputs（出力項目）ごとの段階・使う項目・必要なrunner・公開するファイル、いまの環境で各出力項目を生成できるか（available、missingRunners。使う項目のrunnerも含む）を返します。作る計算書は入力のoutputsだけで決まります（引数では選びません）。webpier_generateの前に呼んでください。addin（荷重モデルのアドイン）を付けると、アドインを読めるかを確かめ、その宣言（名前・版・約束の版）も返します。",
+    description: "WebPierの段階（0400〜0910）と、入力のoutputs（出力項目）ごとの段階・使う項目・必要なrunner・公開するファイル、いまの環境で各出力項目を生成できるか（available、missingRunners。使う項目のrunnerも含む）を返します。作る計算書は入力のoutputsだけで決まります（引数では選びません）。webpier_generateの前に呼んでください。addin（荷重モデルのアドイン）を付けると、アドインを読めるかを確かめ、その宣言（名前・版・約束の版）も返します。",
     inputSchema: { ...webPierAddinShape },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ addin }) => {
@@ -874,7 +874,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("webpier_generate", {
     title: "Generate WebPier pier design reports",
-    description: "WebPierで橋脚の設計計算をし、入力のoutputs（出力項目、12項目のtrue/false。使う項目もtrueが必要。段階は引数では選ばない）が選ぶ計算書PDF・結果JSON（output/）、WebPierが組む頁の方眼Excel（export/）と外部プログラムの入力・解析結果・付帯JSON（post/）をjob成果物として返します。CLIと同じ生成で、同じバイトです。artifactsのrelativePathはoutput/output/…・output/export/…・output/post/…で、案件のoutput/・export/・post/へはread_artifactで取得しSHA-256を確かめてからclient側で置きます。engineeringStatusは段階ごと（summary.stages。0612・0622はok/not_ok、ほかはnot_evaluated）と全体で、実行の成否（ok）とは別です。先にwebpier_get_contractで使える出力項目を確かめ、webpier_validateで入力を検証してください。inputPathまたはinputのどちらか一方だけを指定してください。",
+    description: "WebPierで橋脚の設計計算をし、入力のoutputs（出力項目、13項目のtrue/false。使う項目もtrueが必要。段階は引数では選ばない）が選ぶ計算書PDF・結果JSON（output/）、WebPierが組む頁の方眼Excel（export/）と外部プログラムの入力・解析結果・付帯JSON（post/）をjob成果物として返します。CLIと同じ生成で、同じバイトです。artifactsのrelativePathはoutput/output/…・output/export/…・output/post/…で、案件のoutput/・export/・post/へはread_artifactで取得しSHA-256を確かめてからclient側で置きます。engineeringStatusは段階ごと（summary.stages。0400・0612・0622はok/not_ok、ほかはnot_evaluated）と全体で、実行の成否（ok）とは別です。先にwebpier_get_contractで使える出力項目を確かめ、webpier_validateで入力を検証してください。inputPathまたはinputのどちらか一方だけを指定してください。",
     inputSchema: { ...sourceShape, ...webPierAddinShape },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ inputPath, input, addin }) => {

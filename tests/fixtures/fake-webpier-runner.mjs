@@ -1,5 +1,5 @@
 // A stand-in for WebPier's run_headless.py (protocol v1): the commands, the envelope, the output/ and post/ layout
-// and the error codes of the real runner, with four stages of four of its 出力項目 (WebPier decision 72: the input's
+// and the error codes of the real runner, with five stages of five of its 出力項目 (WebPier decision 72: the input's
 // outputs choose the stages; no argument does). The summary reports what the runner received: its arguments, the
 // input's name and SHA-256, and the environment, so the tests can check what the server passes.
 import { createHash } from "node:crypto";
@@ -20,7 +20,7 @@ const runnerKeys = {
 };
 // The 出力項目 and the items each uses, as WebPier's inputs/outputs.py has them.
 const items = [
-  ["ground_model", []], ["reactions", []], ["longitudinal", ["ground_model", "reactions"]],
+  ["detailing", []], ["ground_model", []], ["reactions", []], ["longitudinal", ["ground_model", "reactions"]],
   ["longitudinal_frame_analysis", ["longitudinal"]], ["transverse", ["ground_model", "reactions"]],
   ["transverse_frame_analysis", ["transverse"]], ["longitudinal_seismic", ["longitudinal"]],
   ["longitudinal_nonlinear_analysis", ["longitudinal_seismic"]], ["transverse_seismic", ["transverse"]],
@@ -32,6 +32,7 @@ const items = [
 const requires = new Map(items);
 // id, stem, its 出力項目, runners it calls, engineering status, its post files.
 const stages = [
+  { id: "0400", stem: "0400_照査の前提", output: "detailing", runners: [], status: "ok", post: [] },
   { id: "0500", stem: "0500_直接基礎", output: "ground_model", runners: [], status: "not_evaluated", post: [] },
   { id: "0610", stem: "0610_線路方向荷重", output: "longitudinal", runners: ["fempython"], status: "not_evaluated", post: [["frameweb", "線路方向.json"]] },
   { id: "0612", stem: "0612_線路方向基礎", output: "longitudinal_frame_analysis", runners: ["fempython"], status: "not_ok", post: [["pik", "線路方向.pik"], ["reaction", "線路方向_ピックアップ反力.csv"]] },
