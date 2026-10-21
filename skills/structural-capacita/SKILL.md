@@ -1,6 +1,6 @@
 ---
 name: structural-capacita
-description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く、断面力0で飛ばされる照査（WD-1901〜1913）や WD-408〜410 の警告、WD-1001「有効な算出点がありません」・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
+description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
 ---
 
 # Capacita で RC 断面照査を行う
@@ -41,12 +41,14 @@ dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォ
 - **`--pickup` で取り込むなら `bar[].position` を書かない。** 取込みは着目点の `position` と照合し、`"6.250"` のような値は不一致になる。
 - `calc.print_section_force_checked: true` で断面力一覧表（曲げ・せん断の2頁）が先頭に付く（節 `section_forces`）。断面力入力モードでは効かない。
 - `conditions_list`（JR-001・JR-004）は RcDan が読むが計算に使わない。入力しても結果は変わらない。
-- 安全係数表：復旧性（損傷）地震時以外の γi は運輸機構・JR各社 1.2、JR東日本だけ 1.0（WebDanforJS の `safety-factors-material-strengths.service.ts` の例外に合わせた）。
+- 安全係数表：行6（H16 の復旧性（損傷）地震時以外、R5 の使用性（損傷））の γi は運輸機構・JR各社 1.2、JR東日本だけ 1.0（WebDanforJS の `safety-factors-material-strengths.service.ts` の例外に合わせた）。WebDanforJS の `default_safety_factor` は H16 と R5 で同じ値で、違うのは行6 の名前だけ（コードで確認、2026-10-21）。
 - 旧 WebDan で作った計算書と今の Capacita では耐力が少し違うことがある（同じ WDJ を今の Capacita で計算しても同じ差が出るので、旧 WebDan との違い。照査値は一致した例がある）。
 
-## 断面力0で飛ばされる照査（WD-1901〜1913）
+## 断面力0で飛ばされる照査（H16 は WD-1901〜1913、R5 は WD-1914〜1926）
 
-RcDan（`VerificationControl.CheckValidation`）は断面力0の照査の節を作らず、info のメッセージで知らせる（コードは `ErrorMessage_1000_1999.cs` の `ZeroForce_RailH16_*`、H16 はどの機関も共通）。
+RcDan（`VerificationControl.CheckValidation`）は断面力0の照査の節を作らず、info のメッセージで知らせる（コードは `ErrorMessage_1000_1999.cs` の `ZeroForce_RailH16_*`・`ZeroForce_RailR5_*`、どちらもどの機関も共通）。**基準でコードが違う**ので、省略を節と照合する側（WebPier など）は基準に合わせる。H16 のコードのまま R5 の WDJ を照合すると、省略の欠けを説明できずに止まる。
+
+H16（id 0・1・2）：
 
 | コード | 飛ばす照査 | 条件 |
 |---|---|---|
@@ -64,8 +66,27 @@ RcDan（`VerificationControl.CheckValidation`）は断面力0の照査の節を�
 | WD-1912 | 復旧性のねじり | |
 | WD-1913 | 復旧性 地震時のねじり | |
 
+R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで確認 2026-10-21。1914・1919 は本物の runner でも確認）：
+
+| コード | 飛ばす照査（節 ID） | 条件 |
+|---|---|---|
+| WD-1914 | 使用性（外観）の曲げ（`bending_serviceability`） | 永久作用の Md＝0 かつ引張軸力なし |
+| WD-1915 | 安全性（破壊）の曲げ（`bending_safety_destruction`） | |
+| WD-1916 | 安全性（疲労破壊）の曲げ（`bending_safety_fatigue`） | |
+| WD-1917 | 使用性（損傷）の曲げ（`bending_restorability`） | |
+| WD-1918 | 復旧性（損傷）の曲げ（`bending_restorability_eq`） | |
+| WD-1919 | 耐久性のせん断（`shear_durability`） | 永久＋変動の Vd＝0 |
+| WD-1920 | 安全性（破壊）のせん断（`shear_safety_destruction`） | |
+| WD-1921 | 使用性（損傷）のせん断（`shear_restorability`） | |
+| WD-1922 | 復旧性（損傷）のせん断（`shear_restorability_eq`） | |
+| WD-1923 | 耐久性のねじり（`torsion_durability`） | |
+| WD-1924 | 安全性（破壊）のねじり（`torsion_safety_destruction`） | |
+| WD-1925 | 使用性（損傷）のねじり（`torsion_restorability`） | |
+| WD-1926 | 復旧性（損傷）のねじり（`torsion_restorability_eq`） | |
+
 - 耐久性の曲げは省略しない（全断面圧縮なら「省略判定」として頁を出す）。
-- 左右対称の永久作用（例：橋脚の直角方向）では 1901・1906 が出る。
+- R5 の最小鉄筋量（`bending_rebar_amount`）に断面力0の省略のコードはない（Nd＝0 でも計算する。下の「R5 の最小鉄筋量と最大鉄筋量」）。
+- 左右対称の永久作用（例：橋脚の直角方向）では H16 は 1901・1906、R5 は 1914・1919 が出る。
 - 断面力入力モードで与えない限界状態の照査は、WD-19xx ではなく warn の WD-408（曲げ）／WD-409（せん断）／WD-410（ねじり）で、印刷されず `reportSections` にも出ない。
 
 ## 令和5年の基準（R5_Rail など）で使うとき（2026-10-19、Capacita a29c9b4 の本物の runner で確認）
@@ -77,6 +98,17 @@ RcDan（`VerificationControl.CheckValidation`）は断面力0の照査の節を�
 - 照査値と OK/NG の総括表 `summary.xlsx` は WDJ の `calc.print_summary_table_checked: true` で返る（成果物 kind `spreadsheet`）。`--summary-xlsx` という引数は runner に無い（付けても無視される）。計算書の節は変わらない。
 - 対称な配筋（上下が同じ）では、着目断面力が小さいほうの引張側を飛ばす info（WD-16xx。確認したのは 1618・1619・1622・1625・1628）が出る。照査の省略（WD-19xx）ではない。
 - `members[].g_name` は各頁の右上に `[g_name]` で出る。1つの計算書に複数の骨組の計算書を並べるときは、名前に骨組を入れると頁を区別できる。
+- 行6（使用性（損傷））の節は `bending_restorability`・`shear_restorability`・`torsion_restorability`、見出しは「使用性（損傷）曲げモーメントの照査結果」など。行7 は `*_restorability_eq` で「復旧性（損傷）…」（JR各社・運輸機構・JR東日本とも。コードで確認、2026-10-21）。
+
+### R5 の最小鉄筋量と最大鉄筋量（`bending_rebar_amount`、2026-10-21、Capacita 5104588 で確認）
+
+- 行8「最小鉄筋量」の断面力（断面力入力モードでは `Md8_Md`・`Md8_Nd`、`--pickup` では `pickup_moment` の id 8 の `no`）から、R5 系（id 3・4・8）は同じ節に2つの表を新しいページから印刷する。H16 系は Mcrd/Myd の表だけで変わらない。
+- 「最小鉄筋量の照査結果」：Mcrd/Myd の行（ρm 1.3、γc 1.0・γs 1.0・γb 1.1 固定）に続けて、軸方向力の最大値から定まる最小鉄筋量 As ≧ 0.008Ac の行（N'd・f'ck・γc・f'cd・f'yd・kc・γi・γb・Ac・0.008Ac・As・0.008Ac/As）。Ac＝γi·γb·N'd/(kc·f'cd＋0.008f'yd)、kc＝min(1−0.003f'ck, 0.85)。γi 1.0・γb 1.3・γc 1.3・γs 1.0 は固定で、WDJ の安全係数は使わない。N'd は行8 の最大圧縮（引張なら 0）、As は側方鉄筋を含む全軸方向鉄筋。照査結果は Mcrd/Myd と 0.008Ac/As の両方が OK で OK。
+- 「最大鉄筋量の照査結果」：pt＝Ast/(b·d) ≦ 0.75pb（行 pt/0.75pb）。pb は釣合状態の式で、σ's は xb＝ε'cu/(ε'cu+εsy)·d の圧縮鉄筋のひずみから Es·ε's（0〜f'syd、圧縮鉄筋がなければ 0）。b は換算矩形の幅（T形はウェブ幅）、γc 1.3・γs 1.0 固定。
+- N'd＝0（フーチングなど）でも落ちない：Ac＝0、0.008Ac＝0、0.008Ac/As＝0.000 で OK、pb は N'd の項なし。
+- 見本の照合（コードと本物の runner で確認）：N'd 7592.8 kN・f'ck 24・SD390 → Ac 524690.5 mm²・0.008Ac 4197.5 mm²。b 3940・d 1558.4・圧縮鉄筋なし → pb 1.750 %、0.75pb 1.313 %、pt 0.297 %（D38-16）。
+- 総括表（`summary.xlsx`）と検討結果一覧の最小鉄筋量は Mcrd/Myd だけ（0.008Ac と最大鉄筋量は計算書の表にだけある）。
+- 耐久性（R5）：ひび割れ幅は H16 と同じ式 Wd＝1.1·k1·k2·k3·k4·{4c＋0.7(cs−φ)}·(σse/Es＋ε'csd) で、`crack[].k4` も掛かる。省略判定は σct ≦ σbl かつ σs ≦ σsl（R5 は σs が超えると「省略不可」でひび割れ幅を計算。H16 は「省略判定外」で NG）。σc ≦ 0.4f'cd も同じ節で照査する。
 
 ## 配筋の既定と数え方
 
