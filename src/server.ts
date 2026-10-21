@@ -280,10 +280,10 @@ function webPierEnvironment(config: AppConfig): Record<string, string> {
     runner.path === null ? [] : [[runner.environmentVariable, runner.path]]));
 }
 
-const webPierSelectionSchema = z.object({
-  stage: z.string(),
-  frameAnalysis: z.boolean(),
-  nonlinearAnalysis: z.boolean(),
+/** One 出力項目 of the input (WebPier decision 72): its stages, the items it uses, and the runners choosing it calls. */
+const webPierOutputSchema = z.object({
+  key: z.string(),
+  requires: z.array(z.string()),
   stages: z.array(z.string()),
   runners: z.array(z.string()),
   files: z.array(z.object({ role: z.string(), path: z.string(), folder: z.boolean() }).passthrough()),
@@ -291,9 +291,8 @@ const webPierSelectionSchema = z.object({
 
 const webPierContractSchema = z.object({
   stages: z.array(z.object({ id: z.string() }).passthrough()),
-  switches: z.array(z.unknown()),
   runners: z.array(z.unknown()),
-  selections: z.array(webPierSelectionSchema),
+  outputs: z.array(webPierOutputSchema),
   addin: z.object({ name: z.string(), version: z.string(), contract: z.number() }).passthrough().optional(),
 }).passthrough();
 
@@ -301,21 +300,6 @@ const webPierAddinShape = {
   addin: z.string().min(1).optional()
     .describe("荷重モデルのアドインのフォルダー（webpier-addin.tomlのあるフォルダー、STRUCTURAL_MCP_ALLOWED_ROOTSの中のパス。CLIの--addin）。付けなければ列車荷重（標準の荷重モデル）で計算する。付けたときは入力の荷重モデルの項目（列車・衝撃係数・曲線半径・列車速度・遠心作用方向・支承の雪荷重と列車分担）は読まない"),
 };
-
-const webPierSelectionShape = {
-  ...webPierAddinShape,
-  stage: z.string().regex(/^(?:all|\d{4})$/).default("all")
-    .describe("計算段階（0500・0610・0612 など、またはall）。使える段階はwebpier_get_contractで確認する"),
-  frameAnalysis: z.boolean().default(false)
-    .describe("stage=allに骨組解析（FEMPython）の選択式の段階を加える（CLIの--frame-analysis）。段階を直接選ぶときは不要"),
-  nonlinearAnalysis: z.boolean().default(false)
-    .describe("stage=allに静的非線形解析（JRSNAP・Aggre-SE）の選択式の段階を加える（CLIの--nonlinear-analysis）。1方向数分かかり、JRSNAPの画面が出る"),
-};
-
-function webPierOptions(stage: string, frameAnalysis: boolean, nonlinearAnalysis: boolean, addin?: string): string[] {
-  return ["--stage", stage, "--frame-analysis", String(frameAnalysis), "--nonlinear-analysis", String(nonlinearAnalysis),
-    ...webPierAddinOptions(addin)];
-}
 
 /** --addin with the real path of the add-in folder, which must be inside STRUCTURAL_MCP_ALLOWED_ROOTS (decision 70). */
 async function webPierAddin(addin: string | undefined, config: AppConfig): Promise<string | undefined> {
@@ -835,7 +819,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("webpier_get_contract", {
     title: "Get WebPier stages and their runners",
-    description: "WebPierの段階（0500〜0910）の依存・選択式のスイッチ・必要なrunner・公開するファイルと、いまの環境で各選択（stage=allとスイッチの4通り、各段階の直接選択）を生成できるか（available、missingRunners）を返します。webpier_generateの前に呼んでください。addin（荷重モデルのアドイン）を付けると、アドインを読めるかを確かめ、その宣言（名前・版・約束の版）も返します。",
+    description: "WebPierの段階（0500〜0910）と、入力のoutputs（出力項目）ごとの段階・使う項目・必要なrunner・公開するファイル、いまの環境で各出力項目を生成できるか（available、missingRunners。使う項目のrunnerも含む）を返します。作る計算書は入力のoutputsだけで決まります（引数では選びません）。webpier_generateの前に呼んでください。addin（荷重モデルのアドイン）を付けると、アドインを読めるかを確かめ、その宣言（名前・版・約束の版）も返します。",
     inputSchema: { ...webPierAddinShape },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ addin }) => {
@@ -847,34 +831,32 @@ export function createServer(config: AppConfig): McpServer {
       const contract = webPierContractSchema.parse(envelope.summary);
       const runners = webPierRunners(config);
       const detected = new Set(runners.filter((runner) => runner.path !== null).map((runner) => runner.engine as string));
-      const selections = contract.selections.map((selection) => {
-        const missingRunners = selection.runners.filter((engine) => !detected.has(engine));
-        return { ...selection, available: missingRunners.length === 0, missingRunners };
+      const outputs = contract.outputs.map((output) => {
+        const missingRunners = output.runners.filter((engine) => !detected.has(engine));
+        return { ...output, available: missingRunners.length === 0, missingRunners };
       });
-      const direct = selections.filter((selection) => selection.stage !== "all");
-      const unavailableStages = direct.filter((selection) => !selection.available).map((selection) => selection.stage);
+      const unavailableOutputs = outputs.filter((output) => !output.available).map((output) => output.key);
       return textResponse({
-        schemaVersion: 1,
+        schemaVersion: 2,
         engineVersion: envelope.engineVersion,
         runners: runners.map(({ engine, environmentVariable, path }) => ({ engine, environmentVariable, available: path !== null })),
         stages: contract.stages,
-        switches: contract.switches,
-        selections,
-        unavailableStages,
+        outputs,
+        unavailableOutputs,
         ...(contract.addin === undefined ? {} : { addin: contract.addin }),
         generationTool: "webpier_generate",
-      }, unavailableStages.length === 0
-        ? "WebPierの全段階を生成できます。"
-        : `WebPierの段階のうち${unavailableStages.join("・")}はrunnerが足りないため生成できません。`);
+      }, unavailableOutputs.length === 0
+        ? "WebPierの全出力項目を生成できます。"
+        : `WebPierの出力項目のうち${unavailableOutputs.join("・")}はrunnerが足りないため生成できません（入力のoutputsでfalseにしてください）。`);
     } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
   });
 
   server.registerTool("webpier_validate", {
     title: "Validate a WebPier input",
-    description: "WebPierの入力（schema 2のJSON）を、runnerを呼ばずに決まる範囲（厳密な解析、選んだ段階と依存段階の計算、外部出力・Aggre-SEプロジェクトの入力）で検証します。入力エラーはmessages・errorsのpathに項目のパス（例: 下部構造.寸法.側面.B1）が入ります。summary.requiredRunnersにこの選択が呼ぶrunnerを返します。inputPath（案件のpre/input.json）またはinputのどちらか一方だけを指定してください。",
-    inputSchema: { ...sourceShape, ...webPierSelectionShape },
+    description: "WebPierの入力（schema 2のJSON）を、runnerを呼ばずに決まる範囲（厳密な解析、入力のoutputs（出力項目）が選ぶ段階とその計算、外部出力・Aggre-SEプロジェクトの入力）で検証します。入力エラーはmessages・errorsのpathに項目のパス（例: 下部構造.寸法.側面.B1、outputs.footing）が入ります。summary.outputsに選ばれた出力項目、summary.stagesに段階、summary.requiredRunnersにこの入力が呼ぶrunnerを返します。inputPath（案件のpre/input.json）またはinputのどちらか一方だけを指定してください。",
+    inputSchema: { ...sourceShape, ...webPierAddinShape },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis, addin }) => {
+  }, async ({ inputPath, input, addin }) => {
     const sourceError = invalidSourceSelection(inputPath, input);
     if (sourceError) return sourceError;
     if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
@@ -883,7 +865,7 @@ export function createServer(config: AppConfig): McpServer {
       return await calculate({
         tool: "webpier_validate", engine: "webpier", runnerPath: config.webPierRunner,
         command: "validate", extensions: [".json"], jobExtension: ".json",
-        runnerOptions: webPierOptions(stage, frameAnalysis, nonlinearAnalysis, folder), label: "WebPier 入力検証",
+        runnerOptions: webPierAddinOptions(folder), label: "WebPier 入力検証",
         environment: webPierEnvironment(config),
         prepareJob: () => createNamedJsonJob(inputPath, input, "input.json", config),
       }, undefined, undefined, config);
@@ -892,10 +874,10 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("webpier_generate", {
     title: "Generate WebPier pier design reports",
-    description: "WebPierで橋脚の設計計算をし、計算書PDF・結果JSON（output/）、WebPierが組む頁の方眼Excel（export/）と外部プログラムの入力・解析結果・付帯JSON（post/）をjob成果物として返します。CLIと同じ生成で、同じバイトです。artifactsのrelativePathはoutput/output/…・output/export/…・output/post/…で、案件のoutput/・export/・post/へはread_artifactで取得しSHA-256を確かめてからclient側で置きます。engineeringStatusは段階ごと（summary.stages。0612・0622はok/not_ok、ほかはnot_evaluated）と全体で、実行の成否（ok）とは別です。先にwebpier_get_contractで使える段階を確かめ、webpier_validateで入力を検証してください。inputPathまたはinputのどちらか一方だけを指定してください。",
-    inputSchema: { ...sourceShape, ...webPierSelectionShape },
+    description: "WebPierで橋脚の設計計算をし、入力のoutputs（出力項目、12項目のtrue/false。使う項目もtrueが必要。段階は引数では選ばない）が選ぶ計算書PDF・結果JSON（output/）、WebPierが組む頁の方眼Excel（export/）と外部プログラムの入力・解析結果・付帯JSON（post/）をjob成果物として返します。CLIと同じ生成で、同じバイトです。artifactsのrelativePathはoutput/output/…・output/export/…・output/post/…で、案件のoutput/・export/・post/へはread_artifactで取得しSHA-256を確かめてからclient側で置きます。engineeringStatusは段階ごと（summary.stages。0612・0622はok/not_ok、ほかはnot_evaluated）と全体で、実行の成否（ok）とは別です。先にwebpier_get_contractで使える出力項目を確かめ、webpier_validateで入力を検証してください。inputPathまたはinputのどちらか一方だけを指定してください。",
+    inputSchema: { ...sourceShape, ...webPierAddinShape },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis, addin }) => {
+  }, async ({ inputPath, input, addin }) => {
     const sourceError = invalidSourceSelection(inputPath, input);
     if (sourceError) return sourceError;
     if (config.webPierRunner === null) return unavailable("webpier", "STRUCTURAL_MCP_WEBPIER_RUNNER");
@@ -904,7 +886,7 @@ export function createServer(config: AppConfig): McpServer {
       return await calculate({
         tool: "webpier_generate", engine: "webpier", runnerPath: config.webPierRunner,
         command: "run", extensions: [".json"], jobExtension: ".json",
-        runnerOptions: webPierOptions(stage, frameAnalysis, nonlinearAnalysis, folder), label: "WebPier 計算書作成",
+        runnerOptions: webPierAddinOptions(folder), label: "WebPier 計算書作成",
         requiredArtifacts: [], timeoutMs: config.webPierTimeoutMs, environment: webPierEnvironment(config),
         prepareJob: () => createNamedJsonJob(inputPath, input, "input.json", config),
       }, undefined, undefined, config);

@@ -6,8 +6,8 @@
 
 | コード | 意味 | すること |
 |---|---|---|
-| `INPUT_ERROR` | 入力が読めない・足りない・範囲外。`path` に項目のパス（パスのないものは選択の誤りなど） | `path` の項目を資料で確かめて直す。資料で決まらなければ利用者に聞く。直したら `webpier_validate` で次のエラーを見る（1件ずつ返る） |
-| `RUNNER_UNAVAILABLE` | 選んだ段階が要る runner がない（`summary.missingRunners`） | 足りない runner を利用者に伝える。回り道はしない。`webpier_get_contract` で使える段階を選び直す |
+| `INPUT_ERROR` | 入力が読めない・足りない・範囲外。`path` に項目のパス（出力項目の誤りは `outputs`・`outputs.<項目>`） | `path` の項目を資料で確かめて直す。資料で決まらなければ利用者に聞く。直したら `webpier_validate` で次のエラーを見る（1件ずつ返る） |
+| `RUNNER_UNAVAILABLE` | 入力の出力項目（`outputs`）が要る runner がない（`summary.missingRunners`） | 足りない runner を利用者に伝える。回り道はしない。`webpier_get_contract` で使える出力項目を確かめ、`outputs` を変えてよいかを利用者に確かめる |
 | `ENGINE_FAILED` | runner（FEMPython・Capacita・JRSNAP・Aggre-SE）が失敗した | メッセージにエンジンの理由がある。入力が原因（解析できない形、照査できない配筋）なら入力を見直す。エンジンそのものはそのエンジンのスキル（`structural-capacita`・`structural-aggrese`・`structural-jrsnap-input`） |
 | `GENERATION_FAILED` | 計算書が組めない、生成中に入力や WebPier が変わった | 入力を生成中に書き換えていないか確かめて、もう一度生成する。帳票が組めないのは WebPier の不具合なので開発者に伝える（例：`0600の帳票を作成できません: … needs 509.85 pt; available width is 406.32 pt` は式が1行に入らない。P7橋脚の 61.39 m の桁に 12 軸が載ったときで、WebPier で直した）。0710・0720 の `組合せ … の荷重図に CASE-… のページがありません` は JRSNAP の荷重図のページが足りない（荷重のないケース。WebPier で直した） |
 | `IO_ERROR` | ファイルの読み書きの失敗 | 下の「パスが長い」 |
@@ -20,7 +20,8 @@ MCP の側で止まったとき（`ok: false`、`category`）：`engine_unavaila
 
 - `入力項目がありません: …`：キーが欠けている。全部のキーを書き、値がなければ `null`。
 - `…: 未知の入力項目です`：綴りの違うキー、知らないキー。
-- `…: 値が必要です`：その選択で要る値が `null`。
+- `…: 値が必要です`：選んだ出力項目で要る値が `null`。
+- `outputs.<項目>: outputs.<別の項目> も true が必要です`：使う項目が `false`。`outputs: 出力項目が選ばれていません`：12項目すべて `false`。
 - 印字桁より細かい値（`m` で4桁以上など）：丸めた値を書く（何桁で丸めたかを `出典` に）。
 - `杭種`：「直接基礎」以外は計算できない。
 - 支持層の `内部摩擦角_φd` が 25 度未満、支持層が粘性土（0612・0622）。
@@ -30,7 +31,7 @@ MCP の側で止まったとき（`ok: false`、`category`）：`engine_unavaila
 ## runner がない
 
 - `webpier_get_contract` の `runners[].available` が false の runner は、server が見つけていない。runner の場所は `get_environment_template`（`engine: "all"`）で分かる。
-- JRSNAP がない PC：`all` は使えない（0710・0720 が JRSNAP の図を要る）。0500・0600・0610〜0622 を段階ごとに作る。
+- JRSNAP がない PC：地震時の項目（`longitudinal_seismic`・`transverse_seismic` と、それを使う項目）は作れない（0710・0720 が JRSNAP の図を要る）。地震時以外の6項目だけを `true` にして 0500・0600・0610〜0622 を作る。
 - Capacita の runner は WebPier には `.exe` で渡す（server が `.dll` の横の `WebDanforCS.Headless.exe` を探す）。`.exe` がないと Capacita を使う段階は `missingRunners` に `webdan2` が出る。
 
 ## パスが長い（`IO_ERROR`、`No such file or directory`）

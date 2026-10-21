@@ -1,6 +1,6 @@
 ---
 name: structural-webpier
-description: WebPier（直接基礎の鉄道 RC 橋脚の設計計算アプリ。structural-mcp の WebPier サブモジュール）で計算書を作るときに使う。0500 直接基礎の地盤ばね・0600 上部工反力・0610/0620 線路方向/直角方向の荷重・0611/0621 柱の断面照査・0612/0622 基礎の照査・0710/0720 地震時荷重・0711/0721 静的非線形解析と耐震性能照査・0800〜0820 フーチング・0900/0910 片持ち梁を、MCP の webpier_get_contract／webpier_get_input_schema／webpier_validate／webpier_generate で作り、成果物を案件の output/・export/・post/ に置く。設計資料から入力 pre/input.json（schema 2）を作る・直す、項目の意味・単位・印字桁を調べる、どの段階とスイッチ（frameAnalysis・nonlinearAnalysis）を選ぶか、要る runner（FEMPython・Capacita・JRSNAP・Aggre-SE）、engineeringStatus（ok・not_ok・not_evaluated）と実行の成否の読み分け、付帯JSONで成果物の新旧を確かめる、入力エラー・RUNNER_UNAVAILABLE・IO_ERROR・ADDIN_ERROR で失敗したとき、列車荷重でない橋脚（LRT の車荷重など）を荷重モデルのアドイン（addin、--addin）で計算するときにも使う。WebPier の実装を直すときは WebPier の repo の開発用スキルを使う。
+description: WebPier（直接基礎の鉄道 RC 橋脚の設計計算アプリ。structural-mcp の WebPier サブモジュール）で計算書を作るときに使う。0500 直接基礎の地盤ばね・0600 上部工反力・0610/0620 線路方向/直角方向の荷重・0611/0621 柱の断面照査・0612/0622 基礎の照査・0710/0720 地震時荷重・0711/0721 静的非線形解析と耐震性能照査・0800〜0820 フーチング・0900/0910 片持ち梁を、MCP の webpier_get_contract／webpier_get_input_schema／webpier_validate／webpier_generate で作り、成果物を案件の output/・export/・post/ に置く。設計資料から入力 pre/input.json（schema 2）を作る・直す、項目の意味・単位・印字桁を調べる、どの出力項目（入力の outputs）を選ぶか、要る runner（FEMPython・Capacita・JRSNAP・Aggre-SE）、engineeringStatus（ok・not_ok・not_evaluated）と実行の成否の読み分け、付帯JSONで成果物の新旧を確かめる、入力エラー・RUNNER_UNAVAILABLE・IO_ERROR・ADDIN_ERROR で失敗したとき、列車荷重でない橋脚（LRT の車荷重など）を荷重モデルのアドイン（addin、--addin）で計算するときにも使う。WebPier の実装を直すときは WebPier の repo の開発用スキルを使う。
 ---
 
 # WebPier で橋脚の計算書を作る
@@ -21,9 +21,9 @@ WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 R
 ## 流れ（MCP）
 
 1. `get_capabilities`：`engines.webpier.enabled`、`pathPolicy.allowedInputRoots`（`inputPath` で読める場所）、`pathPolicy.jobRoot`（成果物を置くときに使う）。
-2. `webpier_get_contract`：作りたい選択の `available` と `missingRunners`。使えない段階（`unavailableStages`）は、足りない runner を利用者に伝えて止まる。runner を探して直接起動するなどの回り道をしない。
+2. `webpier_get_contract`：出力項目ごとの `available` と `missingRunners`（使う項目の runner も含む）。作りたい項目が `unavailableOutputs` にあれば、足りない runner を利用者に伝えて止まる。runner を探して直接起動するなどの回り道をしない。
 3. 入力：案件の `pre/input.json`。なければ作る。項目は `webpier_get_input_schema`、意味は `references/input-schema2.md`。資料から写した値は**印字桁に丸めて**書き（細かいと入力エラー）、どの資料のどこから写したかを `出典` に書く。
-4. `webpier_validate`（`inputPath` か `input`、`stage`・`frameAnalysis`・`nonlinearAnalysis`）：入力エラーは `errors[0].path` に項目のパス（例 `下部構造.寸法.側面.B1`）。最初の1件だけが返るので、直しては繰り返す。runner の結果で決まる段階の入力エラー（0612 の反力、0910 の照査の条件など）は生成のときに出る。
+4. `webpier_validate`（`inputPath` か `input`。段階は引数では選ばない）：入力エラーは `errors[0].path` に項目のパス（例 `下部構造.寸法.側面.B1`、出力項目の誤りは `outputs.footing` など）。`summary.outputs`・`summary.stages` で作るものを確かめる。最初の1件だけが返るので、直しては繰り返す。runner の結果で決まる段階の入力エラー（0612 の反力、0910 の照査の条件など）は生成のときに出る。
 5. `webpier_generate`：`ok`・`executionStatus` が実行の成否、`engineeringStatus` と `summary.stages[].engineeringStatus` が判定。
 6. 成果物を置く（下の「成果物を置く」）。
 7. 報告：作った計算書、段階ごとの判定（not_evaluated の段階は「計算書で確かめる」と書く）、利用者に確かめたい入力値。
@@ -31,24 +31,31 @@ WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 R
 - 入力ファイルが `allowedInputRoots` の外（ネットワークドライブの案件など）なら、ファイルを読んで中身を `input` に文字列で渡す（BOM なしの UTF-8 なら、結果 JSON に記録される入力の SHA-256 はファイルと同じ。名前は `input.json` になる）。
 - 生成は CLI（`python -m webpier`）と同じで、バイトも同じ（`smoke:webpier`、2026-10-19）。
 
-## 段階とスイッチの選び方
+## 出力項目の選び方（入力の `outputs`）
 
-| 頼まれたこと | `stage` | 呼ぶ runner |
-|---|---|---|
-| 直接基礎の地盤ばね・支持力係数 | `0500` | なし |
-| 上部工反力・橋脚自重 | `0600` | なし |
-| 線路方向／直角方向の荷重（骨組解析の入力） | `0610`／`0620` | FEMPython（荷重図） |
-| 線路方向／直角方向の柱の断面照査 | `0611`／`0621` | FEMPython・Capacita |
-| 線路方向／直角方向の基礎の照査 | `0612`／`0622` | FEMPython |
-| 地震時の荷重（JRSNAP の入力） | `0710`／`0720` | JRSNAP（図） |
-| 静的非線形解析と耐震性能照査 | `0711`／`0721` | JRSNAP・Aggre-SE |
-| フーチングの応答値／断面照査 | `0800`／`0810`・`0820` | FEMPython・JRSNAP・Aggre-SE／＋Capacita |
-| 片持ち梁の応答値／断面照査 | `0900`／`0910` | JRSNAP・Aggre-SE／＋Capacita |
-| まとめて | `all`（＋`frameAnalysis`・`nonlinearAnalysis`） | 選択による |
+作る計算書は、入力の `outputs`（出力項目、WebPier の決定72）だけで決まる。ツールの引数・CLI・runner の引数では選べない。12項目をすべて `true`／`false` で書く（入力エディタの「07 計算・印刷」のチェックと同じもの）。
 
-- 1つの段階を選ぶと、依存する段階は内部で計算するだけで、その計算書は作らない（例外：0800・0810・0820・0900・0910 は、runner を動かす依存段階も一緒に作る）。「0612 まで作って」で 0500〜0610 の計算書も要るなら、段階ごとに呼ぶか `all` にする。
-- スイッチは `stage: "all"` とだけ使う（1つの段階と組み合わせると入力エラー）。`all` は 0500・0600・0610・0620・0710・0720。`frameAnalysis` で 0611・0612・0621・0622、`nonlinearAnalysis` で 0711・0721・0900・0910、両方で 0800・0810・0820 が加わる。**`all` でも 0710・0720 のために JRSNAP の runner が要る**（なければ `all` は使えない）。
-- 0711・0721 を含む生成（`nonlinearAnalysis`、0800〜0910）は1方向数分かかり、JRSNAP の画面が出て、JRSNAP のインストール先の共用ファイルを書く。**実行の前に利用者に確かめる**。同じ PC で JRSNAP を同時に動かせない。
+| 頼まれたこと | 項目（`outputs.*`） | 段階 | 使う項目（同時に `true` が必要） | 呼ぶ runner |
+|---|---|---|---|---|
+| 地盤のモデル化（直接基礎の地盤ばね・支持力係数） | `ground_model` | 0500 | — | なし |
+| 上部工反力及び橋脚自重 | `reactions` | 0600 | — | なし |
+| 線路方向の計算（地震時以外。骨組解析の入力） | `longitudinal` | 0610 | `ground_model`・`reactions` | FEMPython（荷重図） |
+| 線路方向の骨組解析（柱の断面照査・基礎の照査） | `longitudinal_frame_analysis` | 0611・0612 | `longitudinal` | FEMPython・Capacita |
+| 線路直角方向の計算（地震時以外） | `transverse` | 0620 | `ground_model`・`reactions` | FEMPython（荷重図） |
+| 線路直角方向の骨組解析 | `transverse_frame_analysis` | 0621・0622 | `transverse` | FEMPython・Capacita |
+| 線路方向の計算（地震時。JRSNAP の入力） | `longitudinal_seismic` | 0710 | `longitudinal` | JRSNAP（図） |
+| 線路方向の静的非線形解析と耐震性能照査 | `longitudinal_nonlinear_analysis` | 0711 | `longitudinal_seismic` | JRSNAP・Aggre-SE |
+| 線路直角方向の計算（地震時） | `transverse_seismic` | 0720 | `transverse` | JRSNAP（図） |
+| 線路直角方向の静的非線形解析と耐震性能照査 | `transverse_nonlinear_analysis` | 0721 | `transverse_seismic` | JRSNAP・Aggre-SE |
+| フーチングの計算 | `footing` | 0800・0810・0820 | 両方向の `*_frame_analysis` と `*_nonlinear_analysis` | 4つすべて |
+| 片持ち梁の計算 | `cantilever` | 0900・0910 | 両方向の `*_nonlinear_analysis` | JRSNAP・Aggre-SE・Capacita |
+
+- 使う項目が `false` なのに `true` の項目があると、その項目の名前を入れた入力エラー（例 `outputs.footing: outputs.transverse_nonlinear_analysis も true が必要です`）。12項目すべて `false` も入力エラー。
+- 選んだ項目の段階はすべて作り直す。選ばなかった項目の成果物は消さずに残る（前の世代。付帯JSON の入力の SHA-256 で見分ける）。`outputs` を変えると入力の SHA-256 も変わる。
+- 「0612 まで作って」なら `ground_model`・`reactions`・`longitudinal`・`longitudinal_frame_analysis` を `true` にする（0500・0600・0610 の計算書も作られる）。
+- **地震時の項目（0710・0720）は JRSNAP の runner が要る**。JRSNAP がなければ地震時以外の6項目だけを `true` にする。
+- 静的非線形解析を含む生成（`*_nonlinear_analysis`・`footing`・`cantilever`）は1方向数分かかり、JRSNAP の画面が出て、JRSNAP のインストール先の共用ファイルを書く。**実行の前に利用者に確かめる**。同じ PC で JRSNAP を同時に動かせない。
+- 利用者の案件の `outputs` を勝手に書き換えない。作りたいものと違うときは、変えてよいかを確かめてから直す。
 - 段階・依存・成果物の一覧は `references/stages.md`、照査の中身は `references/checks.md`。
 
 ## 荷重モデルのアドイン（車荷重など。`addin`）
@@ -82,7 +89,7 @@ node <このスキルのフォルダー>\scripts\place-webpier-outputs.mjs --job
 
 ## runner を直接呼ぶ（スクリプトから使うとき）
 
-`WebPier\run_headless.py`（protocol v1）を、その横の `.venv\Scripts\python.exe -X utf8` で起動する。コマンドは `run --input <JSON> --output-dir <空のフォルダー> [--stage …] [--frame-analysis true|false] [--nonlinear-analysis true|false] [--addin <フォルダー>]`・`validate`・`contract`・`schema`（どれも `--addin` を取る）。runner の場所は環境変数（`STRUCTURAL_MCP_FEMPYTHON_RUNNER`・`STRUCTURAL_MCP_WEBDAN_RUNNER`（`.exe`）・`STRUCTURAL_MCP_JRSNAP_RUNNER`・`STRUCTURAL_MCP_AGGRESE_RUNNER`）だけから読む（`.env` は読まない）。値は `get_environment_template`。MCP があるなら MCP を使う。
+`WebPier\run_headless.py`（protocol v1）を、その横の `.venv\Scripts\python.exe -X utf8` で起動する。コマンドは `run --input <JSON> --output-dir <空のフォルダー> [--addin <フォルダー>]`・`validate`・`contract`・`schema`（どれも `--addin` を取る。作る計算書は入力の `outputs` で決まり、`--stage` などはない）。runner の場所は環境変数（`STRUCTURAL_MCP_FEMPYTHON_RUNNER`・`STRUCTURAL_MCP_WEBDAN_RUNNER`（`.exe`）・`STRUCTURAL_MCP_JRSNAP_RUNNER`・`STRUCTURAL_MCP_AGGRESE_RUNNER`）だけから読む（`.env` は読まない）。値は `get_environment_template`。MCP があるなら MCP を使う。
 
 ## うまくいかないとき
 

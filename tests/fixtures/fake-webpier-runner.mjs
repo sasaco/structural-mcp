@@ -1,6 +1,7 @@
 // A stand-in for WebPier's run_headless.py (protocol v1): the commands, the envelope, the output/ and post/ layout
-// and the error codes of the real runner, with four stages. The summary reports what the runner received: its
-// arguments, the input's name and SHA-256, and the environment, so the tests can check what the server passes.
+// and the error codes of the real runner, with four stages of four of its 出力項目 (WebPier decision 72: the input's
+// outputs choose the stages; no argument does). The summary reports what the runner received: its arguments, the
+// input's name and SHA-256, and the environment, so the tests can check what the server passes.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
@@ -8,6 +9,8 @@ import { basename, dirname, resolve } from "node:path";
 const [command, ...rawArgs] = process.argv.slice(2);
 const options = new Map();
 for (let index = 0; index < rawArgs.length; index += 2) options.set(rawArgs[index], rawArgs[index + 1]);
+const known = new Set(["--input", "--output-dir", "--addin"]);
+const unknown = [...options.keys()].filter((key) => !known.has(key));
 
 const runnerKeys = {
   fempython: "STRUCTURAL_MCP_FEMPYTHON_RUNNER",
@@ -15,12 +18,24 @@ const runnerKeys = {
   webdan2: "STRUCTURAL_MCP_WEBDAN_RUNNER",
   aggrese: "STRUCTURAL_MCP_AGGRESE_RUNNER",
 };
-// id, stem, runners it calls when chosen alone, engineering status, its post files.
+// The 出力項目 and the items each uses, as WebPier's inputs/outputs.py has them.
+const items = [
+  ["ground_model", []], ["reactions", []], ["longitudinal", ["ground_model", "reactions"]],
+  ["longitudinal_frame_analysis", ["longitudinal"]], ["transverse", ["ground_model", "reactions"]],
+  ["transverse_frame_analysis", ["transverse"]], ["longitudinal_seismic", ["longitudinal"]],
+  ["longitudinal_nonlinear_analysis", ["longitudinal_seismic"]], ["transverse_seismic", ["transverse"]],
+  ["transverse_nonlinear_analysis", ["transverse_seismic"]],
+  ["footing", ["longitudinal_frame_analysis", "transverse_frame_analysis", "longitudinal_nonlinear_analysis",
+    "transverse_nonlinear_analysis"]],
+  ["cantilever", ["longitudinal_nonlinear_analysis", "transverse_nonlinear_analysis"]],
+];
+const requires = new Map(items);
+// id, stem, its 出力項目, runners it calls, engineering status, its post files.
 const stages = [
-  { id: "0500", stem: "0500_直接基礎", runners: [], status: "not_evaluated", post: [] },
-  { id: "0610", stem: "0610_線路方向荷重", runners: ["fempython"], status: "not_evaluated", post: [["frameweb", "線路方向.json"]] },
-  { id: "0612", stem: "0612_線路方向基礎", runners: ["fempython"], status: "not_ok", post: [["pik", "線路方向.pik"], ["reaction", "線路方向_ピックアップ反力.csv"]] },
-  { id: "0711", stem: "0711_線路方向非線形解析", runners: ["jrsnap", "aggrese"], status: "not_evaluated", post: [["aggrese", "線路方向.xml"]], folder: "線路方向_JRSNAP" },
+  { id: "0500", stem: "0500_直接基礎", output: "ground_model", runners: [], status: "not_evaluated", post: [] },
+  { id: "0610", stem: "0610_線路方向荷重", output: "longitudinal", runners: ["fempython"], status: "not_evaluated", post: [["frameweb", "線路方向.json"]] },
+  { id: "0612", stem: "0612_線路方向基礎", output: "longitudinal_frame_analysis", runners: ["fempython"], status: "not_ok", post: [["pik", "線路方向.pik"], ["reaction", "線路方向_ピックアップ反力.csv"]] },
+  { id: "0711", stem: "0711_線路方向非線形解析", output: "longitudinal_nonlinear_analysis", runners: ["jrsnap", "aggrese"], status: "not_evaluated", post: [["aggrese", "線路方向.xml"]], folder: "線路方向_JRSNAP" },
 ];
 
 function envelope(ok, summary, { artifacts = [], errors = [], engineeringStatus = "not_evaluated" } = {}) {
@@ -33,29 +48,56 @@ function envelope(ok, summary, { artifacts = [], errors = [], engineeringStatus 
   process.exitCode = ok ? 0 : 2;
 }
 
-function selected(stage, frame, nonlinear) {
-  if (stage !== "all") return stages.filter((item) => item.id === stage);
-  return stages.filter((item) => (item.id !== "0612" || frame) && (item.id !== "0711" || nonlinear));
+function uses(key) {
+  const found = new Set();
+  const pending = [...requires.get(key)];
+  while (pending.length > 0) {
+    const item = pending.pop();
+    if (!found.has(item)) { found.add(item); pending.push(...requires.get(item)); }
+  }
+  return found;
+}
+
+function selected(keys) {
+  return stages.filter((item) => keys.includes(item.output));
 }
 
 function runnersOf(chosen) {
   return Object.keys(runnerKeys).filter((engine) => chosen.some((item) => item.runners.includes(engine)));
 }
 
-if (command === "contract") {
-  const selection = (stage, frameAnalysis, nonlinearAnalysis) => {
-    const chosen = selected(stage, frameAnalysis, nonlinearAnalysis);
-    return { stage, frameAnalysis, nonlinearAnalysis, stages: chosen.map((item) => item.id), runners: runnersOf(chosen),
-      files: chosen.map((item) => ({ role: `${item.id}.pdf`, path: `output/${item.stem}.pdf`, folder: false })) };
+/** The chosen 出力項目 of the input, or the input error WebPier reports for them. */
+function chosenOutputs(document) {
+  const outputs = document.outputs;
+  if (outputs === undefined) return { error: { message: "入力項目がありません: outputs", path: "outputs" } };
+  const keys = items.map(([key]) => key).filter((key) => outputs[key] === true);
+  for (const key of keys) {
+    const missing = requires.get(key).filter((item) => !keys.includes(item));
+    if (missing.length > 0) {
+      const named = missing.map((item) => `outputs.${item}`).join("・");
+      return { error: { message: `outputs.${key}: ${named} も true が必要です`, path: `outputs.${key}` } };
+    }
+  }
+  if (keys.length === 0) {
+    return { error: { message: "outputs: 出力項目が選ばれていません（どれかを true にしてください）", path: "outputs" } };
+  }
+  return { keys };
+}
+
+if (unknown.length > 0) {
+  envelope(false, null, { errors: [{ category: "request", code: "INVALID_ARGUMENT", message: `unrecognized arguments: ${unknown.join(" ")}` }] });
+} else if (command === "contract") {
+  // Choosing an item needs the runners of its stages and of the items it uses, which are chosen with it.
+  const output = ([key, used]) => {
+    const own = selected([key]);
+    return { key, requires: used, stages: own.map((item) => item.id), runners: runnersOf(selected([...uses(key), key])),
+      files: own.map((item) => ({ role: `${item.id}.pdf`, path: `output/${item.stem}.pdf`, folder: false })) };
   };
   envelope(true, {
     command,
-    stages: stages.map(({ id, stem }) => ({ id, stem, dependsOn: [], optIn: [], hasReport: true })),
-    switches: [{ name: "frame_analysis", flag: "--frame-analysis", stages: ["0612"] },
-      { name: "nonlinear_analysis", flag: "--nonlinear-analysis", stages: ["0711"] }],
+    stages: stages.map(({ id, stem, output }) => ({ id, stem, dependsOn: [], output, hasReport: true })),
     runners: Object.entries(runnerKeys).map(([engine, environmentVariable]) => ({ engine, environmentVariable })),
-    selections: [selection("all", false, false), selection("all", true, false), selection("all", false, true),
-      selection("all", true, true), ...stages.map((item) => selection(item.id, false, false))],
+    outputs: items.map(output),
     ...(options.has("--addin") ? { addin: { name: "fake-addin", version: "1", contract: 1, folder: options.get("--addin") } } : {}),
   });
 } else if (command === "schema") {
@@ -64,20 +106,20 @@ if (command === "contract") {
 } else if (command === "run" || command === "validate") {
   const inputPath = options.get("--input");
   const outputDirectory = options.get("--output-dir");
-  const stage = options.get("--stage");
-  const frame = options.get("--frame-analysis") === "true";
-  const nonlinear = options.get("--nonlinear-analysis") === "true";
   const bytes = await readFile(inputPath);
   const document = JSON.parse(bytes.toString("utf8"));
-  const chosen = selected(stage, frame, nonlinear);
+  const { keys = [], error } = chosenOutputs(document);
+  const chosen = selected(keys);
   const summary = {
-    command, stage, frameAnalysis: frame, nonlinearAnalysis: nonlinear, addin: options.get("--addin") ?? null,
+    command, ...(error === undefined ? { outputs: keys } : {}), addin: options.get("--addin") ?? null,
     input: { file: basename(inputPath), sha256: createHash("sha256").update(bytes).digest("hex") },
     environment: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith("STRUCTURAL_MCP_"))),
     environmentKeys: Object.keys(process.env).filter((key) => !/^(?:=|COVERAGE)/.test(key)).sort(),
   };
   const missing = runnersOf(chosen).filter((engine) => !process.env[runnerKeys[engine]]);
-  if (document.下部構造?.寸法?.側面?.B1 === -1) {
+  if (error !== undefined) {
+    envelope(false, summary, { errors: [{ category: "input", code: "INPUT_ERROR", ...error }] });
+  } else if (document.下部構造?.寸法?.側面?.B1 === -1) {
     envelope(false, summary, { errors: [{ category: "input", code: "INPUT_ERROR", message: "下部構造.寸法.側面.B1: 0より大きい値が必要です", path: "下部構造.寸法.側面.B1" }] });
   } else if (command === "validate") {
     envelope(true, { ...summary, stages: chosen.map((item) => item.id),

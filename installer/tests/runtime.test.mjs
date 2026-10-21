@@ -151,7 +151,7 @@ test("runtime MCP probe imports SDK and calls a real server over stdio", async (
   const capabilities = await probeMcp(layout, { sdkRoot: resolve(root, "node_modules/@modelcontextprotocol/sdk/dist/esm"), registration });
   assert.equal(capabilities.engines.capacita.enabled, true);
   assert.equal(capabilities.engines.webpier.enabled, true);
-  assert.deepEqual(capabilities.webPierUnavailableStages, ["0711"]);
+  assert.deepEqual(capabilities.webPierUnavailableOutputs, ["longitudinal_nonlinear_analysis", "footing", "cantilever"]);
   registration.env.STRUCTURAL_MCP_FEMPYTHON_RUNNER = resolve(layout.root, "missing.exe");
   await assert.rejects(probeMcp(layout, { sdkRoot: resolve(root, "node_modules/@modelcontextprotocol/sdk/dist/esm"), registration }), /engine unavailable: fempython/);
 });

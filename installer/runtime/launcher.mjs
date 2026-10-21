@@ -151,8 +151,8 @@ export async function probeMcp(layout, { sdkRoot = resolve(layout.root, "server/
       if (!capabilities.engines?.[engine]?.enabled) throw new Error(`MCP engine unavailable: ${engine}`);
     }
     const contract = await client.callTool({ name: "webpier_get_contract", arguments: {} }, undefined, { timeout: 60_000 });
-    if (contract.isError || !Array.isArray(contract.structuredContent?.unavailableStages)) throw new Error("MCP webpier_get_contract returned an error.");
-    return { ...capabilities, webPierUnavailableStages: contract.structuredContent.unavailableStages };
+    if (contract.isError || !Array.isArray(contract.structuredContent?.unavailableOutputs)) throw new Error("MCP webpier_get_contract returned an error.");
+    return { ...capabilities, webPierUnavailableOutputs: contract.structuredContent.unavailableOutputs };
   } catch (error) {
     throw new Error(`MCP health check failed: ${error.message}${stderr ? `\n${stderr}` : ""}`);
   } finally { await client.close(); await transport.close(); }
@@ -177,8 +177,8 @@ export async function health(layout, { log = console.log, execute = runProcess }
   if (webPier.code !== 0 || contract.protocolVersion !== 1 || contract.engine !== "webpier" || !contract.ok) throw new Error("WebPier contract probe failed.");
   log("Connecting to MCP and calling get_capabilities and webpier_get_contract...");
   const capabilities = await probeMcp(layout);
-  const unavailable = capabilities.webPierUnavailableStages;
-  log(`WebPier stages unavailable here: ${unavailable.length ? unavailable.join(", ") : "none"} (JRSNAPHeadless is not bundled, so JRSNAP stages 0710 and later need a separate runner).`);
+  const unavailable = capabilities.webPierUnavailableOutputs;
+  log(`WebPier output items unavailable here: ${unavailable.length ? unavailable.join(", ") : "none"} (JRSNAPHeadless is not bundled, so the seismic items (0710 and later) need a separate runner).`);
   log(`Health check succeeded. Python: ${pythonVersion.split("\n")[0]}`);
   return capabilities;
 }

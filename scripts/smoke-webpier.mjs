@@ -1,5 +1,6 @@
 // A real MCP client for WebPier: validate, generate through webpier_generate, download every artifact, then run the
-// CLI (run_design.py) with the same venv, input and runners and compare the two generations byte for byte.
+// CLI (run_design.py) with the same venv, input and runners and compare the two generations byte for byte. The input's
+// outputs (出力項目, WebPier decision 72) choose the reports of both; no argument does.
 //
 // Files whose bytes are not WebPier's to fix are reported but do not fail the run: the reports with pages of other
 // programs (FEMPython's load diagrams in 0610/0620, Capacita's sections in 0611/0621/0810/0820/0910 — its font subset
@@ -14,13 +15,9 @@ import { parseArgs } from "node:util";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: {
-  stage: { type: "string", default: "all" },
-  "frame-analysis": { type: "boolean", default: false },
-  "nonlinear-analysis": { type: "boolean", default: false },
-} });
+const { positionals } = parseArgs({ allowPositionals: true, options: {} });
 if (positionals.length !== 1 || !isAbsolute(positionals[0])) {
-  throw new Error("usage: npm run smoke:webpier -- <absolute input.json> [--stage 0612] [--frame-analysis] [--nonlinear-analysis]");
+  throw new Error("usage: npm run smoke:webpier -- <absolute input.json>（作る計算書は入力の outputs で選ぶ）");
 }
 const inputPath = resolve(positionals[0]);
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -87,14 +84,14 @@ try {
   await client.connect(transport);
   const capabilities = await call("get_capabilities");
   if (!capabilities.engines.webpier.enabled) throw new Error("Set up WebPier (uv sync) or STRUCTURAL_MCP_WEBPIER_RUNNER first");
-  const selection = { stage: values.stage, frameAnalysis: values["frame-analysis"], nonlinearAnalysis: values["nonlinear-analysis"] };
   const contract = await call("webpier_get_contract");
-  const chosen = contract.selections.find((item) => item.stage === selection.stage
-    && (selection.stage !== "all" || (item.frameAnalysis === selection.frameAnalysis && item.nonlinearAnalysis === selection.nonlinearAnalysis)));
-  if (!chosen?.available) throw new Error(`The runners for this selection are missing: ${JSON.stringify(chosen?.missingRunners)}`);
-  await call("webpier_validate", { inputPath, ...selection });
+  const validated = await call("webpier_validate", { inputPath });
+  const unavailable = contract.outputs.filter((item) => validated.summary.outputs.includes(item.key) && !item.available);
+  if (unavailable.length > 0) {
+    throw new Error(`The runners for the input's outputs are missing: ${JSON.stringify(unavailable.map(({ key, missingRunners }) => ({ key, missingRunners })))}`);
+  }
   const started = Date.now();
-  const manifest = await call("webpier_generate", { inputPath, ...selection });
+  const manifest = await call("webpier_generate", { inputPath });
   const seconds = Math.round((Date.now() - started) / 1000);
   if (!manifest.ok || manifest.engine !== "webpier" || manifest.executionStatus !== "success") throw new Error("Unexpected generation status");
   const kinds = new Map();
@@ -113,8 +110,7 @@ try {
   const webPier = template.variables.find((item) => item.engine === "webpier").value;
   const python = resolve(dirname(webPier), ".venv", "Scripts", "python.exe");
   const cli = spawnSync(python, ["-X", "utf8", resolve(dirname(webPier), "run_design.py"), "--input", inputPath,
-    "--output-dir", resolve(cliOutput, "output"), "--post-dir", resolve(cliOutput, "post"), "--stage", selection.stage,
-    ...(selection.frameAnalysis ? ["--frame-analysis"] : []), ...(selection.nonlinearAnalysis ? ["--nonlinear-analysis"] : [])], {
+    "--output-dir", resolve(cliOutput, "output"), "--post-dir", resolve(cliOutput, "post")], {
     cwd: root, windowsHide: true, timeout: timeoutMs, encoding: "utf8",
     env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP, ...runners },
   });

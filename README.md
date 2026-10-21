@@ -253,24 +253,25 @@ npm run smoke:aggrese -- 'C:\path\to\project.xml' --outputs summary,report
 
 `webpier_*` は WebPier の headless runner（`WebPier/run_headless.py`、WebPier の決定61）を、その横の `.venv\Scripts\python.exe -X utf8` で起動します（`uv sync --project .\WebPier --locked` で作る venv が必要）。生成は WebPier の CLI（`python -m webpier`）と同じで、成果物のバイトも同じです。
 
-1. `webpier_get_contract`：段階（0500〜0910）の依存・選択式のスイッチ・必要な runner・公開するファイルと、**いまの環境で各選択を生成できるか**（`available`・`missingRunners`、直接選べない段階は `unavailableStages`）。JRSNAP の runner がなければ 0500・0600・0610〜0622 だけです。
+作る計算書は、入力の `outputs`（出力項目、WebPier の決定72）だけで決まります。12項目（`ground_model`・`reactions`・`longitudinal`・`longitudinal_frame_analysis`・`transverse`・`transverse_frame_analysis`・`longitudinal_seismic`・`longitudinal_nonlinear_analysis`・`transverse_seismic`・`transverse_nonlinear_analysis`・`footing`・`cantilever`）をすべて `true`／`false` で書き、ある項目を `true` にするときは、それが使う項目も `true` にします（違反と、すべて `false` は入力エラー）。ツールの引数では段階を選びません。
+
+1. `webpier_get_contract`：段階（0500〜0910）と、出力項目ごとの段階・使う項目（`requires`）・必要な runner（使う項目の runner も含む）・公開するファイルと、**いまの環境でその出力項目を生成できるか**（`available`・`missingRunners`、生成できない項目は `unavailableOutputs`）。JRSNAP の runner がなければ、地震時以外の項目（0500・0600・0610〜0622）だけです。
 2. `webpier_get_input_schema`：入力（schema 2）の JSON Schema（WebPier の項目表から作る。必須と項目間の規則は書かない）。
-3. `webpier_validate`：runner を呼ばずに決まる範囲で入力を検証（入力エラーは `errors[].path` に項目のパス）。`summary.requiredRunners` に選択が呼ぶ runner。
-4. `webpier_generate`：`stage`（既定 `all`）・`frameAnalysis`・`nonlinearAnalysis`・`addin`。成果物は `output/output/…`（計算書 PDF・結果 JSON）と `output/post/…`（FrameWeb 入力・NDU・PIK・CSV・WDJ・Aggre-SE の XML・PIK・xlsx・付帯JSON、JRSNAP の結果フォルダーの中のファイル）。artifact の ID は WebPier の役割（`0612-pdf`、`0612-pik-provenance`、JRSNAP のファイルは `0711-jrsnap`・`0711-jrsnap-2`…）です。案件の `output/`・`post/` へは、クライアントが置きます。MCP サーバーと同じ PC なら、スキル `structural-webpier` の `scripts/place-webpier-outputs.mjs` が job（`get_capabilities` の `pathPolicy.jobRoot` の下）の `manifest.json` のバイト数と SHA-256 を全件確かめてから複写します（計算書は1つ最大 2MB、JRSNAP の結果は数十MB あり、`read_artifact` の Base64 では重いため）。別の PC なら `read_artifact` で取得して SHA-256 を確かめてから置きます。
+3. `webpier_validate`：runner を呼ばずに決まる範囲で入力を検証（入力エラーは `errors[].path` に項目のパス。出力項目の誤りは `outputs`・`outputs.footing` など）。`summary.outputs` に選ばれた出力項目、`summary.stages` に段階、`summary.requiredRunners` にその入力が呼ぶ runner。
+4. `webpier_generate`：入力（と `addin`）だけを受け取ります。成果物は `output/output/…`（計算書 PDF・結果 JSON）と `output/post/…`（FrameWeb 入力・NDU・PIK・CSV・WDJ・Aggre-SE の XML・PIK・xlsx・付帯JSON、JRSNAP の結果フォルダーの中のファイル）。artifact の ID は WebPier の役割（`0612-pdf`、`0612-pik-provenance`、JRSNAP のファイルは `0711-jrsnap`・`0711-jrsnap-2`…）です。案件の `output/`・`post/` へは、クライアントが置きます。MCP サーバーと同じ PC なら、スキル `structural-webpier` の `scripts/place-webpier-outputs.mjs` が job（`get_capabilities` の `pathPolicy.jobRoot` の下）の `manifest.json` のバイト数と SHA-256 を全件確かめてから複写します（計算書は1つ最大 2MB、JRSNAP の結果は数十MB あり、`read_artifact` の Base64 では重いため）。別の PC なら `read_artifact` で取得して SHA-256 を確かめてから置きます。
 
 - 入力は `inputPath`（案件の `pre/input.json` が主）か inline の `input`。`inputPath` のファイルは名前とバイトのまま job にコピーします（WebPier は入力のファイル名と SHA-256 を結果 JSON・付帯JSONに記録するため、CLI と同じ値になる）。inline は `input.json` という名前になります。
-- WebPier には最小の環境に加えて、server が検出した runner のパスだけを `STRUCTURAL_MCP_FEMPYTHON_RUNNER`・`STRUCTURAL_MCP_JRSNAP_RUNNER`・`STRUCTURAL_MCP_WEBDAN_RUNNER`（`.dll` なら横の `.exe`）・`STRUCTURAL_MCP_AGGRESE_RUNNER` で渡します。WebPier の `.env` は読みません。選択が要る runner がなければ何も作らずに `RUNNER_UNAVAILABLE` で失敗します。
+- WebPier には最小の環境に加えて、server が検出した runner のパスだけを `STRUCTURAL_MCP_FEMPYTHON_RUNNER`・`STRUCTURAL_MCP_JRSNAP_RUNNER`・`STRUCTURAL_MCP_WEBDAN_RUNNER`（`.dll` なら横の `.exe`）・`STRUCTURAL_MCP_AGGRESE_RUNNER` で渡します。WebPier の `.env` は読みません。入力の出力項目が要る runner がなければ何も作らずに `RUNNER_UNAVAILABLE` で失敗します。
 - `engineeringStatus` は段階ごと（`summary.stages`。0612・0622 の基礎の照査は ok／not_ok、ほかは not_evaluated）と全体（not_ok が1つでもあれば not_ok、判定した段階がすべて ok なら ok）。Capacita・Aggre-SE の照査は判定を返さないので not_evaluated です。
 - 荷重モデルのアドイン（WebPier の決定70。LRT の車荷重など、列車荷重でない橋脚）：4つのツールとも `addin` に、アドインのフォルダー（`webpier-addin.toml` のあるフォルダー）を渡します。フォルダーは実パスに直して `STRUCTURAL_MCP_ALLOWED_ROOTS` の中にあることを確かめ（外・ファイル・ないものは要求の誤り）、runner に `--addin` で渡します。付けなければ列車荷重で計算します（エラーにはなりません）。アドインを読めない・約束の版が違うと `ADDIN_ERROR`、`summary.addin` と全結果 JSON・付帯 JSON の `addin` にアドインの宣言と来歴が入ります。`webpier_get_contract` は `addin` を付けるとアドインの宣言を返し、`webpier_get_input_schema` は荷重モデルの項目に `x-webpier-load-model` の印を付けます。
-- `webpier_generate` の timeout は `STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS`（既定30分）。`nonlinearAnalysis` は1方向数分かかり、JRSNAP の画面が出ます。JRSNAP は同じインストール先で同時に解析できません（JRSNAPHeadless が直列にする）。クライアント側の tool の timeout も長くしてください（Codex は `config.toml` の `[mcp_servers.<名前>]` に `tool_timeout_sec = 1800`）。
+- `webpier_generate` の timeout は `STRUCTURAL_MCP_WEBPIER_TIMEOUT_MS`（既定30分）。静的非線形解析（`longitudinal_nonlinear_analysis`・`transverse_nonlinear_analysis`）は1方向数分かかり、JRSNAP の画面が出ます。JRSNAP は同じインストール先で同時に解析できません（JRSNAPHeadless が直列にする）。クライアント側の tool の timeout も長くしてください（Codex は `config.toml` の `[mcp_servers.<名前>]` に `tool_timeout_sec = 1800`）。
 - JRSNAPHeadless の runner（`STRUCTURAL_MCP_JRSNAP_RUNNER`）は検出して WebPier に渡すだけで、単体の MCP ツールはありません。
 - WebPier は job の下に `output/output/.webpier-xxxxxxxx/` の一時ファイルや JRSNAP の長いファイル名を作ります。`STRUCTURAL_MCP_JOB_ROOT` は浅い場所にしてください（既定の `%LOCALAPPDATA%\structural-mcp\jobs` なら足ります）。Windows の長いパスが有効でない PC では、パスが 260 文字を超えると `IO_ERROR` で失敗します。
 
-実 runner と MCP の接続確認は次のコマンドで行います。MCP で作った成果物と、同じ venv・入力・runner で CLI が作ったものをバイトで比べます（他のプログラムのページを差し込む計算書、Aggre-SE の xlsx、JRSNAP の結果と、それらの SHA-256 を記録する JSON は違っても失敗にしません）。
+実 runner と MCP の接続確認は次のコマンドで行います。作る計算書は入力の `outputs` で選びます。MCP で作った成果物と、同じ venv・入力・runner で CLI が作ったものをバイトで比べます（他のプログラムのページを差し込む計算書、Aggre-SE の xlsx、JRSNAP の結果と、それらの SHA-256 を記録する JSON は違っても失敗にしません）。
 
 ```powershell
-npm run smoke:webpier -- 'C:\path\to\pre\input.json' --stage 0612
-npm run smoke:webpier -- 'C:\path\to\pre\input.json' --frame-analysis --nonlinear-analysis
+npm run smoke:webpier -- 'C:\path\to\pre\input.json'
 ```
 
 ## 設定
