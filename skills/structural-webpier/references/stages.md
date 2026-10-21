@@ -1,12 +1,12 @@
 # 段階・依存・runner・成果物
 
-いまの環境での正は `webpier_get_contract`（WebPier の登録表 `webpier/pipeline/stages.py` から作る）。この表はその写しで、WebPier `b6c349c` の contract で確認した（2026-10-19）。0400 と節の番号は WebPier `bb4a2cf` のコードで確認（2026-10-21）。
+いまの環境での正は `webpier_get_contract`（WebPier の登録表 `webpier/pipeline/stages.py` から作る）。この表はその写しで、WebPier `b6c349c` の contract で確認した（2026-10-19）。0400 と節の番号は WebPier `bb4a2cf`、配筋図は `89857d0` のコードで確認（2026-10-21）。
 
 ## 段階
 
 | 段階 | 内容 | 依存 | 出力項目 | `output/` | `post/`（各ファイルに付帯JSON `<名前>.provenance.json`） |
 |---|---|---|---|---|---|
-| 0400 | 照査の前提（柱・梁・フーチングの構造細目、配筋図） | — | `detailing` | `0400_照査の前提` | —（`配筋図.dxf` は WebPier の部品の公開待ち） |
+| 0400 | 照査の前提（柱・梁・フーチングの構造細目、配筋図） | — | `detailing` | `0400_照査の前提` | `配筋図.dxf` |
 | 0500 | 直接基礎の地盤ばね・支持力係数 | — | `ground_model` | `0500_直接基礎.pdf`・`.json` | — |
 | 0600 | 上部工反力・橋脚自重・移動荷重の反力 | — | `reactions` | `0600_上部工反力` | — |
 | 0610 | 線路方向荷重（20基本ケース・16組合せ） | 0500・0600 | `longitudinal` | `0610_線路方向荷重` | `線路方向.json`（FrameWeb 入力） |
