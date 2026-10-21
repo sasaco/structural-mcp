@@ -421,7 +421,7 @@ export function createServer(config: AppConfig): McpServer {
         enabled: webPierEnabled,
         readiness: webPierEnabled ? "experimental" : "unavailable",
         inputFormats: [".json（schema 2）", "inline-json"],
-        outputFormats: ["pdf", "json", "pik", "csv", "ndu", "wdj", "xml", "xlsx", "JRSNAPの解析結果"],
+        outputFormats: ["pdf", "json", "pik", "csv", "ndu", "wdj", "xml", "xlsx", "dxf", "JRSNAPの解析結果"],
         runners: webPierRunners(config).map(({ engine, environmentVariable, path }) => ({ engine, environmentVariable, available: path !== null })),
         stageAvailability: "段階ごとに要るrunnerが違います。webpier_get_contractで使える段階を確かめてください（JRSNAPがなければ0400・0500・0600・0610〜0622だけ）。",
         timeoutMs: config.webPierTimeoutMs,

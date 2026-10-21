@@ -889,6 +889,8 @@ test("WebPier generates the input's output items from the project's input with o
   assert.deepEqual(manifest.artifacts.map(({ artifactId, relativePath }) => [artifactId, relativePath]), [
     ["0400-pdf", "output/output/0400_照査の前提.pdf"],
     ["0400-json", "output/output/0400_照査の前提.json"],
+    ["0400-dxf", "output/post/配筋図.dxf"],
+    ["0400-dxf-provenance", "output/post/配筋図.dxf.provenance.json"],
     ["0500-pdf", "output/output/0500_直接基礎.pdf"],
     ["0500-json", "output/output/0500_直接基礎.json"],
     ["0610-pdf", "output/output/0610_線路方向荷重.pdf"],

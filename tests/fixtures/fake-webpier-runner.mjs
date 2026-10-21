@@ -32,7 +32,7 @@ const items = [
 const requires = new Map(items);
 // id, stem, its 出力項目, runners it calls, engineering status, its post files.
 const stages = [
-  { id: "0400", stem: "0400_照査の前提", output: "detailing", runners: [], status: "ok", post: [] },
+  { id: "0400", stem: "0400_照査の前提", output: "detailing", runners: [], status: "ok", post: [["dxf", "配筋図.dxf"]] },
   { id: "0500", stem: "0500_直接基礎", output: "ground_model", runners: [], status: "not_evaluated", post: [] },
   { id: "0610", stem: "0610_線路方向荷重", output: "longitudinal", runners: ["fempython"], status: "not_evaluated", post: [["frameweb", "線路方向.json"]] },
   { id: "0612", stem: "0612_線路方向基礎", output: "longitudinal_frame_analysis", runners: ["fempython"], status: "not_ok", post: [["pik", "線路方向.pik"], ["reaction", "線路方向_ピックアップ反力.csv"]] },
