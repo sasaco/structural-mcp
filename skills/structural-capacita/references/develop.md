@@ -12,5 +12,7 @@
 
 - Capacita の規則（submodule の `.claude/rules/`）に従う。submodule の中で commit し、structural-mcp の pointer を更新する。
 - 直したら Release でビルドし直す（structural-mcp のルートで `dotnet build .\Capacita\WebDanforCS\Headless\WebDanforCS.Headless.csproj -c Release`）。
+- 品質ゲートは submodule の `.claude/check.ps1`（宣言は `.claude/repository.toml`。2026-10-21 の edee272 で `.agents` から直した。それより前の commit では no_gates になる）。
 - テストは `dotnet test` で `WebDanforCS/tests/UiTests`（`ReportSectionsTests`・`HeadlessPickupTests`）。`PreviewTests` の `.agents/logs` 未作成、クリップボード、Steel 印刷は以前から落ちることがある（変更と無関係のことが多い）。`WebDanforCS.Tests` は NU1201 で restore できず、`RcDan/tests` は確認用の WinForms アプリ（2026-10-18）。
+- RcDan を直接呼ぶテスト（`ReportSectionsTests` など）が先に走ると RcDan が自分の PDF フォントリゾルバーを入れ、後の計算が「Must not change font resolver after is was once used.」で落ちる。UiTests はアセンブリの初期化（`TestAssemblyInitializer.cs`）でアプリと同じ共有のリゾルバー（`SharedPdfFonts`）を入れて避けている（f385359）。新しいテストのアセンブリを作るときも同じにする。
 - 節の ID を変える・足すと、計算書を節ごとに切り分けて使う利用者（WebPier など）とその代役の runner も合わせる必要がある。`run-rc` のやり取りを変えたときも同じ。

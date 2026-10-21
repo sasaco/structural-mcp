@@ -113,6 +113,7 @@ R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで
 - 見本の照合（コードと本物の runner で確認）：N'd 7592.8 kN・f'ck 24・SD390 → Ac 524690.5 mm²・0.008Ac 4197.5 mm²。b 3940・d 1558.4・圧縮鉄筋なし → pb 1.750 %、0.75pb 1.313 %、pt 0.297 %（D38-16）。
 - 総括表（`summary.xlsx`）と検討結果一覧の最小鉄筋量は Mcrd/Myd だけ（0.008Ac と最大鉄筋量は計算書の表にだけある）。
 - 耐久性（R5）：ひび割れ幅は H16 と同じ式 Wd＝1.1·k1·k2·k3·k4·{4c＋0.7(cs−φ)}·(σse/Es＋ε'csd) で、`crack[].k4` も掛かる。省略判定は σct ≦ σbl かつ σs ≦ σsl（R5 は σs が超えると「省略不可」でひび割れ幅を計算。H16 は「省略判定外」で NG）。σc ≦ 0.4f'cd も同じ節で照査する。
+- ひび割れ幅の照査値は Wd/Wlim で、**γi を掛けない**（`RcDan/CalcResult/CalcResult_BendingCrack.cs` の `VerRatio`。H16・R5 共通、コードで確認 2026-10-21、Capacita f385359）。Wlim の c は引張鉄筋1段目のかぶりで、`basic.Limit100`（既定 true）なら 100 mm が上限。計算書の解説に γi·Wd/Wlim と書くと Capacita の値と合わない。
 
 ## 配筋の既定と数え方
 
