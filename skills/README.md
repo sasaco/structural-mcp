@@ -1,6 +1,6 @@
 # structural-mcp のスキル
 
-structural-mcp が公開する解析エンジン（Aggre-SE、Capacita、FEMPython、SoilStructure、JRSNAP）と、橋脚自動設計アプリ WebPier を扱うための、Claude Code と Codex 用のスキルです。ここが唯一の正で、ユーザー全体（グローバル）のスキルとして配ります。案件ごとにコピーしません。計画と経緯は `.claude/docs/plans/global-engine-skills-plan.md`。
+structural-mcp が公開する解析エンジン（Aggre-SE、Capacita、FEMPython、SoilStructure、JRSNAP）と、橋脚自動設計アプリ WebPier を扱うための、Claude Code と Codex 用のスキルです。エンジンに依らない鉄道土木構造物の設計の知見（基準・作用・骨組・組合せ・計算書の慣習）は `structural-railway-design/` に貯めます。ここが唯一の正で、ユーザー全体（グローバル）のスキルとして配ります。案件ごとにコピーしません。計画と経緯は `.claude/docs/plans/global-engine-skills-plan.md`。
 
 ## 置く知識と置かない知識
 
@@ -8,6 +8,7 @@ structural-mcp が公開する解析エンジン（Aggre-SE、Capacita、FEMPyth
 |---|---|
 | エンジンの性質（書式、項目の意味、runner の挙動、版による違い） | ここ（`structural-<engine>/`） |
 | WebPier の使い方（入力の意味、段階と依存、成果物、照査の中身） | ここ（`structural-webpier/`） |
+| 鉄道土木の設計の一般知見（基準の条番号、側圧・水位・揚圧力、骨組と剛域、作用係数と組合せ、底版、計算書の章立てと印字桁、資料の読み方、ユーザーに決めてもらう判断） | ここ（`structural-railway-design/`） |
 | WebPier の開発（実装、決定番号、受入、テストの期待値） | WebPier の `.claude/skills/webpier-*` |
 | 案件の判断（その構造物の条件、発注者とのやり取り、見本の読み替え） | 各案件の repo |
 
@@ -26,7 +27,7 @@ structural-mcp が公開する解析エンジン（Aggre-SE、Capacita、FEMPyth
 
 ## 知見を足すとき
 
-- エンジンの性質・WebPier の使い方：ここを編集し、structural-mcp で commit する。開発機ではインストール先がこのフォルダーへのジャンクションなので、編集はそのまま全案件に効く。
+- エンジンの性質・WebPier の使い方・鉄道土木の設計の一般知見：ここを編集し、structural-mcp で commit する。案件で採用した値と判断は案件の repo に置き、ここには「こういう判断の選択肢があり、こう決めた例がある（日付）」の形でだけ書く。開発機ではインストール先がこのフォルダーへのジャンクションなので、編集はそのまま全案件に効く。
 - WebPier の実装・決定・受入：WebPier の repo。
 - 案件のこと：その案件の repo。
 - インストール先がコピー（MSI の利用者）のときは編集しない。案件側に書いて開発者に伝える。

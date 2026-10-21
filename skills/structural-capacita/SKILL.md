@@ -23,7 +23,7 @@ Capacita（RcDan／WebDanforCS）は WDJ（JSON）の部材・着目点・配筋
 ## runner を直接呼ぶ（--pickup、スクリプトから使うとき）
 
 ```powershell
-dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォルダー> [--output-format pdf|markdown] [--pickup <断面力データ>] [--summary-xlsx true]
+dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォルダー> [--output-format pdf|markdown] [--pickup <断面力データ>]
 ```
 
 - stdout は protocol v1 の envelope。メッセージは `\uXXXX` なので Python などで読む。
@@ -96,9 +96,13 @@ R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで
 - 耐久性の節（`bending_durability`・`shear_durability`）は、**永久作用の行（`pickup_moment`・`pickup_shear_force` の id 1）が無いと出ない**（行0 だけでは info も warn も出ずに節ごと消える）。せん断の変動作用の行（id 2）は空でよい（`CalcResult_ShearCrack` が行0−行1 の差で作る）。
 - `safety_factor` の `V_rbv` は Vdd の γb（`S_Gamma_bd`、Capacita の既定 1.2）。Vwcd の γb は別（計算書では Vcd・Vwcd・Vdd の γb 欄に V_rbc が出る）。
 - 照査値と OK/NG の総括表 `summary.xlsx` は WDJ の `calc.print_summary_table_checked: true` で返る（成果物 kind `spreadsheet`）。`--summary-xlsx` という引数は runner に無い（付けても無視される）。計算書の節は変わらない。
+- `summary.xlsx` の並び（2026-10-21、断面力入力の版の照査で確認）：シートは `Sheet1` だけ。2〜4行目が列見出し（`g_name`・`No<m_no>`・`p_name`）、A〜D 列が照査項目の階層（結合セルの続きは空）、E 列が単位、F 列以降が着目点。照査値のセルは `OK (0.425 ≦ 1.0)`・`OK (省略)` のような文字列で、数値のセルも文字列、記号の後ろに NBSP、鉄筋の行の改行は `_x000A_`。openpyxl（`data_only=True`）で読んで `NG` で始まるセルを探し、`(OK|NG) \(([0-9.]+)` で照査値を取ると、変更前後の NG の数と最大の照査値を比べられる。
 - 対称な配筋（上下が同じ）では、着目断面力が小さいほうの引張側を飛ばす info（WD-16xx。確認したのは 1618・1619・1622・1625・1628）が出る。照査の省略（WD-19xx）ではない。
 - `members[].g_name` は各頁の右上に `[g_name]` で出る。1つの計算書に複数の骨組の計算書を並べるときは、名前に骨組を入れると頁を区別できる。
 - 行6（使用性（損傷））の節は `bending_restorability`・`shear_restorability`・`torsion_restorability`、見出しは「使用性（損傷）曲げモーメントの照査結果」など。行7 は `*_restorability_eq` で「復旧性（損傷）…」（JR各社・運輸機構・JR東日本とも。コードで確認、2026-10-21）。
+- `--pickup` で行0・1・5・6・8 と外観を与えたときの節の並び（2026-10-21、本物の runner で確認）：`section_forces`、`bending/shear_safety_destruction`、`bending/shear_durability`、`bending_serviceability`、`bending/shear_restorability`、`bending_rebar_amount`。
+- **使用性（外観）**：`crack[].vis_u`（上側）・`vis_l`（下側）を true にした面だけ、`bending_serviceability`（「使用性（外観）曲げひび割れの照査結果」）に出る。断面力は行0（縁応力度）と行1（永久作用）、印字はその面の引張側の点だけ（σct/σbl など）。両方 false なら節は出ない。`crack[].wlimit`（GUI が 0.3 を書く）は RcDan が読まない（コードで確認）。
+- **鉄筋の題**：`bar[].rebar1.title`・`rebar2.title` は計算書の各表の「引張側」の欄にそのまま出る（例：上側を「外側」、下側を「内側」にすると、負の Md の点に「外側」と出る）。断面力の符号と面の対応を頁で確かめるのに使える。題は計算に使われない。
 
 ### R5 の最小鉄筋量と最大鉄筋量（`bending_rebar_amount`、2026-10-21、Capacita 5104588 で確認）
 
@@ -117,7 +121,7 @@ R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで
 
 ## 詳しく
 
-- `references/wdj.md`：`--pickup` の着目点の番号、断面力入力モードの WDJ（`force[]`・`shear[]`・La・返る節）、疲労の繰返し回数、上側鉄筋なし、他のエンジンの PIK を渡すとき。
+- `references/wdj.md`：GUI で保存し直した WDJ との比べ方、`--pickup` の着目点の番号、断面力入力モードの WDJ（`force[]`・`shear[]`・La・返る節）、疲労の繰返し回数、上側鉄筋なし、他のエンジンの PIK を渡すとき。
 - `references/develop.md`：手で試す手順（ページを画像にする）、Capacita を直すときのビルドとテスト。
 
 ## 知見を足すとき

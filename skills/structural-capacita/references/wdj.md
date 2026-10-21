@@ -2,6 +2,17 @@
 
 ソースは開発機のみ（structural-mcp の repo のルートから `Capacita/`）。
 
+## GUI で保存し直した WDJ（2026-10-21、WebDanforCS 2.5.9 で保存されたもので確認）
+
+利用者がプログラムの出した WDJ を GUI で開いて直し、保存したものを受け取ったときは、**JSON を読んで値ごとに比べる**（テキストの diff は使えない）。GUI の保存で次のものが変わるが、意図した変更ではない。
+
+- 書式：1行の JSON（字下げなし）、`ver` が GUI の版（例 `2.5.9`）、`$schema`・`format`・`schema_version`・`lang` が消える。
+- 既定値の補完：`bar[].b`・`h` に部材の B・H、`bar[].position` に文字列の位置（`"0.200"`）、同じ部材の2点目以降の `bar`・`crack`・`fatigue_list`・`shear` の `m_no` が `""`、`rebar1/2.enable` が消える、`crack[].JRTT05: false`・`wlimit: 0.3`、`fatigues.fatigue_list`（着目点ごと）・`service_life: 100`・`train_A/B_count: 0`、`shear[]`（La null の行）、`members[].c_type: 1`・`vo_type: 2`、`safety.axisforce_condition`・空の `component` など、`calc.member_group_selection`（グループごとに Checked）。
+- 表の題：`specification1/2_list` の title が日本語（「鉄道標準 令和5年設計標準」）、`pickup_*` の題が GUI の文言（「耐久性 使用性 永久作用」など）。
+- `pickup_data` は取り込んだ断面力（PIK の値そのもの。M の符号は変えない）。
+
+意図した変更として見るのは、`basic.pickup_*` の `no`（行と抽出ケースの対応）、`bar[].rebar1/2` の題・径・本数・間隔・かぶり、`crack[]` の `con_*`・`ecsd_*`・`vis_*`、`safety_factor`。題だけを変えて鉄筋や `con_*` が付いてきていないことがあるので、面ごとにそろっているか確かめる（スキル `structural-railway-design` の「骨組の曲げモーメントの符号と、外側・内側の鉄筋の対応」）。
+
 ## --pickup の着目点の番号（2026-10-18、本物の runner で確認）
 
 - Capacita の取込みは、PIK の最初のピックアップ・着目力の行の順に 1 から番号を付け、WDJ の `points`・`bar`・`crack` の `index` と厳密に照合する（`IMPORT-EXISTING-POINT-IDENTITY`。番号を決め打ちすると `IMPORT-EXISTING-POINT-IDENTITY /points/0/p_id` で止まる）。
@@ -12,7 +23,7 @@
 ## 断面力入力モード（`--pickup` なし、2026-10-19、本物の runner で確認）
 
 - `pickup_filename` を空にすると Manual モード（`RcConditionEditor.ConditionInputMode`）。Capacita は WDJ の断面力をそのまま計算して `result.json`・`report.pdf` を返す（`model.wdj` は返らない）。
-- 断面力は `force[]` の行に `Md<id>_Md`・`Md<id>_Nd`・`Vd<id>_Vd`・`Vd<id>_Md`・`Vd<id>_Nd`、ねじりは `Mt<id>_Mt`・`Mt<id>_Md`・`Mt<id>_Vd`。`id` は `basic.pickup_moment`／`pickup_shear_force` の id（確かめたもの：0 耐久性 応力度、1 耐久性 永久荷重、5 安全性 破壊、7 復旧性 地震時、8 最小鉄筋量。ほかの id の意味は WDJ の `basic` の表で確かめる）。`no` は null でよい。
+- 断面力は `force[]` の行に `Md<id>_Md`・`Md<id>_Nd`・`Vd<id>_Vd`・`Vd<id>_Md`・`Vd<id>_Nd`、ねじりは `Mt<id>_Mt`・`Mt<id>_Md`・`Mt<id>_Vd`。`id` は `basic.pickup_moment`／`pickup_shear_force` の id（確かめたもの：0 耐久性 応力度、1 耐久性 永久荷重、5 安全性 破壊、6 使用性（損傷）（R5。H16 は復旧性 地震時以外）、7 復旧性 地震時、8 最小鉄筋量。ほかの id の意味は WDJ の `basic` の表で確かめる）。`no` は null でよい。
 - 正の Md が下側引張（`rebar2`）、負が上側引張。
 - 返る節は断面力表の行で決まる。並びは bending/shear/torsion_safety_destruction、bending/shear_safety_fatigue、bending/shear/torsion_durability、（外観の照査を行えば bending_serviceability）、bending/shear/torsion_restorability、bending/shear/torsion_restorability_eq、（行8 があれば）bending_rebar_amount。`section_forces` は `print_section_force_checked: true` でも出ない。
 - 断面力の欠けた行は warn の WD-408/409/410（例：最小鉄筋量 Md8 を空欄にすると WD-408 が1つ出る。Md8 を書けば出ない）。
