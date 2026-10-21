@@ -1,11 +1,12 @@
-// Place the artifacts of a webpier_generate job into a project's output/ and post/ folders.
+// Place the artifacts of a webpier_generate job into a project's output/, export/ and post/ folders.
 //
 //   node place-webpier-outputs.mjs --job-root <jobRoot> --job-id <jobId> --project <project folder> [--overwrite] [--dry-run]
 //
 // jobRoot is get_capabilities' pathPolicy.jobRoot and jobId is webpier_generate's jobId (the MCP server runs on the
 // same PC). Every artifact the job's manifest.json lists is read from the job and checked against the manifest's
-// byte count and SHA-256 before anything is written. output/output/<file> goes to <project>/output/<file> and
-// output/post/<file> to <project>/post/<file>; the files of a JRSNAP result folder (post/<folder>/<file>) replace
+// byte count and SHA-256 before anything is written. output/output/<file> goes to <project>/output/<file>,
+// output/export/<file> (the grid Excel workbooks) to <project>/export/<file> and output/post/<file> to
+// <project>/post/<file>; the files of a JRSNAP result folder (post/<folder>/<file>) replace
 // that folder whole, as WebPier's CLI does. Without --overwrite nothing is written when a destination exists.
 // Files of earlier generations that this job does not publish are left as they are (the CLI does the same).
 import { createHash, randomBytes } from "node:crypto";
@@ -15,7 +16,8 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 const JOB_ID = /^(\d{4}-\d{2}-\d{2})_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const ARTIFACT = /^output\/(output|post)\/(.+)$/;
+const ARTIFACT = /^output\/(output|export|post)\/(.+)$/;
+const DIRECTORIES = ["output", "export", "post"];
 
 async function kind(path) {
   try {
@@ -50,7 +52,7 @@ export async function readJob(jobRoot, jobId) {
   const files = [];
   for (const artifact of manifest.artifacts) {
     const found = ARTIFACT.exec(artifact.relativePath);
-    if (!found) throw new Error(`output/ と post/ のどちらでもない成果物です: ${artifact.relativePath}`);
+    if (!found) throw new Error(`output/・export/・post/ のどれでもない成果物です: ${artifact.relativePath}`);
     const [directory, parts] = [found[1], plainParts(found[2])];
     if (parts.length > (directory === "post" ? 2 : 1)) throw new Error(`成果物のパスが深すぎます: ${artifact.relativePath}`);
     const data = await readFile(resolve(jobDirectory, ...artifact.relativePath.split("/")));
@@ -62,7 +64,7 @@ export async function readJob(jobRoot, jobId) {
   return { manifest, files };
 }
 
-/** Check, then place the job's artifacts into project/output and project/post. */
+/** Check, then place the job's artifacts into project/output, project/export and project/post. */
 export async function place({ jobRoot, jobId, project, overwrite = false, dryRun = false }) {
   const { manifest, files } = await readJob(jobRoot, jobId);
   const root = resolve(project);
@@ -90,7 +92,9 @@ export async function place({ jobRoot, jobId, project, overwrite = false, dryRun
   };
   if (dryRun) return summary;
   const suffix = () => randomBytes(4).toString("hex");
-  for (const directory of ["output", "post"]) await mkdir(resolve(root, directory), { recursive: true });
+  for (const directory of DIRECTORIES.filter((name) => files.some((file) => file.directory === name))) {
+    await mkdir(resolve(root, directory), { recursive: true });
+  }
   for (const file of single) {
     const destination = resolve(root, file.directory, file.parts[0]);
     const staged = resolve(root, file.directory, `.${file.parts[0]}.placing-${suffix()}`);

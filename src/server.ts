@@ -892,7 +892,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("webpier_generate", {
     title: "Generate WebPier pier design reports",
-    description: "WebPierで橋脚の設計計算をし、計算書PDF・結果JSON（output/）と外部プログラムの入力・解析結果・付帯JSON（post/）をjob成果物として返します。CLIと同じ生成で、同じバイトです。artifactsのrelativePathはoutput/output/…・output/post/…で、案件のoutput/・post/へはread_artifactで取得しSHA-256を確かめてからclient側で置きます。engineeringStatusは段階ごと（summary.stages。0612・0622はok/not_ok、ほかはnot_evaluated）と全体で、実行の成否（ok）とは別です。先にwebpier_get_contractで使える段階を確かめ、webpier_validateで入力を検証してください。inputPathまたはinputのどちらか一方だけを指定してください。",
+    description: "WebPierで橋脚の設計計算をし、計算書PDF・結果JSON（output/）、WebPierが組む頁の方眼Excel（export/）と外部プログラムの入力・解析結果・付帯JSON（post/）をjob成果物として返します。CLIと同じ生成で、同じバイトです。artifactsのrelativePathはoutput/output/…・output/export/…・output/post/…で、案件のoutput/・export/・post/へはread_artifactで取得しSHA-256を確かめてからclient側で置きます。engineeringStatusは段階ごと（summary.stages。0612・0622はok/not_ok、ほかはnot_evaluated）と全体で、実行の成否（ok）とは別です。先にwebpier_get_contractで使える段階を確かめ、webpier_validateで入力を検証してください。inputPathまたはinputのどちらか一方だけを指定してください。",
     inputSchema: { ...sourceShape, ...webPierSelectionShape },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ inputPath, input, stage, frameAnalysis, nonlinearAnalysis, addin }) => {

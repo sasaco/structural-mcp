@@ -1,11 +1,11 @@
 ---
 name: structural-webpier
-description: WebPier（直接基礎の鉄道 RC 橋脚の設計計算アプリ。structural-mcp の WebPier サブモジュール）で計算書を作るときに使う。0500 直接基礎の地盤ばね・0600 上部工反力・0610/0620 線路方向/直角方向の荷重・0611/0621 柱の断面照査・0612/0622 基礎の照査・0710/0720 地震時荷重・0711/0721 静的非線形解析と耐震性能照査・0800〜0820 フーチング・0900/0910 片持ち梁を、MCP の webpier_get_contract／webpier_get_input_schema／webpier_validate／webpier_generate で作り、成果物を案件の output/・post/ に置く。設計資料から入力 pre/input.json（schema 2）を作る・直す、項目の意味・単位・印字桁を調べる、どの段階とスイッチ（frameAnalysis・nonlinearAnalysis）を選ぶか、要る runner（FEMPython・Capacita・JRSNAP・Aggre-SE）、engineeringStatus（ok・not_ok・not_evaluated）と実行の成否の読み分け、付帯JSONで成果物の新旧を確かめる、入力エラー・RUNNER_UNAVAILABLE・IO_ERROR・ADDIN_ERROR で失敗したとき、列車荷重でない橋脚（LRT の車荷重など）を荷重モデルのアドイン（addin、--addin）で計算するときにも使う。WebPier の実装を直すときは WebPier の repo の開発用スキルを使う。
+description: WebPier（直接基礎の鉄道 RC 橋脚の設計計算アプリ。structural-mcp の WebPier サブモジュール）で計算書を作るときに使う。0500 直接基礎の地盤ばね・0600 上部工反力・0610/0620 線路方向/直角方向の荷重・0611/0621 柱の断面照査・0612/0622 基礎の照査・0710/0720 地震時荷重・0711/0721 静的非線形解析と耐震性能照査・0800〜0820 フーチング・0900/0910 片持ち梁を、MCP の webpier_get_contract／webpier_get_input_schema／webpier_validate／webpier_generate で作り、成果物を案件の output/・export/・post/ に置く。設計資料から入力 pre/input.json（schema 2）を作る・直す、項目の意味・単位・印字桁を調べる、どの段階とスイッチ（frameAnalysis・nonlinearAnalysis）を選ぶか、要る runner（FEMPython・Capacita・JRSNAP・Aggre-SE）、engineeringStatus（ok・not_ok・not_evaluated）と実行の成否の読み分け、付帯JSONで成果物の新旧を確かめる、入力エラー・RUNNER_UNAVAILABLE・IO_ERROR・ADDIN_ERROR で失敗したとき、列車荷重でない橋脚（LRT の車荷重など）を荷重モデルのアドイン（addin、--addin）で計算するときにも使う。WebPier の実装を直すときは WebPier の repo の開発用スキルを使う。
 ---
 
 # WebPier で橋脚の計算書を作る
 
-WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 RC 橋脚の荷重計算・照査を行い、A4 白黒の計算書 PDF と結果 JSON（`output/`）、各エンジンの入力と解析結果（`post/`）を作る。骨組解析は FEMPython、柱・フーチング・片持ち梁の断面照査は Capacita、静的非線形解析は JRSNAP、耐震性能照査は Aggre-SE に任せる。structural-mcp はその生成を MCP のツールで公開している。
+WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 RC 橋脚の荷重計算・照査を行い、A4 白黒の計算書 PDF と結果 JSON（`output/`）、WebPier が組む頁の方眼Excel（`export/`）、各エンジンの入力と解析結果（`post/`）を作る。骨組解析は FEMPython、柱・フーチング・片持ち梁の断面照査は Capacita、静的非線形解析は JRSNAP、耐震性能照査は Aggre-SE に任せる。structural-mcp はその生成を MCP のツールで公開している。
 
 - 確認した版：WebPier `b6c349c`（headless runner、WebPier の決定61）、structural-mcp `91d7aca`、2026-10-19。決定62〜67（雪荷重・qu の空欄、Df の範囲の複数層、桁の高さが違う橋脚の制御節点、La/d＜2 の柱、節点番号）は WebPier `4ccae9f` で P7橋脚の全段階を実アプリで確認、2026-10-20。決定69（雪のない橋脚は雪荷重のケースを作らない）は `86188f6`（テストのみ、実アプリは未確認）。
 - ソース（開発機のみ。structural-mcp の repo のルートから）：`WebPier/`。仕様は `WebPier/README.md`、用語は `WebPier/CONTEXT.md`。
@@ -65,7 +65,7 @@ WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 R
 
 ## 成果物を置く
 
-`webpier_generate` の成果物は job の中にある（`output/output/…` が案件の `output/`、`output/post/…` が案件の `post/`）。数が多く大きい（計算書 1 つで最大 2MB、JRSNAP の結果は数十MB）ので、MCP サーバーと同じ PC なら補助スクリプトで job から複写する。スクリプトは job の `manifest.json` のバイト数と SHA-256 を全件確かめてから書く。
+`webpier_generate` の成果物は job の中にある（`output/output/…` が案件の `output/`、`output/export/…` が案件の `export/`、`output/post/…` が案件の `post/`）。数が多く大きい（計算書 1 つで最大 2MB、JRSNAP の結果は数十MB）ので、MCP サーバーと同じ PC なら補助スクリプトで job から複写する。スクリプトは job の `manifest.json` のバイト数と SHA-256 を全件確かめてから書く。
 
 ```powershell
 node <このスキルのフォルダー>\scripts\place-webpier-outputs.mjs --job-root <pathPolicy.jobRoot> --job-id <jobId> --project <案件のフォルダー> --dry-run

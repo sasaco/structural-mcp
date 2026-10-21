@@ -36,18 +36,20 @@ async function job(files: Record<string, string>, changes: Record<string, unknow
 
 const files = {
   "output/output/0612_線路方向基礎.pdf": "%PDF 0612",
+  "output/export/0612_線路方向基礎.xlsx": "PK 0612",
   "output/post/線路方向.pik": "PIK",
   "output/post/線路方向.pik.provenance.json": "{}",
   "output/post/線路方向_JRSNAP/a.DB1": "DB1",
   "output/post/線路方向_JRSNAP/a.ndt": "NDT",
 };
 
-test("places a WebPier job's artifacts into output/ and post/, a JRSNAP folder whole", async () => {
+test("places a WebPier job's artifacts into output/, export/ and post/, a JRSNAP folder whole", async () => {
   const { root, jobRoot, project } = await job(files);
   try {
     const placed = await place({ jobRoot, jobId, project });
     assert.deepEqual(placed.replacedFolders, ["post/線路方向_JRSNAP"]);
     assert.equal(await readFile(resolve(project, "output/0612_線路方向基礎.pdf"), "utf8"), "%PDF 0612");
+    assert.equal(await readFile(resolve(project, "export/0612_線路方向基礎.xlsx"), "utf8"), "PK 0612");
     assert.deepEqual((await readdir(resolve(project, "post/線路方向_JRSNAP"))).sort(), ["a.DB1", "a.ndt"]);
     assert.deepEqual((await readdir(resolve(project, "post"))).sort(), ["線路方向.pik", "線路方向.pik.provenance.json", "線路方向_JRSNAP"]);
 
@@ -57,7 +59,7 @@ test("places a WebPier job's artifacts into output/ and post/, a JRSNAP folder w
     await assert.rejects(place({ jobRoot, jobId, project }), /--overwrite/);
     // With it, the folder is replaced whole and files the job does not publish elsewhere are kept.
     const again = await place({ jobRoot, jobId, project, overwrite: true });
-    assert.equal(again.overwritten.length, 4);
+    assert.equal(again.overwritten.length, 5);
     assert.deepEqual((await readdir(resolve(project, "post/線路方向_JRSNAP"))).sort(), ["a.DB1", "a.ndt"]);
     assert.equal(await readFile(resolve(project, "post/kept.csv"), "utf8"), "kept");
     assert.deepEqual((await readdir(resolve(project, "post"))).filter((name) => name.startsWith(".")), []);
@@ -67,7 +69,7 @@ test("places a WebPier job's artifacts into output/ and post/, a JRSNAP folder w
 test("checks the whole job against its manifest before writing anything", async () => {
   const { root, jobRoot, directory, project } = await job(files);
   try {
-    assert.deepEqual((await place({ jobRoot, jobId, project, dryRun: true })).files.length, 5);
+    assert.deepEqual((await place({ jobRoot, jobId, project, dryRun: true })).files.length, 6);
     assert.deepEqual(await readdir(project), []);
     await writeFile(resolve(directory, "output/post/線路方向_JRSNAP/a.ndt"), "CHANGED");
     await assert.rejects(place({ jobRoot, jobId, project }), /manifest と一致しません/);
@@ -85,7 +87,8 @@ test("places only successful webpier_generate jobs with plain paths", async () =
     try { await assert.rejects(place({ jobRoot, jobId, project }), pattern); } finally { await rm(root, { recursive: true, force: true }); }
   }
   for (const [bad, pattern] of [
-    [{ "output/result.json": "{}" }, /output\/ と post\/ のどちらでもない/],
+    [{ "output/result.json": "{}" }, /output\/・export\/・post\/ のどれでもない/],
+    [{ "output/export/sub/x.xlsx": "x" }, /深すぎます/],
     [{ "output/output/sub/x.pdf": "x" }, /深すぎます/],
   ] as const) {
     const { root, jobRoot, project } = await job(bad);

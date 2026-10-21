@@ -4,8 +4,8 @@
 
 ## MCP の job の中の配置
 
-- `webpier_generate` の `artifacts[].relativePath` は `output/output/<ファイル>`（案件の `output/` に置くもの）と `output/post/<ファイル>`（案件の `post/`）。JRSNAP の結果フォルダーは `output/post/線路方向_JRSNAP/<ファイル>` のように中のファイルが1つずつ並ぶ。
-- `artifactId` は WebPier の役割から：`0612-pdf`・`0612-json`・`0612-pik`・`0612-pik-provenance`。JRSNAP の結果は `0711-jrsnap`・`0711-jrsnap-2`…。
+- `webpier_generate` の `artifacts[].relativePath` は `output/output/<ファイル>`（案件の `output/` に置くもの）、`output/export/<ファイル>`（案件の `export/`）と `output/post/<ファイル>`（案件の `post/`）。JRSNAP の結果フォルダーは `output/post/線路方向_JRSNAP/<ファイル>` のように中のファイルが1つずつ並ぶ。
+- `artifactId` は WebPier の役割から：`0612-pdf`・`0612-xlsx`・`0612-json`・`0612-pik`・`0612-pik-provenance`。JRSNAP の結果は `0711-jrsnap`・`0711-jrsnap-2`…。
 - job は `<pathPolicy.jobRoot>\<日付>\<jobId>\` で、`manifest.json`（`get_job` と同じ内容。各成果物のバイト数と SHA-256）と `output\` がある。
 
 ## `output/`
@@ -14,6 +14,12 @@
 |---|---|
 | `<段階>_<名前>.pdf` | 計算書（A4 縦・白黒。ページ番号なし） |
 | `<段階>_<名前>.json` | 結果 JSON：`schema_version`・`stage`・`input`（入力のファイル名と SHA-256）・`implementation_sha256`・`result`。0611 などは `section_check`（Capacita を実行したこと、`engineering_status: not_evaluated`、飛ばした節）、0711・0721 は `seismic_check`（Aggre-SE、Case ごとの集計の有無）、0612・0622 は `result.engineering_status` |
+
+## `export/`
+
+| ファイル | 中身 |
+|---|---|
+| `<段階>_<名前>.xlsx` | 方眼Excel：計算書のうち WebPier が組む頁を、1冊1シートに書いたもの（GridLayoutPdf 0.2 の共通グリッド。セルが方眼のマスで、文字・式の項・表の罫線がセルに入る）。他のプログラムの頁（FEMPython の荷重図、Capacita・JRSNAP の頁）は入らない。0711・0721 は Aggre-SE の帳票そのものなので無い。WebPier の生成で strict に書くので、セルに置けない部分があれば生成ごと止まる |
 
 ## `post/`
 
@@ -42,5 +48,5 @@
 - **入力と合っているか**：付帯JSON・結果 JSON の `input.sha256` を、案件の `pre/input.json` の SHA-256 と比べる（PowerShell の `Get-FileHash -Algorithm SHA256`）。違えば、いまの入力で作ったものではない。
 - **同じ世代か**：付帯JSONの `artifacts` に並ぶファイルの SHA-256 が、いまのファイルと合うか。
 - **同じ WebPier で作ったか**：`implementation_sha256` を、新しく生成した `summary.implementationSha256` と比べる。WebPier の置き場所（venv のパス）や PC の git の改行の設定でも変わるので、違っても計算が違うとは限らない。
-- 毎回バイトが変わるもの（同じ入力でも SHA-256 で新旧を判断しない）：差し込みページを含む計算書（0610・0620 の FEMPython の荷重図、0611・0621・0810・0820・0910 の Capacita のページ、0710・0720 の JRSNAP の図（日付入り）、0711・0721 の Aggre-SE の帳票）、Aggre-SE の xlsx、JRSNAP の結果、およびそれらの SHA-256 を記録する付帯JSON。それ以外（WebPier だけで決まる計算書・結果 JSON・NDU・FrameWeb 入力・WDJ・ピックアップ）は、同じ入力・同じ WebPier なら同じバイト。
+- 毎回バイトが変わるもの（同じ入力でも SHA-256 で新旧を判断しない）：差し込みページを含む計算書（0610・0620 の FEMPython の荷重図、0611・0621・0810・0820・0910 の Capacita のページ、0710・0720 の JRSNAP の図（日付入り）、0711・0721 の Aggre-SE の帳票）、Aggre-SE の xlsx、JRSNAP の結果、およびそれらの SHA-256 を記録する付帯JSON。それ以外（WebPier だけで決まる計算書・方眼Excel・結果 JSON・NDU・FrameWeb 入力・WDJ・ピックアップ）は、同じ入力・同じ WebPier なら同じバイト。
 - 1つの段階だけを作った生成は、ほかの段階の前のファイルを消さずに残す。どの世代のものかは付帯JSONで見分ける。
