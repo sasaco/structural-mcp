@@ -778,7 +778,21 @@ test("a missing Aggre-SE runner disables only its tools", async () => {
   } finally { await isolated.close(); }
 });
 
+// It chooses the 出力項目 ground_model, reactions, longitudinal and longitudinal_frame_analysis (WebPier decision 72),
+// which are the fake runner's 0500, 0610 and 0612.
 const webPierInput = resolve(fixtureRoot, "webpier/pier-input.json");
+const webPierItems = ["ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis", "transverse",
+  "transverse_frame_analysis", "longitudinal_seismic", "longitudinal_nonlinear_analysis", "transverse_seismic",
+  "transverse_nonlinear_analysis", "footing", "cantilever"];
+
+/** The fixture input choosing the 出力項目 *chosen* and no other, as inline JSON. */
+async function webPierChoosing(...chosen: string[]): Promise<string> {
+  const document = JSON.parse(await readFile(webPierInput, "utf8")) as Record<string, unknown>;
+  document.outputs = Object.fromEntries(webPierItems.map((key) => [key, chosen.includes(key)]));
+  return JSON.stringify(document);
+}
+
+const webPierNonlinear = ["ground_model", "reactions", "longitudinal", "longitudinal_seismic", "longitudinal_nonlinear_analysis"];
 
 interface WebPierManifest {
   ok: boolean;
@@ -787,6 +801,7 @@ interface WebPierManifest {
   engineeringStatus: string;
   summary: {
     input: { file: string; sha256: string };
+    outputs?: string[];
     environment: Record<string, string>;
     environmentKeys: string[];
     stages: Array<{ id: string; stem: string; engineeringStatus: string }>;
@@ -796,23 +811,29 @@ interface WebPierManifest {
   errors: Array<{ code: string; path?: string }>;
 }
 
-test("the WebPier contract says which stages the detected runners can generate", async () => {
+test("the WebPier contract says which output items the detected runners can generate", async () => {
   const result = await client.callTool({ name: "webpier_get_contract", arguments: {} });
   assert.equal(result.isError, undefined);
   const contract = result.structuredContent as {
     runners: Array<{ engine: string; environmentVariable: string; available: boolean }>;
-    selections: Array<{ stage: string; frameAnalysis: boolean; nonlinearAnalysis: boolean; available: boolean; missingRunners: string[] }>;
-    unavailableStages: string[];
+    stages: Array<{ id: string; output: string }>;
+    outputs: Array<{ key: string; requires: string[]; stages: string[]; runners: string[]; available: boolean; missingRunners: string[] }>;
+    unavailableOutputs: string[];
     generationTool: string;
   };
   assert.deepEqual(contract.runners.map(({ engine, available }) => [engine, available]),
     [["fempython", true], ["jrsnap", false], ["webdan2", true], ["aggrese", true]]);
-  assert.deepEqual(contract.unavailableStages, ["0711"]);
-  const all = contract.selections.filter((selection) => selection.stage === "all");
-  assert.deepEqual(all.map((selection) => [selection.frameAnalysis, selection.nonlinearAnalysis, selection.available]),
-    [[false, false, true], [true, false, true], [false, true, false], [true, true, false]]);
-  assert.deepEqual(contract.selections.find((selection) => selection.stage === "0711")?.missingRunners, ["jrsnap"]);
+  assert.deepEqual(contract.outputs.map((output) => output.key), webPierItems);
+  assert.deepEqual(contract.stages.map(({ id, output }) => [id, output]), [["0500", "ground_model"],
+    ["0610", "longitudinal"], ["0612", "longitudinal_frame_analysis"], ["0711", "longitudinal_nonlinear_analysis"]]);
+  // An item needs the runners of the items it uses too: the footing and the cantilever use the nonlinear analysis.
+  assert.deepEqual(contract.unavailableOutputs, ["longitudinal_nonlinear_analysis", "footing", "cantilever"]);
+  const nonlinear = contract.outputs.find((output) => output.key === "longitudinal_nonlinear_analysis")!;
+  assert.deepEqual([nonlinear.requires, nonlinear.stages, nonlinear.runners, nonlinear.missingRunners],
+    [["longitudinal_seismic"], ["0711"], ["fempython", "jrsnap", "aggrese"], ["jrsnap"]]);
+  assert.equal(contract.outputs.find((output) => output.key === "longitudinal_frame_analysis")?.available, true);
   assert.equal(contract.generationTool, "webpier_generate");
+  assert.match(JSON.stringify(result.content), /longitudinal_nonlinear_analysis・footing・cantilever/);
 
   const schema = await client.callTool({ name: "webpier_get_input_schema", arguments: {} });
   assert.equal(schema.isError, undefined);
@@ -836,13 +857,18 @@ test("the WebPier contract says which stages the detected runners can generate",
     .map(({ name, value }) => [name, value]), [["STRUCTURAL_MCP_WEBPIER_RUNNER", fakeWebPierRunner]]);
 });
 
-test("WebPier generates a stage from the project's input with only the runners it calls", async () => {
-  const result = await client.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, stage: "0612" } });
+test("WebPier generates the input's output items from the project's input with only the runners it calls", async () => {
+  const result = await client.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput } });
   assert.equal(result.isError, undefined);
   const manifest = result.structuredContent as unknown as WebPierManifest;
   assert.equal(manifest.engine, "webpier");
   assert.equal(manifest.engineeringStatus, "not_ok");
-  assert.deepEqual(manifest.summary.stages, [{ id: "0612", stem: "0612_線路方向基礎", engineeringStatus: "not_ok" }]);
+  assert.deepEqual(manifest.summary.outputs, ["ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis"]);
+  assert.deepEqual(manifest.summary.stages, [
+    { id: "0500", stem: "0500_直接基礎", engineeringStatus: "not_evaluated" },
+    { id: "0610", stem: "0610_線路方向荷重", engineeringStatus: "not_evaluated" },
+    { id: "0612", stem: "0612_線路方向基礎", engineeringStatus: "not_ok" },
+  ]);
   // The input keeps its name and bytes: WebPier records both in its outputs.
   const bytes = await readFile(webPierInput);
   assert.deepEqual(manifest.summary.input,
@@ -859,6 +885,12 @@ test("WebPier generates a stage from the project's input with only the runners i
     ...Object.keys(manifest.summary.environment)]);
   assert.deepEqual(manifest.summary.environmentKeys.filter((key) => !allowed.has(key)), []);
   assert.deepEqual(manifest.artifacts.map(({ artifactId, relativePath }) => [artifactId, relativePath]), [
+    ["0500-pdf", "output/output/0500_直接基礎.pdf"],
+    ["0500-json", "output/output/0500_直接基礎.json"],
+    ["0610-pdf", "output/output/0610_線路方向荷重.pdf"],
+    ["0610-json", "output/output/0610_線路方向荷重.json"],
+    ["0610-frameweb", "output/post/線路方向.json"],
+    ["0610-frameweb-provenance", "output/post/線路方向.json.provenance.json"],
     ["0612-pdf", "output/output/0612_線路方向基礎.pdf"],
     ["0612-json", "output/output/0612_線路方向基礎.json"],
     ["0612-pik", "output/post/線路方向.pik"],
@@ -871,13 +903,15 @@ test("WebPier generates a stage from the project's input with only the runners i
   const content = Buffer.from((read.structuredContent as { base64: string }).base64, "base64");
   assert.equal(createHash("sha256").update(content).digest("hex"), pik.sha256);
 
-  const inline = await client.callTool({ name: "webpier_generate", arguments: { input: bytes.toString("utf8"), stage: "0500" } });
+  const inline = await client.callTool({ name: "webpier_generate", arguments: { input: await webPierChoosing("ground_model") } });
   assert.equal(inline.isError, undefined);
-  assert.equal((inline.structuredContent as unknown as WebPierManifest).summary.input.file, "input.json");
+  const plain = inline.structuredContent as unknown as WebPierManifest;
+  assert.equal(plain.summary.input.file, "input.json");
+  assert.deepEqual(plain.summary.stages.map((stage) => stage.id), ["0500"]);
 });
 
-test("WebPier reports a stage whose runner is missing, and input errors with their path", async () => {
-  const missing = await client.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, stage: "0711" } });
+test("WebPier reports an output item whose runner is missing, and input errors with their path", async () => {
+  const missing = await client.callTool({ name: "webpier_generate", arguments: { input: await webPierChoosing(...webPierNonlinear) } });
   assert.equal(missing.isError, true);
   const failed = missing.structuredContent as unknown as WebPierManifest;
   assert.equal(failed.ok, false);
@@ -885,7 +919,7 @@ test("WebPier reports a stage whose runner is missing, and input errors with the
   assert.deepEqual(failed.artifacts, []);
 
   const valid = await client.callTool({
-    name: "webpier_validate", arguments: { inputPath: webPierInput, stage: "all", nonlinearAnalysis: true },
+    name: "webpier_validate", arguments: { input: await webPierChoosing(...webPierNonlinear) },
   });
   assert.equal(valid.isError, undefined);
   assert.deepEqual((valid.structuredContent as unknown as WebPierManifest).summary.requiredRunners, [
@@ -894,17 +928,24 @@ test("WebPier reports a stage whose runner is missing, and input errors with the
     { engine: "aggrese", environmentVariable: "STRUCTURAL_MCP_AGGRESE_RUNNER", available: true },
   ]);
 
-  const wrong = JSON.stringify({ schema_version: 2, 下部構造: { 寸法: { 側面: { B1: -1 } } } });
-  const invalid = await client.callTool({ name: "webpier_validate", arguments: { input: wrong } });
+  const wrong = JSON.parse(await webPierChoosing("ground_model")) as { 下部構造: { 寸法: { 側面: { B1: number } } } };
+  wrong.下部構造.寸法.側面.B1 = -1;
+  const invalid = await client.callTool({ name: "webpier_validate", arguments: { input: JSON.stringify(wrong) } });
   assert.equal(invalid.isError, true);
   assert.deepEqual((invalid.structuredContent as unknown as WebPierManifest).errors.map(({ code, path }) => [code, path]),
     [["INPUT_ERROR", "下部構造.寸法.側面.B1"]]);
+  // The 出力項目 are the input's (decision 72): none chosen, or one without an item it uses, is an input error.
+  for (const [chosen, path] of [[[], "outputs"], [["longitudinal"], "outputs.longitudinal"]] as const) {
+    const refused = await client.callTool({ name: "webpier_generate", arguments: { input: await webPierChoosing(...chosen) } });
+    assert.equal(refused.isError, true);
+    assert.deepEqual((refused.structuredContent as unknown as WebPierManifest).errors.map(({ code, path }) => [code, path]),
+      [["INPUT_ERROR", path]]);
+  }
 
   const rejections: Array<[Record<string, unknown>, RegExp]> = [
     [{ inputPath: webPierInput, input: "{}" }, /どちらか一方だけ/],
     [{ input: "[]" }, /JSON object/],
     [{ inputPath: resolve(fixtureRoot, "model.wdj") }, /\.json/],
-    [{ inputPath: webPierInput, stage: "--overwrite" }, /stage/],
   ];
   for (const [args, pattern] of rejections) {
     const rejected = await client.callTool({ name: "webpier_generate", arguments: args });
@@ -915,7 +956,7 @@ test("WebPier reports a stage whose runner is missing, and input errors with the
 
 test("WebPier passes a load model's add-in inside the allowed roots by its real path (decision 70)", async () => {
   const folder = resolve(fixtureRoot, "webpier");
-  const generated = await client.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, stage: "0500", addin: folder } });
+  const generated = await client.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, addin: folder } });
   assert.equal(generated.isError, undefined);
   assert.equal((generated.structuredContent as unknown as { summary: { addin: string } }).summary.addin, folder);
   const validated = await client.callTool({ name: "webpier_validate", arguments: { inputPath: webPierInput, addin: folder } });
@@ -940,7 +981,7 @@ test("WebPier passes a load model's add-in inside the allowed roots by its real 
 test("WebPier lists a JRSNAP folder file by file with distinct artifact IDs", async () => {
   const isolated = await connect({ STRUCTURAL_MCP_JRSNAP_RUNNER: fakeRunner });
   try {
-    const result = await isolated.callTool({ name: "webpier_generate", arguments: { inputPath: webPierInput, stage: "0711" } });
+    const result = await isolated.callTool({ name: "webpier_generate", arguments: { input: await webPierChoosing(...webPierNonlinear) } });
     assert.equal(result.isError, undefined);
     const manifest = result.structuredContent as unknown as WebPierManifest;
     assert.deepEqual(manifest.artifacts.filter((artifact) => artifact.relativePath.includes("_JRSNAP/"))

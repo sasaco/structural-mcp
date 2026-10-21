@@ -225,31 +225,40 @@ try {
     await calculate("aggrese_calculate", null, { inputPath, generateSummaryExcel: true }, ["result.json", "summary.xlsx"]);
   }
   if (!values["skip-webpier"]) {
-    // JRSNAPHeadless is not bundled: the stages before 0710 are generated, the JRSNAP ones are reported missing.
+    // JRSNAPHeadless is not bundled: the 出力項目 before the seismic ones (0500-0622) are generated in one generation of
+    // the input choosing them (WebPier decision 72), and the JRSNAP ones are reported missing.
     const contract = await call("webpier_get_contract");
-    const direct = new Map(contract.selections.filter(selection => selection.stage !== "all").map(selection => [selection.stage, selection]));
-    const withoutJrsnap = ["0500", "0600", "0610", "0611", "0612", "0620", "0621", "0622"];
-    for (const stage of withoutJrsnap) assert.equal(direct.get(stage)?.available, true, `WebPier ${stage} must be available without JRSNAP`);
-    for (const stage of ["0710", "0720"]) assert.deepEqual(direct.get(stage)?.missingRunners, ["jrsnap"], `WebPier ${stage} must report JRSNAP missing`);
-    evidence.webPier = { engineVersion: contract.engineVersion, unavailableStages: contract.unavailableStages };
+    const items = new Map(contract.outputs.map(output => [output.key, output]));
+    const withoutJrsnap = ["ground_model", "reactions", "longitudinal", "longitudinal_frame_analysis", "transverse",
+      "transverse_frame_analysis"];
+    for (const key of withoutJrsnap) assert.equal(items.get(key)?.available, true, `WebPier ${key} must be available without JRSNAP`);
+    for (const key of ["longitudinal_seismic", "transverse_seismic"]) {
+      assert.deepEqual(items.get(key)?.missingRunners, ["jrsnap"], `WebPier ${key} must report JRSNAP missing`);
+    }
+    evidence.webPier = { engineVersion: contract.engineVersion, unavailableOutputs: contract.unavailableOutputs };
     const inputPath = join(inputs, "webpier", "input.json");
     await mkdir(dirname(inputPath));
-    await cp(values["webpier-input"], inputPath);
-    evidence.webPier.input = { source: values["webpier-input"], sha256: createHash("sha256").update(await readFile(inputPath)).digest("hex") };
-    const validated = await call("webpier_validate", { inputPath, stage: "all", frameAnalysis: true });
+    const document = JSON.parse(await readFile(values["webpier-input"], "utf8"));
+    document.outputs = Object.fromEntries([...items.keys()].map(key => [key, withoutJrsnap.includes(key)]));
+    await writeFile(inputPath, JSON.stringify(document, null, 2), "utf8");
+    evidence.webPier.input = { source: values["webpier-input"], outputs: withoutJrsnap,
+      sha256: createHash("sha256").update(await readFile(inputPath)).digest("hex") };
+    const validated = await call("webpier_validate", { inputPath });
     assert.equal(validated.ok, true, "WebPier input did not validate");
-    for (const stage of withoutJrsnap) {
-      progress(`Running webpier_generate (stage ${stage}) and checking its artifacts...`);
-      const result = await call("webpier_generate", { inputPath, stage });
-      assert.equal(result.ok, true, `webpier_generate ${stage} failed: ${JSON.stringify(result.errors ?? result.messages)}`);
-      assert.equal(result.executionStatus, "success");
-      const artifacts = await download(result);
-      assert([...artifacts.keys()].some(name => name.endsWith(".pdf")), `webpier_generate ${stage} returned no report PDF`);
-      assert([...artifacts.keys()].some(name => name.endsWith(".json")), `webpier_generate ${stage} returned no result JSON`);
-      evidence.engines.push({ tool: "webpier_generate", stage, jobId: result.jobId, executionStatus: result.executionStatus,
-        engineeringStatus: result.engineeringStatus, artifacts: result.artifacts.map(({ relativePath, name, bytes, sha256 }) => ({ path: relativePath ?? name, bytes, sha256 })) });
-      progress(`webpier_generate ${stage} complete: ${result.artifacts.length} verified artifacts.`);
+    const stages = ["0500", "0600", "0610", "0611", "0612", "0620", "0621", "0622"];
+    assert.deepEqual(validated.summary.stages, stages, "WebPier input must choose the stages 0500-0622");
+    progress("Running webpier_generate (0500-0622) and checking its artifacts...");
+    const result = await call("webpier_generate", { inputPath });
+    assert.equal(result.ok, true, `webpier_generate failed: ${JSON.stringify(result.errors ?? result.messages)}`);
+    assert.equal(result.executionStatus, "success");
+    const artifacts = await download(result);
+    for (const stage of stages) {
+      assert([...artifacts.keys()].some(name => name.includes(`${stage}_`) && name.endsWith(".pdf")), `webpier_generate returned no ${stage} report PDF`);
+      assert([...artifacts.keys()].some(name => name.includes(`${stage}_`) && name.endsWith(".json")), `webpier_generate returned no ${stage} result JSON`);
     }
+    evidence.engines.push({ tool: "webpier_generate", outputs: withoutJrsnap, jobId: result.jobId, executionStatus: result.executionStatus,
+      engineeringStatus: result.engineeringStatus, artifacts: result.artifacts.map(({ relativePath, name, bytes, sha256 }) => ({ path: relativePath ?? name, bytes, sha256 })) });
+    progress(`webpier_generate complete: ${result.artifacts.length} verified artifacts.`);
     evidence.checks.push("WebPier stages 0500-0622 without JRSNAP, artifacts SHA-256/PDF checks");
   }
   {
