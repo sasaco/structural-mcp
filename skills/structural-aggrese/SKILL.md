@@ -22,6 +22,7 @@ Aggre-SE（Batch.exe、Docu-SE）は JRSNAP の解析結果（各 Case の `.DB1
 ## DB1 の横に要るファイル
 
 - DB1 と同じ名前の全ファイル（`.DB2`・`.R10` など。`.R10` などは SNAPDBLib が zip から展開する）。DB1 の横の同じ名前の `.xlsx`・`.csv` は Batch の出力で、入力ではない。
+- 欠けても失敗しないので注意（Batch の PHC の見本で、runner で確認、2026-10-22）：**`.DB2` がないと `ok:true` のまま荷重変位と照査値が `-----` になる**。runner は DB2 がないと `SNAP_FILES_MISSING` で失敗する（Batch e463db8 から）。`.R10`・`.R12` がないと、総括表の文字列が一部変わる（R10 の損傷レベルの制限値と思われる）が、R10・R12 は見本の半分のケースにしかないので runner は確かめない。DB1・DB2・R10・R12 があれば、総括表・照査表は全部置いたときと一致した。
 - `<DB1名>_Output_Chokukiso.csv`：直接基礎の照査値。**JRSNAP の基礎照査機能（`S_SubstCheck.exe`）が書く**。NDU に直接基礎の照査のデータ（`ChokuKisoNum`・`CHOKU_KISO`）があり、「基礎照査機能を起動しますか？」に「はい」と答えたときだけできる。ないとき Aggre-SE は DB1 から求める（`SNAPClass.vb`：`SetChokukisoDB` は CSV があれば読むだけで、`GetChokukisoJoint` などは `OutputInfo.OutChokukiso Is Nothing` のとき DB1 の値を使う。コードで確認）。**JRSNAP の基礎照査の値と、CSV なしで DB1 から求めた値は一致しないことがある**（作用は合い、抵抗側が違った例がある。原因は未切り分け。実アプリで確認、2026-10-19）。
 - `_Output_PIC.csv`・`_直接基礎照査No1.csv` も同じ機能の出力だが、Aggre-SE は読まない。
 - `Aspect-SE_*.csv`：任意スペクトルのとき（DB1 と同じフォルダー）。
