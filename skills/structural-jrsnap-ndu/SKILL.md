@@ -1,12 +1,12 @@
 ---
 name: structural-jrsnap-ndu
-description: JRSNAP の入力データ .ndu（Shift-JIS・CRLF のキー＝カンマ区切りの行）の項目を直接読む・編集するときに使う。Shift-JIS・改行・対象外のバイトを保ったままキーとフィールド位置を指定して置き換え、差分を検証する手順と、確かめたキーとフィールドの意味（SectInfo・SectConc・SectJiku・SectJikuNum・SectRein・SectSher・SectFrangeJiku の断面・材料・配筋、FootInfo・CHOKU_KISO・SuppotNum の直接基礎と支点、DataInfo、Tisou、NonLinInfo の破壊形態、JLoadInfo、版の保存で足される項目、読込が行の順に依存すること、節点番号は左上から付けること）を扱う。断面データを計算表へ転記するとき、見本と既存の NDU を照合するときにも使う。アプリでの版別保存や解析実行は structural-jrsnap-input。
+description: JRSNAP の入力データ .ndu（Shift-JIS・CRLF のキー＝カンマ区切りの行）の項目を直接読む・編集するときに使う。Shift-JIS・改行・対象外のバイトを保ったままキーとフィールド位置を指定して置き換え、差分を検証する手順と、確かめたキーとフィールドの意味（SectInfo・SectConc・SectJiku・SectJikuNum・SectRein・SectSher・SectFrangeJiku の断面・材料・配筋、FootInfo・CHOKU_KISO・SuppotNum の直接基礎と支点、DataInfo、Tisou、NonLinInfo の破壊形態、JLoadInfo、SNAPConb・ConbAlpf の荷重の組合せ（ρm・αf・正向／逆向）、版の保存で足される項目、読込が行の順に依存すること、節点番号は左上から付けること）を扱う。断面データを計算表へ転記するとき、見本と既存の NDU を照合するときにも使う。アプリでの版別保存や解析実行は structural-jrsnap-input。
 ---
 
 # JRSNAP の NDU の項目を読む・編集する
 
 - 断面・材料・配筋のキーとフィールド：`references/section-fields.md`
-- 直接基礎・支点・全体の設定、版の保存で足される項目、読込の制約、節点番号の順・破壊形態（`NonLinInfo`）・節点荷重（`JLoadInfo`）：`references/ndu-format.md`
+- 直接基礎・支点・全体の設定、版の保存で足される項目、読込の制約、節点番号の順・破壊形態（`NonLinInfo`）・節点荷重（`JLoadInfo`）、荷重の組合せ（`SNAPConb` の ρm・αf・正向／逆向、`ConbAlpf`）：`references/ndu-format.md`
 - フィールドの意味は、特定のモデルで観測した対応を含む。各資料の「確認範囲」を見て、別の版・断面形状・案件へ無条件に当てはめない。
 - 公式の説明：JRSNAP Ver5.2-L03 操作説明書（JRSNAP のインストールに付く PDF。T形断面 100頁、引張鉄筋段数 101頁・表2-33、DR の入力 103頁・図2-70、フランジ内軸方向鉄筋 105頁・図2-71・表2-36、主筋段数 90・530頁）。
 
