@@ -67,7 +67,7 @@
 
 `git clone --branch sassa/skills <structural-mcp の作業ツリー> <scratchpad>/phase3/clone` の後、`git submodule update --init --recursive`。
 
-1. 1回目（`core.longpaths` なし）：JRSNAPHeadless・SoilStructure・WebPier は取得できた。Batch・Capacita・FEMPython は取得まで進んだが、checkout で「Filename too long」（scratchpad のパスが約130文字と深く、Batch の `Batchテスト/…/…ρm12.ndt`、Capacita の `WebDanforJS/src/app/components/…`、FEMPython の `FrameGConverter/…/appInsights1.arm.json` が 260 文字を超えた）。この Phase の変更とは無関係の、置き場所の深さの問題。
+1. 1回目（`core.longpaths` なし）：JRSNAPHeadless・SoilStructure・WebPier は取得できた。Batch・Capacita・FEMPython は取得まで進んだが、checkout で「Filename too long」（scratchpad のパスが約130文字と深く、Batch の `tests/…/…ρm12.ndt`、Capacita の `WebDanforJS/src/app/components/…`、FEMPython の `FrameGConverter/…/appInsights1.arm.json` が 260 文字を超えた）。この Phase の変更とは無関係の、置き場所の深さの問題。
 2. `git -c core.longpaths=true clone …` と `git -c core.longpaths=true submodule update --init --recursive` で作り直すと exit 0。6つの submodule がすべて登録の commit（Batch `47d1654`、Capacita `a29c9b4`、FEMPython `7488c8f`、JRSNAPHeadless `9e3c8fe`、SoilStructure `ef41177`、WebPier `f4aabca`）で、作業ツリーの差分なし。
 3. **Batch（GitLab）は認証を求められずに取得できた**（この PC の資格情報。別の PC で権限がなければ Batch だけ失敗する）。JRSNAPHeadless（private）も `gh` の資格情報で取得できた。
 4. clone の中の WebPier で `uv sync --project "./WebPier" --locked` が通り、GridLayoutPdf が `git+https://github.com/sasaco/grid_layout_pdf@a8c5228…` で入り、`import gridlayoutpdf, webpier` も通った。

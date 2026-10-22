@@ -94,7 +94,7 @@ Codex の登録（`~/.codex/config.toml`）は変えずに、Claude Code の新�
 
 ## 新しく分かったこと
 
-- Batch：`9c70f54` を Docu-SE.sln で MSBuild（VS 18 Community）して `AggreSE.Headless.exe` を作り直した（2026-10-19 21:22）。`dotnet test tests\Aggre-SE.Test\… --no-build -c Release` は **22 件すべて成功、skip 0**（この PC には `Batchテスト` の DB1 がある）。structural-mcp の `npm test`（55件）と `smoke:aggrese`（`Batchテスト/JRSNAP_Ver5.2-L03/01_サンプル(V53)：RC橋脚L：PHC/…xml`、31秒、成果物7件）も通った。
+- Batch：`9c70f54` を Docu-SE.sln で MSBuild（VS 18 Community）して `AggreSE.Headless.exe` を作り直した（2026-10-19 21:22）。`dotnet test tests\Aggre-SE.Test\… --no-build -c Release` は **22 件すべて成功、skip 0**（この PC には `tests` の DB1 がある）。structural-mcp の `npm test`（55件）と `smoke:aggrese`（`tests/JRSNAP_Ver5.2-L03/01_サンプル(V53)：RC橋脚L：PHC/…xml`、31秒、成果物7件）も通った。
 - `npm run smoke:aggrese -- <パス>` は、パスに括弧があると npm（cmd）が `^(` にエスケープして ENOENT になる。`npm run build` の後に `node scripts/smoke-aggrese.mjs <パス>` で直接呼ぶ。
 - WebPier の生成で入力エラーの多くは `<入力のパス>: <理由>` の形のメッセージ（`Reader.error` と計算層の `_need` など約100か所）。`InputError` に属性を足すより、メッセージの先頭が入力のパス（最初の区切りが `parse.TOP_KEYS`）かで取り出すほうが変更が小さく、計算層のエラーにも効く。
 - WebPier の項目表 `FIELDS` のパターンは `.` 区切りだが、キーに `.` を含むもの（`等価繰返し回数.A列車.k=0.06`）がある。数字だけの区切りは前のキーに戻す（`1両の長さ` のように数字で始まるキーはあるが、数字だけのキーはない）。

@@ -10,7 +10,7 @@ description: JRSNAP（鉄道総研の静的非線形解析。Ver.5.2-L03／Ver.5
 - 画面の起動と NDU の保存（開く・上書き保存、版の形式番号）：`references/open-save.md`
 - 解析用データ出力（.ndu→.ndt）を画面なしで行う仕組み：`references/ndt-export.md`
 - 解析エンジンの画面・結果ファイル・基礎照査機能：`references/engine.md`
-- 見本データ（開発機のみ。structural-mcp の repo のルートから）：`Batch/Batchテスト/JRSNAP_Ver5.3-L01体験版2/`・`Batch/Batchテスト/JRSNAP_Ver5.2-L03/`。原本を直接開いて保存しない（複製を使う）。
+- 見本データ（開発機のみ。structural-mcp の repo のルートから）：`Batch/tests/JRSNAP_Ver5.3-L01体験版2/`・`Batch/tests/JRSNAP_Ver5.2-L03/`。原本を直接開いて保存しない（複製を使う）。
 
 ## .ndu から解析まで画面なしで行う（JRSNAPHeadless の runner。先にこちら）
 

@@ -77,7 +77,7 @@
 | 桑園 `jrsnap-ndu-edit/references/section-material-geometry-rebar.md`（全文） | 桑園 `slab-shear-summary/references/ndu-section-material-geometry-rebar.md`（同上。`tension-side.md`・`ndu-sect-frange-jiku.md` へのリンクも） |
 | 桑園 `jrsnap-ndu-edit/SKILL.md` の案件の規則（L3 の形状コード15の要約、転記の記録、Mdmax の符号の規則） | すでに `slab-shear-summary` の SKILL.md・`input-sources.md`・`tension-side.md` にある。SKILL.md に2つの記録とグローバルの `structural-jrsnap-ndu` への1行を足した |
 | 桑園 `slab-shear-summary` の `calculation.md`・`tension-side.md` の `../../jrsnap-ndu-edit/references/…` へのリンク | 移した先のファイルへ |
-| Batch `Batchテスト/版別サンプル_保存状況.md` の `../.agents/skills/jrsnap-input-open-save/SKILL.md` へのリンク（以前から切れていた） | 「structural-mcp のスキル structural-jrsnap-input（open-save.md）」 |
+| Batch `tests/版別サンプル_保存状況.md` の `../.agents/skills/jrsnap-input-open-save/SKILL.md` へのリンク（以前から切れていた） | 「structural-mcp のスキル structural-jrsnap-input（open-save.md）」 |
 | structural-mcp `structural-webpier/references/checks.md` の開発用スキル名 | 新しい名前（旧名を併記） |
 
 ## 確認を取った操作（いつ・何を・利用者の返事・結果）

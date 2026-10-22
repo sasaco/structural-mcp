@@ -78,7 +78,7 @@ SectFrangeJiku1-4=223,16,250,2
 
 ## 断面形状コードと解析データの断面コード（JRSNAP_Input のソースで確認）
 
-2026-10-22 に Ver.5.3-L01体験版2 の JRSNAP_Input のソース（`mdlDataFile.cs` の NDU 書出し、`mdlDATA_NDT.cs: mdl_Wrt_NDTData_SectNo`、`mdlSectKyoutuu.cs`、`frmHokyoBuzaiSet.cs`、`frmDanmenEdit_CFT.cs`）を読んで確かめた。下の 3 つは、NDU を編集して JRSNAPHeadless の runner で解析し、NDT の断面コードと DB1 で確かめた（structural-mcp の `Batch/Batchテスト/JRSNAP_Ver5.3-L01体験版2/07_断面形状(V53)：57・301・510/README.md`）。
+2026-10-22 に Ver.5.3-L01体験版2 の JRSNAP_Input のソース（`mdlDataFile.cs` の NDU 書出し、`mdlDATA_NDT.cs: mdl_Wrt_NDTData_SectNo`、`mdlSectKyoutuu.cs`、`frmHokyoBuzaiSet.cs`、`frmDanmenEdit_CFT.cs`）を読んで確かめた。下の 3 つは、NDU を編集して JRSNAPHeadless の runner で解析し、NDT の断面コードと DB1 で確かめた（structural-mcp の `Batch/tests/JRSNAP_Ver5.3-L01体験版2/07_断面形状(V53)：57・301・510/README.md`）。
 
 - `SectInfo` 第2フィールド（断面形状コード）と NDT の断面コードは別の番号体系。1→51（密帯鉄筋なら 58）、2→52（密帯鉄筋なら 57）、3→54、4→201、5→202、6→204、7→61、8・9→62、10→300、11→52、12→55、13→301、14→510、15→54（フランジ内軸方向鉄筋ありなら 540）、151・400・501 はそのまま。
 - **14＝補強ありの RC 矩形**。補強工法（`SectRetrofit` 第1フィールド。0＝適用しない、1＝鋼板巻立て、2＝鋼製パネル組立て、3＝波形分割鋼板巻立て、4＝スパイラル筋巻立て、5＝吹付けモルタル、6＝組合せ鋼材巻立て、7＝RCプレキャスト型枠、8＝外部スパイラル筋巻立て、9＝繊維補強モルタル巻立て）が 1 以上だと画面が 1 を 14 にする。`SectRetrofit` は整数4（工法、施工、考慮、端部）＋実数14（第5＝板厚 t、第7＝JT、第8＝ヤング係数、第9＝降伏強度、以降は係数）。鋼板巻立て t=6 の例：`SectRetrofit2=1,0,1,1,6,0,30,200,245,1,1,0,0,0,1.05,6.154,1.1,1.1`。

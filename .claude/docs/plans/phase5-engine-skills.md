@@ -31,7 +31,7 @@
 
 - 旧系統（桑園・Batch・上越）にしかない記述はなかった。違いはパスの書き方（`C:\Users\sasai\Documents\Batch` を起点にした相対パス／`.agents\skills\…`）だけ。新系統（WebPier）を基準にした。
 - `capacita-column-check`：WebPier 版（77行）は 26_関内 版（68行）の上位互換。関内版にない「片持ち梁の断面照査（0910）」の節と、Dmax の出どころ（`鉄筋.柱` → `鉄筋.フーチング`）の訂正がある。関内版にしかない記述はない。
-- 見本データ `Batchテスト` は Batch submodule の中で追跡されている（151 ファイル）ので、スキルは「開発機のみ。structural-mcp の repo のルートから `Batch/Batchテスト/…`」と書ける。
+- 見本データ `tests` は Batch submodule の中で追跡されている（151 ファイル）ので、スキルは「開発機のみ。structural-mcp の repo のルートから `Batch/tests/…`」と書ける。
 
 ## 対応表（元 → 移した先）
 
@@ -47,7 +47,7 @@ E＝structural-mcp の `skills/`、W＝WebPier の `.claude/skills/`、案件＝
 | 同：解析エンジンの画面と結果ファイル | E `engine.md`。「0720 Case1 の CASE-6 が 0（決定51）」の例は W、一般の事実は E `ndt-export.md` |
 | jrsnap-input-open-save：操作・一括保存・形式制限・`-ConvertS6`・根拠 | E `structural-jrsnap-input/references/open-save.md` |
 | 同：解析用データ出力を画面なしで行う仕組み | E `structural-jrsnap-input/references/ndt-export.md` |
-| jrsnap-soil-analysis：全部 | E `structural-jrsnap-soil`（サンプルは `Batch/Batchテスト/…`） |
+| jrsnap-soil-analysis：全部 | E `structural-jrsnap-soil`（サンプルは `Batch/tests/…`） |
 | jrsnap-ndu-edit：編集前・Shift-JIS・検証・知見の規則 | E `structural-jrsnap-ndu/SKILL.md` |
 | 同：L3 総括表への転記、Mdmax の符号で引張側の主筋を選ぶ規則、`jrsnap-slab-shear-summary` へのリンク | 案件（26_桑園高架橋）。E には「転記側の規則は案件の判断で、NDU の配筋を変える指示ではない」だけ |
 | ndu-edit/references/sect-frange-jiku.md：形式・フィールドの意味・正規表現・上下と左右の判定 | E `structural-jrsnap-ndu/references/section-fields.md`・SKILL.md |
