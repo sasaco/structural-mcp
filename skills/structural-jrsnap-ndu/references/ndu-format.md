@@ -24,6 +24,15 @@
 
 これは1つのモデルに対する保存処理の実測で、マニュアルの新版既定値を旧モデルに一律適用しない。行追加による位置ずれを含む `BodyChangedLines=137` は、137個の入力値が変わったという意味ではない。原本へ新版保存を反映する場合は実際のキー単位の差分を確認する。
 
+## 両端固定 M-θ 部材の Vmu・Vud のチェック（2026-10-22、JRSNAP 5.2-L03）
+
+基本条件の画面の「破壊形態の判定において、両端固定支持された M-θ 部材の Vmu と Vud の値を計算して照査する」（操作説明書 2-51 ⑫）。
+
+- **`DataInfo` の最後の欄**（0＝なし、1＝あり）。コードで確認（`JRSNAP_Input.exe` 5.2.3.1 を逆コンパイル）：画面は `frmEditKihonJyoken.chkVasud`（`G_intSNAP_FLG == 1` のときだけ表示）、値は `mdlGlobal.G_intChkVasud`。`mdlDataFile.cs` は `DataInfo` の整数16欄・実数4欄のあとに `KISOFLG, KISO_SHUBETU, NiniZahyoFlg, SendanSpan, [GanmaC], ChkVasud` を書く（`GanmaC` は `G_intViewFlg[22] == 1` のときだけ書く。読込みは `GanmaC`・`ChkVasud` の順に読む）。
+- Batch の見本「T形両端固定」（26欄）では第26欄。0→1 にしただけの NDU を runner の `--analyze false` で書き出すと、NDT の差は DA ブロック1行目の1文字（`GanmaC` の次。1 なら `1`、0 なら空白）だけだった。
+- 解析すると、両端固定（`TanbuShiji<n>=2,<部材長 mm>`）の断面の両端の M-θ 部材で、総括表の Vmu が `|Mm1 − Mm2| / L` になる（実アプリで確認。DB1 の値はスキル `structural-aggrese` の outputs.md）。見本（開発機のみ。structural-mcp の repo のルートから）：`Batch/Batchテスト/JRSNAP_Ver5.2-L03/08_両端固定のVmu・Vud(V52-L03)/`。
+- 旧版を保存したときに `DataInfo` 末尾に足される `,0,0,0`（上の節）は、`SendanSpan`・`GanmaC`・`ChkVasud` と推定（未確認）。5.3-L01体験版2 は調べていない。
+
 ## 5.2-L03 の読込の制約（2026-10-17、インストール済み 5.2-L03 の読込・保存処理で一時モデルを確認）
 
 - reader は行の位置と順番に依存する。キーが同じでも `Member_BunpuBane` や `ShabuzaiMeInfo` を別ブロックへ移すと読込に失敗する。名前を辞書へ読み込めただけでは実アプリ互換を保証できない。

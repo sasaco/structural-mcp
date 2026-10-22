@@ -39,4 +39,15 @@ Batch 5.3.0.1。確認は 2026-10-19（直接基礎の橋脚の線路方向 1 Ca
 ## 総括表 summary.xlsx
 
 - 約27 KB。シートは応答値一覧表・設計総括表・安全率一覧表・直接基礎の4枚（計算書の最後の4ページと同じ）。
+- 総括表を標準スタイル（XML の `Calculation/_rbProduct` が true,false、runner の `summary.productStyle` 0）にした杭基礎のラーメン（Batch の見本「T形両端固定」）では、応答値一覧表・M-θ・M-φ・安全率一覧表の4枚だった（2026-10-22、Batch eb74d80）。
+
+## 両端固定 M-θ 部材の Vmu・Vud（JRSNAP 5.2-L03 のチェック）
+
+JRSNAP の解析条件「破壊形態の判定において、両端固定支持された M-θ 部材の Vmu と Vud の値を計算して照査する」（.ndu の項目はスキル `structural-jrsnap-ndu`）を入れて解析した DB1。同じモデルをチェックなし・ありで解析して比べた（2026-10-22、JRSNAP 5.2-L03、SNAPDBLib は Batch cb652a3 のもの）。
+
+- SNAPDBLib：`InputInfo.KihonInfo.Both_VmuVud` がチェック（0／1）。対象の部材は、連番の非線形番号（① I 端・② J 端）で同じ断面（`DLInfo.SIJI = 2`）の組。
+- `OutputInfo.OutSoukatu[n].Break`：`La` が **−999.999**（定義書の「−999」ではない）。`Vmu = |Mm1 − Mm2| / (DLInfo.L2 / 1000)`（`L2` は部材長で単位は mm。`Mm` は符号付き）で、`Vmu`・`Vyd`（=Vud、JRSNAP の min(Vud+, Vud-)）・`Vmu_Vyd` が両端で同じ。I 端の `Mm` も変わる（例：−4795.1 → 2870.3）。
+- チェックで I 端の `Sendan`（せん断破壊の照査）も変わった（StepNo1・2 が 0,0 → 119,346、Vdmax 115.9 → 1344.5 kN）。定義書の説明にない変化で、意図どおりかは SNAPDBLib の開発者に確認中。ほかの非線形番号の `Break`・`Sendan`・`Sonsho` は全項目が同じ。
+- Aggre-SE（Batch eb74d80 以降）：M-θ で La ≦ −999 の部材を両端固定（`cls破壊形態の照査.is両端固定`）とし、総括表の M-θ シートと計算書の La を `-----` と出す。Vmu・Vud・Vmu/Vud は DB1 の値のまま。カスタムせん断耐力の設定があっても、この部材の Vud は算定し直さない。それより前の Batch では La が `-999.999` と出る。
+- 確かめるテスト（開発機のみ。structural-mcp の repo のルートから）：`Batch/tests/Aggre-SE.Test/BothEndsFixedVmuVudTests.cs`。見本は `Batch/Batchテスト/JRSNAP_Ver5.2-L03/08_両端固定のVmu・Vud(V52-L03)/`。
 - zip の中の日時は 1980-01-01 で固定だが、`xl/workbook.xml` の `documentId`、各シート・図の `xr:uid`・`a16:creationId` の GUID と `docProps/core.xml` の `dcterms:modified` が毎回変わるので、同じ入力でもバイトが変わる（2026-10-19、2回作って比べた）。検査するならシート名の並びを見る。

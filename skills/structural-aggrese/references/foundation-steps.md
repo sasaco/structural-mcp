@@ -36,6 +36,9 @@ $db.OutputInfo.OutChokukiso[$k].ChokuItem[$j]
 ```
 
 - `.OUT` はパスワード付き zip で読めない。
+- repo の `Batch/Aggre-SE/SNAPDBLib.dll` は、`LoadFrom` が 0x80131515 で失敗した（ダウンロードしたファイルとしてブロックされている）。`[Reflection.Assembly]::UnsafeLoadFrom(...)` なら読める（2026-10-22、32 ビットの Windows PowerShell 5.1 で確認）。
+- `IKihonInfo`・`IOutSokatuBreak` などは `CSNAPDB` の入れ子の型で、値はプロパティではなく**フィールド**（一覧は `GetFields()`）。
+- Windows PowerShell 5.1 は BOM なしのスクリプトを ANSI で読むので、日本語のパスはスクリプトに書かず引数で渡す。
 
 ## Batch 側のテスト
 

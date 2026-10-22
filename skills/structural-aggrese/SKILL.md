@@ -1,6 +1,6 @@
 ---
 name: structural-aggrese
-description: Aggre-SE（Batch.exe、Docu-SE。structural-mcp の Batch サブモジュール）のプロジェクトXMLを読む・項目を画面と対応付ける・JRSNAP の解析結果（DB1 と同じ名前のファイル）と一緒に MCP の aggrese_inspect／aggrese_calculate か AggreSE.Headless の runner で照査・集計させる・Aggre-SE 自身の保存し直しで書式を確かめるときに使う。XML の文字コード（宣言は utf-16、中身は Shift-JIS）、_rbSpec・_rbJIban などの添字の意味（画面の並びや 0 始まりの順と違うものがあるので、推測せずこのスキルの表で確かめる）、DB1 の横に要るファイル（_Output_Chokukiso.csv、Aspect-SE_*.csv）、計算書 report.pdf・ピックアップ pickup.pik・総括表 summary.xlsx の構成と毎回変わる部分、直接基礎のステップ表（--foundation-steps）、SNAPDBLib で DB1 を画面なしで覗く方法、Batch の版が変わって書式を追うとき、耐震照査の入力が Aggre-SE で読めるか調べるときにも使う。JRSNAP の解析そのものには使わない。
+description: Aggre-SE（Batch.exe、Docu-SE。structural-mcp の Batch サブモジュール）のプロジェクトXMLを読む・項目を画面と対応付ける・JRSNAP の解析結果（DB1 と同じ名前のファイル）と一緒に MCP の aggrese_inspect／aggrese_calculate か AggreSE.Headless の runner で照査・集計させる・Aggre-SE 自身の保存し直しで書式を確かめるときに使う。XML の文字コード（宣言は utf-16、中身は Shift-JIS）、_rbSpec・_rbJIban などの添字の意味（画面の並びや 0 始まりの順と違うものがあるので、推測せずこのスキルの表で確かめる）、DB1 の横に要るファイル（_Output_Chokukiso.csv、Aspect-SE_*.csv）、計算書 report.pdf・ピックアップ pickup.pik・総括表 summary.xlsx の構成と毎回変わる部分、JRSNAP の両端固定 M-θ 部材の Vmu・Vud（La が -999.999、Both_VmuVud）、直接基礎のステップ表（--foundation-steps）、SNAPDBLib で DB1 を画面なしで覗く方法、Batch の版が変わって書式を追うとき、耐震照査の入力が Aggre-SE で読めるか調べるときにも使う。JRSNAP の解析そのものには使わない。
 ---
 
 # Aggre-SE のプロジェクトXMLを扱う
@@ -65,8 +65,8 @@ runner（`STRUCTURAL_MCP_AGGRESE_RUNNER`）は protocol v1。XML と DB1 のフ�
 ## 詳しく
 
 - `references/project-xml.md`：XML の項目と画面の対応、クラスと画面のソースの場所、配列の長さ。
-- `references/outputs.md`：report.pdf・pickup.pik・summary.xlsx の構成、見出しの出どころ、毎回変わる部分、引数と成果物の対応、版による違い。
-- `references/foundation-steps.md`：直接基礎のステップ表（`--foundation-steps`）の列と step の番号、SNAPDBLib で DB1 を画面なしで覗く方法、Batch 側のテスト。
+- `references/outputs.md`：report.pdf・pickup.pik・summary.xlsx の構成、見出しの出どころ、毎回変わる部分、引数と成果物の対応、版による違い、両端固定 M-θ 部材の Vmu・Vud（DB1 の値と Aggre-SE の表示）。
+- `references/foundation-steps.md`：直接基礎のステップ表（`--foundation-steps`）の列と step の番号、SNAPDBLib で DB1 を画面なしで覗く方法（`UnsafeLoadFrom`、値はフィールド）、Batch 側のテスト。
 
 ## 知見を足すとき
 
