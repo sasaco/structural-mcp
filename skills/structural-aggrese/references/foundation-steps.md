@@ -47,3 +47,11 @@ $db.OutputInfo.OutChokukiso[$k].ChokuItem[$j]
 - PHC（杭基礎）の見本で CSV が返らないこと。
 - 直接基礎（既定は Batch の repo のルートの隣の `WebPier/post/線路方向.xml`、環境変数 `AGGRE_SE_TEST_DIRECT_FOUNDATION_XML` で差替え、なければ skip）で、各行を `CSNAPDBEx` から読み直して照合する。
 - `summary.outputs` は result.json を含まず、帳票を作らない呼び出しでは `cases[].aggregated` が false になる（既存の仕様）。
+
+## SNAPDBLib を反射で直接呼んで、条件を総当たりする
+
+Batch の `CSNAPDBEx`（`Batch.exe` の型）を使うと、画面なしで SNAPDBLib の計算（`CalcOutouMyu` など）を引数を変えて呼べる。「どの条件で効くか」を調べるのに便利（issue 0002・0007 はこれで α が効く条件を見つけた）。
+
+- `[Reflection.Assembly]::UnsafeLoadFrom('<repo>\Aggre-SE\Headless\bin\Release\SNAPDBLib.dll')` を先に、`[Reflection.Assembly]::LoadFrom('<repo>\tests\Aggre-SE.Test\bin\Release\Batch.exe')` の型 `CSNAPDBEx` を `[Activator]::CreateInstance($t,@($db1,$false))`（第2引数は `$false`）で作る。
+- `CalcOutouMyu` は 8 引数と 9 引数の 2 つがあるので、`GetMethods()` で引数の数を選ぶ。
+- 全 DB1 を 1 本のスクリプトで回すと 120 秒以上止まる。DB1 ごとに `powershell.exe` を分け、`timeout` を付けて 1 本ずつ実行する。
