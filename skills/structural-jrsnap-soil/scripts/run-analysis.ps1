@@ -26,6 +26,9 @@ if (-not ('SoilWindows' -as [type])) {
 $inputFile = (Resolve-Path -LiteralPath $InputPath -ErrorAction Stop).Path
 $install = (Resolve-Path -LiteralPath $InstallDir -ErrorAction Stop).Path
 $exe = Join-Path $install 'SOIL-JR.exe'
+# 起動の引数の版は、インストール先の版に合わせる（Ver.5.2-L03 は 5.2-L03、それ以外は 5.3-L00）
+$licenseArgument = if ((Split-Path $install -Leaf) -like '*Ver5.2*') { 'LicenseOptNo111111199999999999999Ver.5.2-L03' }
+                   else { 'LicenseOptNo111111199999999999999Ver.5.3-L00' }
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "SOIL-JR.exe が見つかりません: $exe" }
 $sdrFile = [IO.Path]::GetFullPath($SdrPath)
 if ([IO.Path]::GetExtension($sdrFile) -ine '.sdr') { throw 'SdrPath には .sdr ファイルを指定してください。' }
@@ -93,7 +96,7 @@ $process = $null
 $originalClipboard = [System.Windows.Forms.Clipboard]::GetDataObject()
 try {
     $process = Start-Process -FilePath $exe `
-        -ArgumentList 'LicenseOptNo111111199999999999999Ver.5.3-L00' `
+        -ArgumentList $licenseArgument `
         -WorkingDirectory $install -PassThru
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ($process.MainWindowHandle -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) {
