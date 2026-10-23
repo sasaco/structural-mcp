@@ -1,6 +1,6 @@
 ---
 name: structural-jrsnap-input
-description: JRSNAP（鉄道総研の静的非線形解析。Ver.5.2-L03／Ver.5.3-L01体験版2）の入力画面 JRSNAP_Input.exe を起動・確認する、既存の .ndu を開いて版別に保存する（版の形式番号 S.5／S.6 の制限、V5.2 への変換の検査）、既存の .ndt を入力画面なしで S_ANALYSIS.exe に単一・複数解析させる、JRSNAPHeadless の runner（run）で .ndu から .ndt の書出しと解析までを画面なしで行うときに使う。解析用データ出力（.ndu→.ndt）の内部の手順と名前の規則、解析エンジンの確認画面と自動応答、結果ファイル（暗号化 zip で毎回バイトが変わる）、インストール先の共用ファイルと同時実行の禁止、基礎照査機能（S_SubstCheck.exe）が書く CSV も扱う。.ndu の項目の直接編集は structural-jrsnap-ndu、データ確認図・荷重図の PDF は structural-jrsnap-figures、SOIL-JR は structural-jrsnap-soil。
+description: JRSNAP（鉄道総研の静的非線形解析。Ver.5.2-L03／Ver.5.3-L01体験版2）の入力画面 JRSNAP_Input.exe を起動・確認する、既存の .ndu を開いて版別に保存する（版の形式番号 S.5／S.6 の制限、V5.2 への変換の検査）、既存の .ndt を入力画面なしで S_ANALYSIS.exe に単一・複数解析させる、JRSNAPHeadless の runner（run）で .ndu から .ndt の書出しと解析までを画面なしで行うときに使う。解析用データ出力（.ndu→.ndt）の内部の手順と名前の規則、解析エンジンの確認画面と自動応答、結果ファイル（暗号化 zip で毎回バイトが変わる）、インストール先の共用ファイルと同時実行の禁止、基礎照査機能（S_SubstCheck.exe）が書く CSV、耐震設計総括表（SSheet.exe）の xlsx も扱う。.ndu の項目の直接編集は structural-jrsnap-ndu、データ確認図・荷重図の PDF は structural-jrsnap-figures、SOIL-JR は structural-jrsnap-soil。
 ---
 
 # JRSNAP の入力を開く・保存する・解析する
@@ -10,6 +10,7 @@ description: JRSNAP（鉄道総研の静的非線形解析。Ver.5.2-L03／Ver.5
 - 画面の起動と NDU の保存（開く・上書き保存、版の形式番号）：`references/open-save.md`
 - 解析用データ出力（.ndu→.ndt）を画面なしで行う仕組み：`references/ndt-export.md`
 - 解析エンジンの画面・結果ファイル・基礎照査機能：`references/engine.md`
+- 耐震設計総括表（SSheet.exe。Output-JR）の入出力と、損傷レベルが小数点以下7桁であること、Docu-SE との突き合わせ：`references/summary-sheet.md`
 - 見本データ（開発機のみ。structural-mcp の repo のルートから）：`Batch/tests/JRSNAP_Ver5.3-L01体験版2/`・`Batch/tests/JRSNAP_Ver5.2-L03/`。原本を直接開いて保存しない（複製を使う）。
 
 ## .ndu から解析まで画面なしで行う（JRSNAPHeadless の runner。先にこちら）

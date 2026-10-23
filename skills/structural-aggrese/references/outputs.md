@@ -40,6 +40,7 @@ Batch 5.3.0.1。確認は 2026-10-19（直接基礎の橋脚の線路方向 1 Ca
 
 - 約27 KB。シートは応答値一覧表・設計総括表・安全率一覧表・直接基礎の4枚（計算書の最後の4ページと同じ）。
 - 総括表を標準スタイル（XML の `Calculation/_rbProduct` が true,false、runner の `summary.productStyle` 0）にした杭基礎のラーメン（Batch の見本「T形両端固定」）では、応答値一覧表・M-θ・M-φ・安全率一覧表の4枚だった（2026-10-22、Batch eb74d80）。
+- 損傷レベルの θd・φd と制限値 θ1〜3・φ1〜3 は、JRSNAP の総括表（5.2-L03・5.3-L01体験版2）が小数点以下7桁。Batch の `ExcelReport.vb` は 2026-10-23 まで `Math.Round(値, 7)` のあと `"0.000000"` で6桁表示だった。書式を `"0.0000000"` にした runner の `summary.xlsx` は、V53 の PHC で JRSNAP の `…_安全性.xlsx` と7桁まで全項目一致した（軸力も同じ。実アプリ）。比べ方と JRSNAP 側の総括表は スキル structural-jrsnap-input（耐震設計総括表の節）。決定ケースの記録（`CalculationElement.vb` の `Math.Round(Math.Abs(φr), 6)`）は6桁のままで、この見本では差が出ていない。
 
 ## 両端固定 M-θ 部材の Vmu・Vud（JRSNAP 5.2-L03 のチェック）
 

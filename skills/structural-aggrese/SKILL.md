@@ -1,6 +1,6 @@
 ---
 name: structural-aggrese
-description: Aggre-SE（Batch.exe、Docu-SE。structural-mcp の Batch サブモジュール）のプロジェクトXMLを読む・項目を画面と対応付ける・JRSNAP の解析結果（DB1 と同じ名前のファイル）と一緒に MCP の aggrese_inspect／aggrese_calculate か AggreSE.Headless の runner で照査・集計させる・Aggre-SE 自身の保存し直しで書式を確かめるときに使う。XML の文字コード（宣言は utf-16、中身は Shift-JIS）、_rbSpec・_rbJIban などの添字の意味（画面の並びや 0 始まりの順と違うものがあるので、推測せずこのスキルの表で確かめる）、DB1 の横に要るファイル（_Output_Chokukiso.csv、Aspect-SE_*.csv）、計算書 report.pdf・ピックアップ pickup.pik・総括表 summary.xlsx の構成と毎回変わる部分、JRSNAP の両端固定 M-θ 部材の Vmu・Vud（La が -999.999、Both_VmuVud）、直接基礎のステップ表（--foundation-steps）、SNAPDBLib で DB1 を画面なしで覗く方法、基礎の照査条件で SOIL-JR の .sdr（基礎照査連携データ）から杭基礎の制限値を取り込む仕組みと注意、Batch の版が変わって書式を追うとき、耐震照査の入力が Aggre-SE で読めるか調べるときにも使う。JRSNAP の解析そのものには使わない。
+description: Aggre-SE（Batch.exe、Docu-SE。structural-mcp の Batch サブモジュール）のプロジェクトXMLを読む・項目を画面と対応付ける・JRSNAP の解析結果（DB1 と同じ名前のファイル）と一緒に MCP の aggrese_inspect／aggrese_calculate か AggreSE.Headless の runner で照査・集計させる・Aggre-SE 自身の保存し直しで書式を確かめるときに使う。XML の文字コード（宣言は utf-16、中身は Shift-JIS）、_rbSpec・_rbJIban などの添字の意味（画面の並びや 0 始まりの順と違うものがあるので、推測せずこのスキルの表で確かめる）、DB1 の横に要るファイル（Aspect-SE_*.csv。_Output_Chokukiso.csv は読まない）、.EMG の軸力適用範囲外の注記と備考、計算書 report.pdf・ピックアップ pickup.pik・総括表 summary.xlsx の構成と毎回変わる部分、JRSNAP の両端固定 M-θ 部材の Vmu・Vud（La が -999.999、Both_VmuVud）、直接基礎のステップ表（--foundation-steps）、SNAPDBLib で DB1 を画面なしで覗く方法、基礎の照査条件で SOIL-JR の .sdr（基礎照査連携データ）から杭基礎の制限値を取り込む仕組みと注意、Batch の版が変わって書式を追うとき、耐震照査の入力が Aggre-SE で読めるか調べるときにも使う。JRSNAP の解析そのものには使わない。
 ---
 
 # Aggre-SE のプロジェクトXMLを扱う
@@ -23,7 +23,7 @@ Aggre-SE（Batch.exe、Docu-SE）は JRSNAP の解析結果（各 Case の `.DB1
 
 - DB1 と同じ名前の全ファイル（`.DB2`・`.R10` など。`.R10` などは SNAPDBLib が zip から展開する）。DB1 の横の同じ名前の `.xlsx`・`.csv` は Batch の出力で、入力ではない。
 - 欠けても失敗しないので注意（Batch の PHC の見本で、runner で確認、2026-10-22）：**`.DB2` がないと `ok:true` のまま荷重変位と照査値が `-----` になる**。runner は DB2 がないと `SNAP_FILES_MISSING` で失敗する（Batch e463db8 から）。`.R10`・`.R12` がないと、総括表の文字列が一部変わる（R10 の損傷レベルの制限値と思われる）が、R10・R12 は見本の半分のケースにしかないので runner は確かめない。DB1・DB2・R10・R12 があれば、総括表・照査表は全部置いたときと一致した。
-- `<DB1名>_Output_Chokukiso.csv`：直接基礎の照査値。**JRSNAP の基礎照査機能（`S_SubstCheck.exe`）が書く**。NDU に直接基礎の照査のデータ（`ChokuKisoNum`・`CHOKU_KISO`）があり、「基礎照査機能を起動しますか？」に「はい」と答えたときだけできる。ないとき Aggre-SE は DB1 から求める（`SNAPClass.vb`：`SetChokukisoDB` は CSV があれば読むだけで、`GetChokukisoJoint` などは `OutputInfo.OutChokukiso Is Nothing` のとき DB1 の値を使う。コードで確認）。**JRSNAP の基礎照査の値と、CSV なしで DB1 から求めた値は一致しないことがある**（作用は合い、抵抗側が違った例がある。原因は未切り分け。実アプリで確認、2026-10-19）。
+- `<DB1名>_Output_Chokukiso.csv`：直接基礎の照査値。JRSNAP の基礎照査機能（`S_SubstCheck.exe`）が書くが、**Aggre-SE（2026-10-23 以降の Batch）はこの CSV を読まない**（読むコードを削除。以前は形式の不一致で例外になり、空の `Catch` で握りつぶされて、一度も読めずに DB1 から求めていた。Batch の issue 0015・ADR 0002）。直接基礎の照査値は常に DB1 から求める。**CSV と DB1 から求めた値は一致しない**（5.3 の Rvd 最大 31%・Mmd 最大 17%、岩盤の Hd は 246 ステップで符号が逆。どちらが基礎照査機能の式に合うかは未確認。実アプリで確認、2026-10-23）。CSV を置いても結果は変わらない。
 - `_Output_PIC.csv`・`_直接基礎照査No1.csv` も同じ機能の出力だが、Aggre-SE は読まない。
 - `Aspect-SE_*.csv`：任意スペクトルのとき（DB1 と同じフォルダー）。
 
@@ -62,6 +62,24 @@ runner（`STRUCTURAL_MCP_AGGRESE_RUNNER`）は protocol v1。XML と DB1 のフ�
 - csc は **PowerShell から**呼ぶ。Git Bash は `/nologo` などをパスに書き換えて失敗する。
 - 保存し直すと、名前空間の宣言の順（`xmlns:xsi` が先）、`Version`、`_dgLimitLevel_SIJI`・`_ParagraphLength` など、いまの Batch の書式に変わる。自前で XML を書くプログラムは「保存し直してもバイト列が変わらない」ことを確かめると、いまの Batch の書式に合っているかが分かる。
 - Batch の版が変わったら、手元の XML をこれで保存し直して差を見る。
+
+## .EMG の「軸力適用範囲外」と照査表の備考
+
+- Aggre-SE は `<DB1名>.EMG`（解析メッセージ）の **「高軸方向圧縮力を受ける要素が発生しました．非線形番号＝N 発生ｽﾃｯﾌﾟ＝S」** の行を読む（`CalculationCase.vb: 軸力適用範囲の判定`）。N は AP 番号で `GetMemberNo` で部材番号にする。旧い書式（「作用軸力が適用範囲外」＋次の行にステップと AP 番号）も読むが、見本の .EMG 46 ファイル（5.2・5.3）に旧い書式はない（Batch の issue 0017）。圧縮力だけが対象で、「高軸方向引張力」「除荷剛性領域」の行は読まない（引張を入れるかは未決）。読めなかった行・例外は `HeadlessHost.Notify` で通知する。
+- 出力に出るところ：report.pdf の荷重変位のページと「水平震度と水平変位」の表の「状態」欄（「要素番号Nの作用軸力が適用範囲外」。増分ステップ S の行）、`cases/case-NN.csv` の同じ行、照査表（M-φ）の備考欄「軸力適用範囲外」。備考は `cls損傷レベル.備考`（4 欄）の空いている最初の欄に付く（高軸圧縮発生・除荷剛性領域は消さない。`Set軸力適用範囲外`、issue 0018）。
+- 損傷レベルの照査は **R10 の経路（`R10損傷レベルの照査`）と DB2 の経路（`DB2損傷レベルの照査`）がある**。R10 があるケースは R10 を通る（01_PHC など）ので、備考や注記を足すときは両方を通る場所（決定ケースを選ぶ前）に付ける。
+- 01_PHC（V53）の確認（実アプリ、2026-10-23）：ステップ 20・23・28・34 の行に要素番号 49〜55 の注記が付く。EMG のステップが DB1 のステップと同じ数え方（0 始まり）かは未確認。
+
+## 同等な断面・空の Catch（テストで確かめたこと）
+
+- **57≡52 は同じ出力**：同じ .ndu で杭の `SectJikuNum` の第7フィールド（密帯鉄筋を考慮）だけを外すと、.ndt は断面コードの 1 行（57／52）しか違わず、Aggre-SE の出力（総括表・照査表・応答値・PDF）は DB1 の名前と SHA を除いて同じ（Batch の `09_同等な断面(V53)`、`EquivalentSectionTests`）。510≡51（補強で解析結果が変わる）・301≡300（CFT 矩形と円形）・540≡54（鉄筋の有無）は同じ寸法・配筋の組が作れず、比べない。
+- `ExcelReport.vb` の空の `Catch`（損傷レベル・基礎の制限値）：制限値の行の指定が範囲外だと部材は落ちるが、あとで `CALCULATION_FAILED` になる。杭基礎の制限値（`dgLimitValue0`）が空欄・数字でないと、その項目の照査は通知なしに「-----」になる（`ok: true`、空欄は「照査しない」と読める）。Batch の `ExcelReportCatchTests`。
+
+## 画面なしで帳票を確かめる
+
+- structural-mcp のルートで `node scripts/smoke-aggrese.mjs "<絶対パス.xml>" --outputs summary,report`。**`npm run smoke:aggrese` は括弧（`(V53)`）を含むパスが cmd で壊れる**ので、ビルド済みなら node を直接呼ぶ。出力は `.structural-mcp/aggrese-smoke-*/client-output/`。
+- report.pdf の見た目は、`uv run --no-project --with pymupdf python` で `pymupdf.open(...)[n].get_pixmap(dpi=80).save("p.png")` として画像にして見る（pdftotext は日本語フォントなしで文字化け、Read ツールの PDF 読み込みは pdftoppm がないと失敗）。
+- Batch のテストの回し方・ゴールデンの作り直しは Batch の `tests/Aggre-SE.Test/README.md`。ゴールデンの diff が「備考の追加だけ」などになっているかは `git diff -U0` の行を種類ごとに数えて確かめる。
 
 ## 杭基礎の制限値に SOIL-JR の .sdr を取り込む
 
