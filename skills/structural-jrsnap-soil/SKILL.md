@@ -7,6 +7,22 @@ description: JRSNAP Ver.5.3-L01体験版2 の地盤反力特性算定プログ�
 
 対象は `SOIL-JR.exe`（開発機の既定のインストール先は `C:\RTRI_Program\JRSNAP(Ver5.3-L01体験版2)`）。ソースは同じインストール先の `SOIL-JR\SOIL-JR.csproj` 以下にある。この版は `.sdt` をコマンドライン引数として受け取らない。`scripts/run-analysis.ps1` が、必要なライセンス引数で起動して画面から読込・計算・連携出力を行う。
 
+## runner の soil 命令（画面を操作しない。まずこちら）
+
+JRSNAPHeadless の runner（`JRSNAP.Headless.exe`）の `soil` 命令が、.sdt を計算して .sdr・.sdc（液状化を考慮する入力では液状化時用も）と帳票の PDF を返す。WebPier の杭基礎の 0500 はこれを使う（WebPier の決定80、ADR-0013）。画面を自動操作しないので、キーボードやマウスに触っても壊れない。5.2-L03 と 5.3-L01体験版2 の両方で動く。
+
+```powershell
+JRSNAP.Headless.exe soil --input <.sdt の絶対パス> --output-dir <空の、またはないフォルダー> [--timeout-seconds 600] [--config <設定ファイル>]
+```
+
+- インストール先は runner の横の `jrsnap-headless.json`（呼び出し側からは渡さない）。成果物は `<名前>.sdr`・`<名前>.sdc`・（液状化時用の `.sdr`・`.sdc`、5.3 は `.sdcl`）・帳票 `<名前>.pdf`（印刷のメニューの全項目）。envelope と失敗の種類は JRSNAPHeadless の README。
+- 仕組み：補助 `JRSNAP.SoilJr.exe` が ReportHost で SOIL-JR.exe を別のアプリケーションドメインで動かし、画面の UI スレッドでメニューと同じ関数（`Common.DataFileRead`、`Check.DataCheck`、`Calc.ResultFile`、`Output.OutPut_Shousa`・`OutPut_Renkei`、`Output.Preview`）を同じ順に呼ぶ。ファイルを開く・保存の画面と印刷の画面は通らない。
+- `.sdr`・`.sdc` は同じ入力から毎回同じバイト列。PDF は印刷日と作成日時が入るので変わる。
+- 5.2 の .sdt の書き方（地盤抵抗係数の行を未入力の目印にして SOIL-JR に求めさせる、など）は `references/sdt-format.md` §12。
+- 同じインストール先で SOIL-JR.exe が起動していると `BUSY`。入力の検査で止まると `SDT_REJECTED`（SOIL-JR のメッセージつき）。
+
+以下の「自動実行」は、runner を使わずに画面を操作する古い方法（runner が使えないときの確認用）。
+
 ## 自動実行
 
 `powershell.exe -STA` を使う。入力と出力は絶対パスに解決され、既存の SOIL-JR プロセスがある場合は別件への干渉を避けるため停止する。インストール先が既定と違うときは `-InstallDir` を渡す。
