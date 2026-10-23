@@ -49,8 +49,8 @@ function Get-VisibleWindows {
     @([SoilWindows]::TopLevelWindows($process.Id) | Where-Object { $_.Visible })
 }
 
-function Wait-Window([string]$title, [string]$phase) {
-    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+function Wait-Window([string]$title, [string]$phase, [int]$seconds = $TimeoutSeconds, [switch]$AllowTimeout) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($seconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         if ($process.HasExited) { throw "SOIL-JR が $phase 中に終了しました。" }
         $matches = @(Get-VisibleWindows | Where-Object { $_.Title -eq $title })
@@ -67,7 +67,8 @@ function Wait-Window([string]$title, [string]$phase) {
         }
         Start-Sleep -Milliseconds 100
     }
-    throw "$phase が $TimeoutSeconds 秒で完了しませんでした。"
+    if ($AllowTimeout) { return $null }
+    throw "$phase が $seconds 秒で完了しませんでした。"
 }
 
 function Paste-PathIntoDialog($dialog, [string]$path) {
@@ -101,15 +102,39 @@ try {
         $process.Refresh()
     }
     if ($process.MainWindowHandle -eq [IntPtr]::Zero) { throw 'SOIL-JR のメイン画面を検出できません。' }
-    Start-Sleep -Seconds 1
+    $process.WaitForInputIdle(15000) | Out-Null
+    Start-Sleep -Seconds 2
     Write-Host "SOIL-JR 起動: PID $($process.Id)"
 
-    [Microsoft.VisualBasic.Interaction]::AppActivate($process.Id)
-    [System.Windows.Forms.SendKeys]::SendWait('%f')
-    Start-Sleep -Milliseconds 100
-    [System.Windows.Forms.SendKeys]::SendWait('o')
+    # キー操作はいちばん前の画面に届く。起動直後に送ると届かず、ファイルを開く画面が出ないことがあった
+    # （2026-10-23、入力待ちと最前面を確かめずに送っていたとき、3回とも1回目だけ）。
+    # メイン画面が最前面になったのを確かめてから送り、出なければメニューを閉じて送り直す。
+    function Focus-Main {
+        for ($i = 0; $i -lt 20; $i++) {
+            [Microsoft.VisualBasic.Interaction]::AppActivate($process.Id)
+            if ([SoilWindows]::TryActivate($process.MainWindowHandle)) { return }
+            Start-Sleep -Milliseconds 300
+        }
+        throw 'SOIL-JR のメイン画面を最前面にできません。ほかの画面を操作していないか確かめてください。'
+    }
     Write-Host '入力ファイルの選択画面を待機中'
-    $open = Wait-Window 'データファイルを開く' '入力ファイル選択'
+    $open = $null
+    for ($attempt = 1; $attempt -le 3 -and -not $open; $attempt++) {
+        Focus-Main
+        [System.Windows.Forms.SendKeys]::SendWait('%f')
+        Start-Sleep -Milliseconds 500
+        [System.Windows.Forms.SendKeys]::SendWait('o')
+        $open = Wait-Window 'データファイルを開く' '入力ファイル選択' -seconds 10 -AllowTimeout
+        if (-not $open) {
+            Write-Host "入力ファイルの選択画面が出ないので、メニューを閉じて送り直す（$attempt 回目）"
+            Focus-Main
+            [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+            Start-Sleep -Milliseconds 300
+            [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+            Start-Sleep -Seconds 1
+        }
+    }
+    if (-not $open) { throw '入力ファイル選択の画面が出ませんでした。' }
     Paste-PathIntoDialog $open $inputFile
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
@@ -119,7 +144,8 @@ try {
         Start-Sleep -Milliseconds 100
     }
     if ($process.MainWindowTitle.IndexOf($inputFile, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
-        throw '入力 SDT の読込を確認できません。'
+        $windows = @(Get-VisibleWindows | ForEach-Object { "$($_.ClassName):$($_.Title)" }) -join ' / '
+        throw "入力 SDT の読込を確認できません。表示中の画面: $windows"
     }
 
     [Microsoft.VisualBasic.Interaction]::AppActivate($process.Id)

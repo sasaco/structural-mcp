@@ -1,6 +1,6 @@
 ---
 name: structural-jrsnap-soil
-description: JRSNAP Ver.5.3-L01体験版2 の地盤反力特性算定プログラム SOIL-JR.exe で既存の .sdt を計算し、基礎照査連携用 .sdr と解析連携用 .sdc を指定した名前で出力するときに使う。画面を自動で操作するスクリプトと、画面で行う手順、出力の確かめ方を扱う。SOIL-JR は .sdt をコマンドライン引数で受け取らない。JRSNAP の解析そのものは structural-jrsnap-input。
+description: JRSNAP Ver.5.3-L01体験版2 の地盤反力特性算定プログラム SOIL-JR.exe で既存の .sdt を計算し、基礎照査連携用 .sdr と解析連携用 .sdc を指定した名前で出力するときに使う。画面を自動で操作するスクリプトと、画面で行う手順、出力の確かめ方を扱う。SOIL-JR は .sdt をコマンドライン引数で受け取らない。.sdr の書式（段と列、Ver.5.2 と Ver.5.3 の性能項目の違い、液状化時用のファイル、回転杭の引抜き7列、杭配置情報の有無、方向で値が変わらないこと）を調べるとき、.sdt の杭条件（杭種・工法のコード、回転杭の入力欄、中抜き）を書き換えて形の違う見本を作るときにも使う。Aggre-SE が .sdr を取り込む側は structural-aggrese。JRSNAP の解析そのものは structural-jrsnap-input。
 ---
 
 # SOIL-JR で SDT を計算し、SDR・SDC を出力する
@@ -20,6 +20,12 @@ powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File '<このスキル�
 ```
 
 スクリプトは計算完了メッセージと保存ダイアログを処理し、既存 SDR の上書き確認に応答する。実行後、SDR・SDC の更新時刻、サイズ、版情報、入力 SDT と一致するタイトルを確認する。入力 SDT は保存せずに SOIL-JR を閉じる。結果のパスとサイズが出力され、失敗時はエラーになる。
+
+- **画面をキー操作で動かすので、実行中は SOIL-JR とキーボード・マウスに触らない**（利用者にも伝える）。触ると、キーがほかの画面やメニューに届き、意図しない「名前を付けて保存」で入力フォルダーに .sdt が書かれたことがある（2026-10-23）。実行後は入力フォルダーに見覚えのないファイルがないかを確かめる。
+- メニューのキー操作は、SOIL-JR が入力待ちになり、メイン画面が最前面になったのを確かめてから送る。開く画面が出なければメニューを閉じて送り直す（3回まで）。確かめずに送っていたときは、1回目にファイルを開く画面が出ずに止まることが3回中3回あった。直したあとは3回とも1回目で通った（2026-10-23）。
+- `%TEMP%` の下の深いフォルダー（`AppData\Local\Temp\…\C--…` のような名前を含むもの）に入力を置くと、ウィンドウの表題のパスが途中で切れて「入力 SDT の読込を確認できません」になった。原因は確かめていない。`C:\tmp\…` のような短いパスでは通った（2026-10-23）。
+- 同じ .sdt から出し直した .sdr は、置き場所が違ってもバイトまで同じ（3回確認、2026-10-23）。
+- 液状化の判定をした .sdt では、`<名前>(液状化時用).sdr`・`.sdcl` も続けて書かれる。スクリプトが確かめるのは通常時の .sdr・.sdc だけ。
 
 ## 画面で実行する場合
 
@@ -42,11 +48,18 @@ powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File '<このスキル�
 
 開発機のみ。structural-mcp の repo のルートから `Batch/tests/JRSNAP_Ver5.3-L01体験版2/01_サンプル(V53)：RC橋脚L：PHC/` の `RC橋脚（杭基礎）サンプルデータE.sdt`。保存ダイアログで同じフォルダーの `RC橋脚（杭基礎）サンプルデータS.sdr` の**絶対パス**を指定する。対応する `RC橋脚（杭基礎）サンプルデータS.sdc` も同じフォルダーに生成される。入力の `E` と出力の `S` は異なるため、保存ダイアログの既定名をそのまま使わない。見本は submodule の中のファイルなので、試すときは複製を使う。
 
+Batch の `tests/JRSNAP_Ver5.3-L01体験版2/08_基礎照査連携(V53)/` には、.sdt を書き換えて作った見本（回転杭・中抜きなし）と、SOIL-JR 付属の RC ラーメン（6列×2列）の .sdt・.sdr・.sdc がある（作り方は同じフォルダーの README）。
+
+## 詳しく
+
+- `references/sdr-format.md`：.sdr の段と列、Ver.5.2 と Ver.5.3 の違い、液状化時用、引抜き7列、杭配置情報の有無、方向で値が変わらないこと。
+- `references/sdt-pile.md`：.sdt の `●杭条件●` の項目（杭種・工法のコード、回転杭の入力欄と A・I の式、杭の配置と中抜き）と、行を書き換えて見本を作る方法。
+
 ## 根拠
 
 - `Protect.cs` の `Protection` は `LicenseOptNo` と版番号を確認し、引数なしの直接起動を拒否する。
 - `MDIfrmMain.cs` の `FileMenu` は、ファイルを開くときに `Common.DataFileRead`、計算時に `Calc.ResultFile` を呼ぶ。計算成功後の保存ダイアログで出力ベース名を決め、`Output.OutPut_Shousa` と `Output.OutPut_Renkei` を順に呼ぶ。
-- `Output.cs` では `OutPut_Shousa` が `.sdr`、`OutPut_Renkei` が `.sdc` を出力ベース名に追加する。
+- `Output.cs` では `OutPut_Shousa` が `.sdr`、`OutPut_Renkei` が `.sdc` を出力ベース名に追加する。液状化の判定をした計算（`J_LiJudgeFlg=1`）では、続けて `OutPut_Shousa_De`・`OutPut_Renkei_De` が `(液状化時用)` を付けた名前で書く。
 
 ## 知見を足すとき
 

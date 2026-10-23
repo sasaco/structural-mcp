@@ -1,6 +1,6 @@
 ---
 name: structural-aggrese
-description: Aggre-SE（Batch.exe、Docu-SE。structural-mcp の Batch サブモジュール）のプロジェクトXMLを読む・項目を画面と対応付ける・JRSNAP の解析結果（DB1 と同じ名前のファイル）と一緒に MCP の aggrese_inspect／aggrese_calculate か AggreSE.Headless の runner で照査・集計させる・Aggre-SE 自身の保存し直しで書式を確かめるときに使う。XML の文字コード（宣言は utf-16、中身は Shift-JIS）、_rbSpec・_rbJIban などの添字の意味（画面の並びや 0 始まりの順と違うものがあるので、推測せずこのスキルの表で確かめる）、DB1 の横に要るファイル（_Output_Chokukiso.csv、Aspect-SE_*.csv）、計算書 report.pdf・ピックアップ pickup.pik・総括表 summary.xlsx の構成と毎回変わる部分、JRSNAP の両端固定 M-θ 部材の Vmu・Vud（La が -999.999、Both_VmuVud）、直接基礎のステップ表（--foundation-steps）、SNAPDBLib で DB1 を画面なしで覗く方法、Batch の版が変わって書式を追うとき、耐震照査の入力が Aggre-SE で読めるか調べるときにも使う。JRSNAP の解析そのものには使わない。
+description: Aggre-SE（Batch.exe、Docu-SE。structural-mcp の Batch サブモジュール）のプロジェクトXMLを読む・項目を画面と対応付ける・JRSNAP の解析結果（DB1 と同じ名前のファイル）と一緒に MCP の aggrese_inspect／aggrese_calculate か AggreSE.Headless の runner で照査・集計させる・Aggre-SE 自身の保存し直しで書式を確かめるときに使う。XML の文字コード（宣言は utf-16、中身は Shift-JIS）、_rbSpec・_rbJIban などの添字の意味（画面の並びや 0 始まりの順と違うものがあるので、推測せずこのスキルの表で確かめる）、DB1 の横に要るファイル（_Output_Chokukiso.csv、Aspect-SE_*.csv）、計算書 report.pdf・ピックアップ pickup.pik・総括表 summary.xlsx の構成と毎回変わる部分、JRSNAP の両端固定 M-θ 部材の Vmu・Vud（La が -999.999、Both_VmuVud）、直接基礎のステップ表（--foundation-steps）、SNAPDBLib で DB1 を画面なしで覗く方法、基礎の照査条件で SOIL-JR の .sdr（基礎照査連携データ）から杭基礎の制限値を取り込む仕組みと注意、Batch の版が変わって書式を追うとき、耐震照査の入力が Aggre-SE で読めるか調べるときにも使う。JRSNAP の解析そのものには使わない。
 ---
 
 # Aggre-SE のプロジェクトXMLを扱う
@@ -62,6 +62,17 @@ runner（`STRUCTURAL_MCP_AGGRESE_RUNNER`）は protocol v1。XML と DB1 のフ�
 - csc は **PowerShell から**呼ぶ。Git Bash は `/nologo` などをパスに書き換えて失敗する。
 - 保存し直すと、名前空間の宣言の順（`xmlns:xsi` が先）、`Version`、`_dgLimitLevel_SIJI`・`_ParagraphLength` など、いまの Batch の書式に変わる。自前で XML を書くプログラムは「保存し直してもバイト列が変わらない」ことを確かめると、いまの Batch の書式に合っているかが分かる。
 - Batch の版が変わったら、手元の XML をこれで保存し直して差を見る。
+
+## 杭基礎の制限値に SOIL-JR の .sdr を取り込む
+
+基礎の照査条件の画面（`ChildFormFoundationSetting`）の「SOIL-JR結果ファイル(*.sdr)」は、SOIL-JR の基礎照査連携データ（.sdr。書式は structural-jrsnap-soil スキルの「.sdr の書式」）から杭基礎の制限値を取り込む。runner と MCP にはない画面だけの機能。コードで確認、Batch 5f609a9（2026-10-23）。
+
+- 読み取りは `Batch/Aggre-SE/datas/FoundationLinkData.vb`（`Read`・`Extract`・`Cells`）。画面の `SelectFoundationDB` で方向（橋軸・直角）を選ぶ。
+- 取り込む値：Lv1（Rvd・Rud・δL・θL）、Lv2（Rvd・δL・θL）、Azen（Rvd・δL・θL）。Ver.5.3 では 安定レベル1(地震時)・安定レベル2・安定レベル3 の行、Ver.5.2 では 残留鉛直変位(L1)・(L2) と「地震時」の段から読む。Rud は引抜きが7列（回転杭）なら列5、6列なら列4。
+- 普通は表「普通」の5列目の行0〜9に10個、液状化は表「液状化」の行0〜6に7個を書く（**液状化では Azen を書かない**）。
+- 普通か液状化かは、Ver.5.3 では**ファイル名に「液状化」があるかだけ**で決める。名前を変えると逆の表に入る。
+- ほかの注意（Batch の `docs/issues/`）：表題に「直角方向」があると直角方向を選んでも橋軸方向の値を読む（0009）、4行に満たないファイルは未処理の例外（0010）、数値は実行時のカルチャで読む（0011）、Ver.5.2 と 5.3 の対応は未確認（0012）。いずれも 2026-10-23 時点で未対応。
+- テストは Batch の `tests/Aggre-SE.Test/FoundationLinkDataTests.cs`（`Category=FoundationLink`、見本の .sdr は普通の git にあり LFS 不要）。
 
 ## 詳しく
 

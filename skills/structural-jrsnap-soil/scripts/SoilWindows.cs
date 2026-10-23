@@ -41,6 +41,8 @@ public static class SoilWindows
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr handle);
     [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
     private static extern void mouse_event(uint flags, uint x, uint y, uint data, IntPtr extra);
 
     private static WindowInfo Describe(IntPtr handle)
@@ -90,6 +92,12 @@ public static class SoilWindows
     {
         if (!SetForegroundWindow(handle))
             throw new InvalidOperationException("Could not activate the dialog");
+    }
+
+    public static bool TryActivate(IntPtr handle)
+    {
+        SetForegroundWindow(handle);
+        return GetForegroundWindow() == handle;
     }
 
     // The calculation icon is at (171, 66) in this version's main window.
