@@ -817,7 +817,10 @@ test("the WebPier contract says which output items the detected runners can gene
   const contract = result.structuredContent as {
     runners: Array<{ engine: string; environmentVariable: string; available: boolean }>;
     stages: Array<{ id: string; output: string }>;
-    outputs: Array<{ key: string; requires: string[]; stages: string[]; runners: string[]; available: boolean; missingRunners: string[] }>;
+    outputs: Array<{
+      key: string; requires: string[]; stages: string[]; runners: string[]; available: boolean; missingRunners: string[];
+      pileFoundation?: { supported: boolean; runners: string[]; available: boolean; missingRunners: string[]; conditionalFiles: Array<{ role: string; when: string }> };
+    }>;
     unavailableOutputs: string[];
     generationTool: string;
   };
@@ -834,6 +837,16 @@ test("the WebPier contract says which output items the detected runners can gene
   assert.equal(contract.outputs.find((output) => output.key === "longitudinal_frame_analysis")?.available, true);
   assert.equal(contract.generationTool, "webpier_generate");
   assert.match(JSON.stringify(result.content), /longitudinal_nonlinear_analysis・footing・cantilever/);
+  // A pile foundation (WebPier decision 85): 0400 and 0600 need no runner; 0500 calls the JRSNAP runner (SOIL-JR), which is
+  // not detected here; the other items are not made for piles yet, whatever the runners.
+  const pile = (key: string) => contract.outputs.find((output) => output.key === key)!.pileFoundation!;
+  assert.deepEqual([pile("detailing").available, pile("detailing").missingRunners], [true, []]);
+  assert.deepEqual([pile("reactions").supported, pile("reactions").available], [true, true]);
+  assert.deepEqual([pile("ground_model").supported, pile("ground_model").runners, pile("ground_model").available,
+    pile("ground_model").missingRunners], [true, ["jrsnap"], false, ["jrsnap"]]);
+  assert.equal(pile("ground_model").conditionalFiles[0]?.role, "0500.liquefiedsdr");
+  assert.deepEqual([pile("longitudinal").supported, pile("longitudinal").available], [false, false]);
+  assert.deepEqual([pile("longitudinal_frame_analysis").supported, pile("longitudinal_frame_analysis").available], [false, false]);
 
   const schema = await client.callTool({ name: "webpier_get_input_schema", arguments: {} });
   assert.equal(schema.isError, undefined);

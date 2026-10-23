@@ -2,7 +2,7 @@
 
 Windows x64 向けのユーザー単位 MSI です。Node.js と各 .NET 計算エンジンの実行環境を同梱します。利用先 PC に Node.js、.NET SDK、Python、uv、Codex CLI を個別に入れる必要はありません。Codex アプリと、初回の Python 環境構築に使うインターネット接続が必要です。Excel 帳票を作る場合だけ Microsoft Excel が必要です。
 
-鉄道橋脚の設計計算アプリ WebPier と、Claude Code・Codex 用のスキル `structural-*` も入ります。WebPier の計算書は PC にある Windows の書体（MS明朝・MSゴシック・Calibri・Times New Roman の Italic）で組みます。JRSNAP（鉄道総研）とその runner JRSNAPHeadless は同梱しないので、WebPier の 0710 以降（JRSNAP を使う段階と、それに依存する段階）は使えません。
+鉄道橋脚の設計計算アプリ WebPier と、Claude Code・Codex 用のスキル `structural-*` も入ります。WebPier の計算書は PC にある Windows の書体（MS明朝・MSゴシック・Calibri・Times New Roman の Italic）で組みます。JRSNAP（鉄道総研）とその runner JRSNAPHeadless は同梱しないので、WebPier の 0710 以降（JRSNAP を使う段階と、それに依存する段階）と、杭基礎の 0500（SOIL-JR を JRSNAPHeadless の runner で動かす）は使えません（杭基礎で MSI から作れるのは 0400 と 0600 だけです）。
 
 ## 別の PC に入れる
 

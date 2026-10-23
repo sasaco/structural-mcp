@@ -280,6 +280,17 @@ function webPierEnvironment(config: AppConfig): Record<string, string> {
     runner.path === null ? [] : [[runner.environmentVariable, runner.path]]));
 }
 
+/**
+ * The same item of a pile foundation (WebPier decision 85): whether it can be chosen yet (`supported`), the runners its
+ * stages call, its files, and the files only some inputs have (SOIL-JR's two for the liquefaction).
+ */
+const webPierPileFoundationSchema = z.object({
+  supported: z.boolean(),
+  runners: z.array(z.string()),
+  files: z.array(z.object({ role: z.string(), path: z.string(), folder: z.boolean() }).passthrough()),
+  conditionalFiles: z.array(z.object({ role: z.string(), path: z.string(), folder: z.boolean(), when: z.string() }).passthrough()),
+}).passthrough();
+
 /** One 出力項目 of the input (WebPier decision 72): its stages, the items it uses, and the runners choosing it calls. */
 const webPierOutputSchema = z.object({
   key: z.string(),
@@ -287,6 +298,7 @@ const webPierOutputSchema = z.object({
   stages: z.array(z.string()),
   runners: z.array(z.string()),
   files: z.array(z.object({ role: z.string(), path: z.string(), folder: z.boolean() }).passthrough()),
+  pileFoundation: webPierPileFoundationSchema.optional(),
 }).passthrough();
 
 const webPierContractSchema = z.object({
@@ -819,7 +831,7 @@ export function createServer(config: AppConfig): McpServer {
 
   server.registerTool("webpier_get_contract", {
     title: "Get WebPier stages and their runners",
-    description: "WebPierの段階（0400〜0910）と、入力のoutputs（出力項目）ごとの段階・使う項目・必要なrunner・公開するファイル、いまの環境で各出力項目を生成できるか（available、missingRunners。使う項目のrunnerも含む）を返します。作る計算書は入力のoutputsだけで決まります（引数では選びません）。webpier_generateの前に呼んでください。addin（荷重モデルのアドイン）を付けると、アドインを読めるかを確かめ、その宣言（名前・版・約束の版）も返します。",
+    description: "WebPierの段階（0400〜0910）と、入力のoutputs（出力項目）ごとの段階・使う項目・必要なrunner・公開するファイル、いまの環境で各出力項目を生成できるか（available、missingRunners。使う項目のrunnerも含む）を返します。杭基礎（下部構造.基礎形式が場所打ち杭・鋼管ソイルセメント杭）で作るときは、各出力項目のpileFoundationを見てください（supported：杭基礎でその項目を選べるか。段ごとに広がる。runners・files：杭基礎の段階の。0500はSOIL-JRを動かすJRSNAPのrunnerが要る。conditionalFiles：液状化を考慮する入力だけに出るファイル。available・missingRunners：supportedで、runnerが足りるか）。作る計算書は入力のoutputsだけで決まります（引数では選びません）。webpier_generateの前に呼んでください。addin（荷重モデルのアドイン）を付けると、アドインを読めるかを確かめ、その宣言（名前・版・約束の版）も返します。",
     inputSchema: { ...webPierAddinShape },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   }, async ({ addin }) => {
@@ -833,7 +845,13 @@ export function createServer(config: AppConfig): McpServer {
       const detected = new Set(runners.filter((runner) => runner.path !== null).map((runner) => runner.engine as string));
       const outputs = contract.outputs.map((output) => {
         const missingRunners = output.runners.filter((engine) => !detected.has(engine));
-        return { ...output, available: missingRunners.length === 0, missingRunners };
+        // The same item of a pile foundation: it can be generated only when WebPier makes it for piles yet and the
+        // runners of its stages are there (0500 of a pile foundation calls the JRSNAP runner for SOIL-JR).
+        const pile = output.pileFoundation === undefined ? {} : (() => {
+          const pileMissing = output.pileFoundation.runners.filter((engine) => !detected.has(engine));
+          return { pileFoundation: { ...output.pileFoundation, available: output.pileFoundation.supported && pileMissing.length === 0, missingRunners: pileMissing } };
+        })();
+        return { ...output, available: missingRunners.length === 0, missingRunners, ...pile };
       });
       const unavailableOutputs = outputs.filter((output) => !output.available).map((output) => output.key);
       return textResponse({

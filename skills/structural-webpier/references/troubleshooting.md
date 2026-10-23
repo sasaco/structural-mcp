@@ -23,7 +23,9 @@ MCP の側で止まったとき（`ok: false`、`category`）：`engine_unavaila
 - `…: 値が必要です`：選んだ出力項目で要る値が `null`。
 - `outputs.<項目>: outputs.<別の項目> も true が必要です`：使う項目が `false`。`outputs: 出力項目が選ばれていません`：13項目すべて `false`。
 - 印字桁より細かい値（`m` で4桁以上など）：丸めた値を書く（何桁で丸めたかを `出典` に）。
-- `杭種`：「直接基礎」以外は計算できない。
+- `SDT_REJECTED`（SOIL-JR の入力の検査が止めた。メッセージに SOIL-JR の文言、例：「ソイルセメント径D1を入力してください」）・`SOIL_CALC_FAILED`（杭先端の地盤ばねの第2勾配が負、など）・`BUSY`（同じ JRSNAP のインストール先で SOIL-JR が起動している）：杭基礎の 0500。入力の地盤の層・杭の諸元を確かめる。
+- `outputs.<項目>: 場所打ち杭は未対応です（…で選べる出力項目: …）`：杭基礎で選べない出力項目を `true` にしている（杭基礎で選べる項目は段ごとに広がる。WebPier 決定84）。
+- `杭基礎.…`：`値が必要です`（選んだ基礎形式の項目が `null`）、`千鳥配置は両方向とも奇数列が必要です`、`この列の杭がすべてなくなります`（抜く杭が多い）など。
 - 支持層の `内部摩擦角_φd` が 25 度未満、支持層が粘性土（0612・0622）。
 - `地盤データ.層: …の層厚の合計 … m が Df（…）を超えます`：支持層より上の層厚の合計が Df（H6＋H5＋min(df1, df2)）より大きい。資料の層厚を、上載土算定の地表面からの深さで写したか確かめる。
 - `鉄筋.柱: La/d = … が1.25未満`：低せん断スパン部材の M-θ の適用範囲（1.25≦La/d＜2）より短い。寸法・桁の高さを確かめる。
@@ -37,7 +39,7 @@ MCP の側で止まったとき（`ok: false`、`category`）：`engine_unavaila
 ## runner がない
 
 - `webpier_get_contract` の `runners[].available` が false の runner は、server が見つけていない。runner の場所は `get_environment_template`（`engine: "all"`）で分かる。
-- JRSNAP がない PC：地震時の項目（`longitudinal_seismic`・`transverse_seismic` と、それを使う項目）は作れない（0710・0720 が JRSNAP の図を要る）。地震時以外の項目だけを `true` にして 0500・0600・0610〜0622 を作る。
+- JRSNAP がない PC：杭基礎の `ground_model`（0500 が SOIL-JR を JRSNAP の runner で動かす）と、地震時の項目（`longitudinal_seismic`・`transverse_seismic` と、それを使う項目）は作れない（0710・0720 が JRSNAP の図を要る）。杭基礎は `detailing`・`reactions` だけが作れる。地震時以外の項目だけを `true` にして 0500・0600・0610〜0622 を作る。
 - FEMPython がない PC：地震時以外の `longitudinal`・`transverse` と骨組解析・`footing` は作れない。地震時の項目は 0610・0620 を使わないので（WebPier の決定78）、`ground_model`・`reactions`・`*_seismic` と、その先の `*_nonlinear_analysis`・`cantilever`（JRSNAP・Aggre-SE・Capacita が要る）は作れる。
 - Capacita の runner は WebPier には `.exe` で渡す（server が `.dll` の横の `WebDanforCS.Headless.exe` を探す）。`.exe` がないと Capacita を使う段階は `missingRunners` に `webdan2` が出る。
 

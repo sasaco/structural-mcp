@@ -49,6 +49,8 @@ function envelope(ok, summary, { artifacts = [], errors = [], engineeringStatus 
   process.exitCode = ok ? 0 : 2;
 }
 
+const pileItems = ["detailing", "ground_model", "reactions"];
+
 function uses(key) {
   const found = new Set();
   const pending = [...requires.get(key)];
@@ -91,8 +93,13 @@ if (unknown.length > 0) {
   // Choosing an item needs the runners of its stages and of the items it uses, which are chosen with it.
   const output = ([key, used]) => {
     const own = selected([key]);
-    return { key, requires: used, stages: own.map((item) => item.id), runners: runnersOf(selected([...uses(key), key])),
-      files: own.map((item) => ({ role: `${item.id}.pdf`, path: `output/${item.stem}.pdf`, folder: false })) };
+    const files = own.map((item) => ({ role: `${item.id}.pdf`, path: `output/${item.stem}.pdf`, folder: false }));
+    // A pile foundation (decision 85) can make 0400, 0500 and 0600 so far; 0500 of piles calls the JRSNAP runner (SOIL-JR).
+    const pile = pileItems.includes(key);
+    return { key, requires: used, stages: own.map((item) => item.id), runners: runnersOf(selected([...uses(key), key])), files,
+      pileFoundation: { supported: pile, runners: [...new Set([...runnersOf(selected([...uses(key), key])), ...(selected([...uses(key), key]).some((item) => item.id === "0500") ? ["jrsnap"] : [])])],
+        files, conditionalFiles: key === "ground_model"
+          ? [{ role: "0500.liquefiedsdr", path: "post/杭基礎(液状化時用).sdr", folder: false, when: "液状化を考慮する入力" }] : [] } };
   };
   envelope(true, {
     command,

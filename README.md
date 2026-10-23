@@ -4,7 +4,7 @@
 
 ## Windows PC へのインストール
 
-別の PC では、Windows x64 向け MSI をインストールし、スタートメニューの **structural-mcp → 1 - Setup and register Codex** を実行します。Node.js と .NET 実行環境を同梱し、Python（FEMPython と WebPier の環境）は初回セットアップで取得します。セットアップはスキル `structural-*` を Claude Code と Codex のユーザーのスキルフォルダーにコピーします。JRSNAP と JRSNAPHeadless は同梱しないので、WebPier の 0710 以降（JRSNAP を使う段階）は MSI では使えません。利用先で SDK や Codex CLI を準備する必要はありません。
+別の PC では、Windows x64 向け MSI をインストールし、スタートメニューの **structural-mcp → 1 - Setup and register Codex** を実行します。Node.js と .NET 実行環境を同梱し、Python（FEMPython と WebPier の環境）は初回セットアップで取得します。セットアップはスキル `structural-*` を Claude Code と Codex のユーザーのスキルフォルダーにコピーします。JRSNAP と JRSNAPHeadless は同梱しないので、WebPier の 0710 以降（JRSNAP を使う段階）と、杭基礎の 0500（SOIL-JR を動かす）は MSI では使えません。利用先で SDK や Codex CLI を準備する必要はありません。
 
 ビルド方法、初期設定、検証、削除手順と Preview の制限は [インストーラー README](./installer/README.md) を参照してください。以下はソースから開発する場合の手順です。
 
@@ -17,7 +17,7 @@
 | [`SoilStructure`](./SoilStructure/) | 地盤・杭の計算、SNAP連携、地盤応答変位 | 中間結果 JSON、Excel、PDF、SDC、JOT | MCP adapter 接続済み。headless runner を個別設定して利用 |
 | [`Batch`](./Batch/) | Aggre-SE（Docu-SE）: JRSNAP解析結果の集計・照査 | 総括表 Excel、計算書 PDF、PIK、杭段落とし PDF | AggreSE.Headless runner 接続済み（experimental） |
 | [`WebPier`](./WebPier/) | 鉄道橋脚の設計計算（上の各エンジンと JRSNAP を呼ぶアプリ） | 計算書 PDF、結果 JSON、各エンジンの入力（FrameWeb 入力・NDU・WDJ・Aggre-SE XML）と解析結果 | headless runner 接続済み（experimental）。CLI でも使う |
-| [`JRSNAPHeadless`](./JRSNAPHeadless/) | JRSNAP（鉄道総研）の解析用データ出力・静的非線形解析・データ確認図と荷重図 | `.ndt`、解析結果、図の PDF | runner を検出して WebPier に渡す（単体の MCP ツールはない）。**private repo**。JRSNAP 本体は同梱せず、利用者が別に入れる |
+| [`JRSNAPHeadless`](./JRSNAPHeadless/) | JRSNAP（鉄道総研）の解析用データ出力・静的非線形解析・データ確認図と荷重図、地盤反力特性算定プログラム SOIL-JR の計算（`soil` 命令） | `.ndt`、解析結果、図の PDF、SOIL-JR の連携ファイル（`.sdr`・`.sdc`）と帳票 | runner を検出して WebPier に渡す（単体の MCP ツールはない）。**private repo**。JRSNAP 本体は同梱せず、利用者が別に入れる |
 
 > [!NOTE]
 > `WebDan2` は旧リポジトリ名です。現在の正式なリポジトリ名は `Capacita` で、RC 計算コアは `RcDan`、鋼部材計算コアは `SteelDan`、統合アプリケーションは `WebDanforCS` に整理されています。互換性維持のため、現行 MCP の tool ID と環境変数には `webdan` という旧名称が残っています。
