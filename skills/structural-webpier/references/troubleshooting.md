@@ -37,7 +37,8 @@ MCP の側で止まったとき（`ok: false`、`category`）：`engine_unavaila
 ## runner がない
 
 - `webpier_get_contract` の `runners[].available` が false の runner は、server が見つけていない。runner の場所は `get_environment_template`（`engine: "all"`）で分かる。
-- JRSNAP がない PC：地震時の項目（`longitudinal_seismic`・`transverse_seismic` と、それを使う項目）は作れない（0710・0720 が JRSNAP の図を要る）。地震時以外の6項目だけを `true` にして 0500・0600・0610〜0622 を作る。
+- JRSNAP がない PC：地震時の項目（`longitudinal_seismic`・`transverse_seismic` と、それを使う項目）は作れない（0710・0720 が JRSNAP の図を要る）。地震時以外の項目だけを `true` にして 0500・0600・0610〜0622 を作る。
+- FEMPython がない PC：地震時以外の `longitudinal`・`transverse` と骨組解析・`footing` は作れない。地震時の項目は 0610・0620 を使わないので（WebPier の決定78）、`ground_model`・`reactions`・`*_seismic` と、その先の `*_nonlinear_analysis`・`cantilever`（JRSNAP・Aggre-SE・Capacita が要る）は作れる。
 - Capacita の runner は WebPier には `.exe` で渡す（server が `.dll` の横の `WebDanforCS.Headless.exe` を探す）。`.exe` がないと Capacita を使う段階は `missingRunners` に `webdan2` が出る。
 
 ## パスが長い（`IO_ERROR`、`No such file or directory`）

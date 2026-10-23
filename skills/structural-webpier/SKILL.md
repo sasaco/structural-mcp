@@ -44,15 +44,16 @@ WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 R
 | 線路方向の骨組解析（柱の断面照査・基礎の照査） | `longitudinal_frame_analysis` | 0611・0612 | `longitudinal` | FEMPython・Capacita |
 | 線路直角方向の計算（地震時以外） | `transverse` | 0620 | `ground_model`・`reactions` | FEMPython（荷重図） |
 | 線路直角方向の骨組解析 | `transverse_frame_analysis` | 0621・0622 | `transverse` | FEMPython・Capacita |
-| 線路方向の計算（地震時。JRSNAP の入力） | `longitudinal_seismic` | 0710 | `longitudinal` | JRSNAP（図） |
+| 線路方向の計算（地震時。JRSNAP の入力） | `longitudinal_seismic` | 0710 | `ground_model`・`reactions` | JRSNAP（図） |
 | 線路方向の静的非線形解析と耐震性能照査 | `longitudinal_nonlinear_analysis` | 0711 | `longitudinal_seismic` | JRSNAP・Aggre-SE |
-| 線路直角方向の計算（地震時） | `transverse_seismic` | 0720 | `transverse` | JRSNAP（図） |
+| 線路直角方向の計算（地震時） | `transverse_seismic` | 0720 | `ground_model`・`reactions` | JRSNAP（図） |
 | 線路直角方向の静的非線形解析と耐震性能照査 | `transverse_nonlinear_analysis` | 0721 | `transverse_seismic` | JRSNAP・Aggre-SE |
 | フーチングの計算 | `footing` | 0800・0810・0820 | 両方向の `*_frame_analysis` と `*_nonlinear_analysis` | 4つすべて |
 | 片持ち梁の計算 | `cantilever` | 0900・0910 | 両方向の `*_nonlinear_analysis` | JRSNAP・Aggre-SE・Capacita |
 
 - 使う項目が `false` なのに `true` の項目があると、その項目の名前を入れた入力エラー（例 `outputs.footing: outputs.transverse_nonlinear_analysis も true が必要です`）。13項目すべて `false` も入力エラー。
 - 選んだ項目の段階はすべて作り直す。選ばなかった項目の成果物は消さずに残る（前の世代。付帯JSON の入力の SHA-256 で見分ける）。`outputs` を変えると入力の SHA-256 も変わる。
+- 地震時の項目は地震時以外の項目を使わない（WebPier の決定78）。0710・0720 は 0610・0620 なしで作れ、FEMPython も要らない（「0711 まで作って」なら `ground_model`・`reactions`・`longitudinal_seismic`・`longitudinal_nonlinear_analysis`）。
 - 「0612 まで作って」なら `ground_model`・`reactions`・`longitudinal`・`longitudinal_frame_analysis` を `true` にする（0500・0600・0610 の計算書も作られる）。
 - `detailing`（0400）は入力だけで作れ、runner は要らない。ただし柱・梁・フーチング（上面を含む）の配筋と `片持ち梁の照査.外観の照査` がすべて要る（空欄は入力エラー）。
 - **地震時の項目（0710・0720）は JRSNAP の runner が要る**。JRSNAP がなければ地震時以外の6項目だけを `true` にする。

@@ -15,9 +15,9 @@
 | 0620 | 直角方向荷重（17基本ケース） | 0500・0600 | `transverse` | `0620_直角方向荷重` | `線路直角方向.json` |
 | 0621 | 直角方向の柱の断面照査（9.5〜9.10） | 0620 | `transverse_frame_analysis` | `0621_直角方向照査` | `線路直角方向.pik`・同 CSV 2つ・`線路直角方向.wdj` |
 | 0622 | 直角方向の基礎の照査（9.11） | 0500・0620 | `transverse_frame_analysis` | `0622_直角方向基礎` | 0621 と同じピックアップ3つ |
-| 0710 | 地震時の線路方向荷重（JRSNAP の入力） | 0500・0600・0610 | `longitudinal_seismic` | `0710_線路方向荷重` | `線路方向.ndu` |
+| 0710 | 地震時の線路方向荷重（JRSNAP の入力） | 0500・0600 | `longitudinal_seismic` | `0710_線路方向荷重` | `線路方向.ndu` |
 | 0711 | 線路方向の静的非線形解析と耐震性能照査 | 0710 | `longitudinal_nonlinear_analysis` | `0711_線路方向非線形解析` | フォルダー `線路方向_JRSNAP/`、`線路方向.xml`、`線路方向_Aggre-SE.pik`・`.xlsx`・`_直接基礎.csv` |
-| 0720 | 地震時の線路直角方向荷重 | 0500・0600・0620 | `transverse_seismic` | `0720_線路直角方向荷重` | `線路直角方向.ndu` |
+| 0720 | 地震時の線路直角方向荷重 | 0500・0600 | `transverse_seismic` | `0720_線路直角方向荷重` | `線路直角方向.ndu` |
 | 0721 | 線路直角方向の静的非線形解析と耐震性能照査 | 0720 | `transverse_nonlinear_analysis` | `0721_線路直角方向非線形解析` | `線路直角方向_JRSNAP/`、`線路直角方向.xml`、`線路直角方向_Aggre-SE.*` |
 | 0800 | フーチングの応答値（12.1、両方向） | 0500・0610・0612・0620・0622・0710・0711・0720・0721 | `footing` | `0800_フーチング` | — |
 | 0810 | 線路方向のフーチングの断面照査（12.2〜12.5） | 0800 | `footing` | `0810_線路方向フーチング照査` | `線路方向フーチング.wdj` |
@@ -34,6 +34,7 @@
 | `true` にする項目 | 作る計算書 | runner |
 |---|---|---|
 | `ground_model`・`reactions`・`longitudinal`・`transverse`・`longitudinal_seismic`・`transverse_seismic` | 0500・0600・0610・0620・0710・0720 | FEMPython・JRSNAP |
+| `ground_model`・`reactions`・`longitudinal_seismic`・`transverse_seismic` | 0500・0600・0710・0720（決定78：0610・0620 なし） | JRSNAP |
 | 上に `longitudinal_frame_analysis`・`transverse_frame_analysis` | 上に 0611・0612・0621・0622 | FEMPython・JRSNAP・Capacita |
 | 上の6項目に `*_nonlinear_analysis` 2つと `cantilever` | 上の6段階に 0711・0721・0900・0910 | 4つすべて |
 | 13項目すべて | 全18段階 | 4つすべて |
