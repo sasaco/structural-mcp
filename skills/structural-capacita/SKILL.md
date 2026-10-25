@@ -30,6 +30,7 @@ dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォ
 - 成果物は `result.json`、`report.pdf`（Markdown なら `report.md`）、選択時の `summary.xlsx`、`--pickup` のときだけ `model.wdj`（取り込んだ WDJ。GUI が保存するのと同じバイト列で、GUI で開ける）。`--pickup` なしでは `model.wdj` は返らない。
 - `--pickup` は GUI の「断面力データ取込」と同じコード（`PickupImporter`）。ファイルがなければ `pickup_not_found`、取り込めなければ `pickup_import_failed`（どちらも終了コード 2 で何も書かない）。
 - `summary.reportSections`：PDF のとき、計算書の節ごとのページ範囲を先頭ページの順に `{id, firstPage, lastPage}`（1始まり、両端を含む）で返す。何も印刷しなかった節は含まない。節の ID の表は Capacita の README。計算書を節ごとに切り分けて他の帳票に差し込む利用者との契約なので、ID を変えるときは利用者に知らせる。
+- 鋼管杭とフーチングの結合部の設計曲げ耐力 Mu は別の命令 `run-pile-joint --input <json> --output-dir <空のフォルダー>`（VePP-HS の HsCalc、鉄筋差込み方式。入力は鋼管・鉄筋・中詰めコンクリート・安全係数・行ごとの軸力 N'd。f'cc・ε'cu は HsCalc が求めるので渡さない）。成果物は `result.json` だけで、`engineeringStatus` は常に `not_run`。契約は `Capacita/README.md` の「Headless runner の run-pile-joint」を正とする。WebPier の 0612・0622 が呼ぶ。
 - 着目点の番号の付け方と、断面力入力モード（`--pickup` なし）の WDJ は `references/wdj.md`。
 
 ## WDJ の落とし穴（2026-10-18、本物の runner で確認）

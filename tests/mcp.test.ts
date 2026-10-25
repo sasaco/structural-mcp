@@ -740,6 +740,72 @@ test("Aggre-SE reports a missing spectral ductility and accepts it on the next c
   }
 });
 
+test("Aggre-SE stages the .sdr of a pile foundation with its direction", async () => {
+  const project = await mkdtemp(resolve(tmpdir(), "structural-mcp-aggrese-"));
+  const external = await mkdtemp(resolve(tmpdir(), "structural-mcp-external-"));
+  const isolated = await connect({ STRUCTURAL_MCP_ALLOWED_ROOTS: project });
+  try {
+    await writeFile(resolve(project, "case.DB1"), "fake");
+    await writeFile(resolve(project, "model.xml"), aggreSeXml(["case.DB1"], "<!-- FAKE_PILE_BLANK -->"));
+    await writeFile(resolve(project, "杭基礎.sdr"), "Ver.5.2.3\n");
+    await writeFile(resolve(project, "杭基礎.txt"), "x");
+    await writeFile(resolve(external, "杭基礎.sdr"), "Ver.5.2.3\n");
+    const inputPath = resolve(project, "model.xml");
+
+    const missing = await isolated.callTool({ name: "aggrese_calculate", arguments: { inputPath } });
+    assert.equal(missing.isError, true);
+    assert.equal((missing.structuredContent as { errors: Array<{ code: string }> }).errors[0]?.code, "SDR_REQUIRED");
+
+    const given = await isolated.callTool({
+      name: "aggrese_calculate",
+      arguments: { inputPath, sdrPath: resolve(project, "杭基礎.sdr"), sdrDirection: "transverse" },
+    });
+    assert.equal(given.isError, undefined, JSON.stringify(given.structuredContent));
+    const read = await isolated.callTool({
+      name: "read_text_artifact",
+      arguments: { jobId: (given.structuredContent as { jobId: string }).jobId, artifactId: "result-json", maxBytes: 65536 },
+    });
+    const summary = JSON.parse((read.structuredContent as { text: string }).text) as { sdr: Record<string, unknown> };
+    assert.deepEqual(summary.sdr, { staged: "杭基礎.sdr", directory: "sdr", direction: "transverse", exists: true, liquefied: null });
+
+    await writeFile(resolve(project, "杭基礎(液状化時用).sdr"), "Ver.5.2.3\n");
+    const withLiquefied = await isolated.callTool({
+      name: "aggrese_calculate",
+      arguments: { inputPath, sdrPath: resolve(project, "杭基礎.sdr"), sdrDirection: "axial",
+        sdrLiquefiedPath: resolve(project, "杭基礎(液状化時用).sdr") },
+    });
+    assert.equal(withLiquefied.isError, undefined, JSON.stringify(withLiquefied.structuredContent));
+    const readBoth = await isolated.callTool({
+      name: "read_text_artifact",
+      arguments: { jobId: (withLiquefied.structuredContent as { jobId: string }).jobId, artifactId: "result-json", maxBytes: 65536 },
+    });
+    assert.equal((JSON.parse((readBoth.structuredContent as { text: string }).text) as { sdr: { liquefied: string } }).sdr.liquefied,
+      "杭基礎(液状化時用).sdr");
+
+    for (const [args, pattern] of [
+      [{ sdrPath: resolve(project, "杭基礎.sdr") }, /一緒に指定/],
+      [{ sdrDirection: "axial" }, /一緒に指定/],
+      [{ sdrPath: "杭基礎.sdr", sdrDirection: "axial" }, /絶対パス/],
+      [{ sdrPath: resolve(project, "杭基礎.txt"), sdrDirection: "axial" }, /拡張子は\.sdr/],
+      [{ sdrPath: resolve(external, "杭基礎.sdr"), sdrDirection: "axial" }, /outside STRUCTURAL_MCP_ALLOWED_ROOTS/],
+      [{ sdrLiquefiedPath: resolve(project, "杭基礎(液状化時用).sdr") }, /sdrPathとsdrDirectionが要ります|一緒に指定/],
+      [{ sdrPath: resolve(project, "杭基礎.sdr"), sdrDirection: "axial", sdrLiquefiedPath: "相対.sdr" }, /sdrLiquefiedPathは絶対パス/],
+      [{ sdrPath: resolve(project, "杭基礎.sdr"), sdrDirection: "axial", sdrLiquefiedPath: resolve(project, "杭基礎.txt") },
+        /sdrLiquefiedPathの拡張子は\.sdr/],
+      [{ sdrPath: resolve(project, "杭基礎.sdr"), sdrDirection: "axial", sdrLiquefiedPath: resolve(external, "杭基礎.sdr") },
+        /outside STRUCTURAL_MCP_ALLOWED_ROOTS/],
+    ] as const) {
+      const refused = await isolated.callTool({ name: "aggrese_inspect", arguments: { inputPath, ...args } });
+      assert.equal(refused.isError, true, JSON.stringify(args));
+      assert.match(JSON.stringify(refused.structuredContent), pattern);
+    }
+  } finally {
+    await isolated.close();
+    await rm(project, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
+});
+
 test("Aggre-SE DB1 files must be inside the allowed roots", async () => {
   const project = await mkdtemp(resolve(tmpdir(), "structural-mcp-aggrese-"));
   const external = await mkdtemp(resolve(tmpdir(), "structural-mcp-external-"));

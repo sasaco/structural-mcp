@@ -46,3 +46,11 @@
 - 変動作用の無い構造で耐久性の行0（縁応力度）と行1（永久作用）に同じ値を入れても、耐久性の節は出る。曲げひび割れは σc・σct・σs が制限値以内なら「省略判定 省略」（ひび割れ幅は「-」、総括表は `OK (省略)`）、せん断ひび割れは変動作用0で `OK (省略)`。
 - 上向きの荷重を受ける底版の支点部は下面引張なので、「支点部は負」で書かれた断面力（上からの荷重の慣用）を渡すときは Md の符号を反転する（Capacita は正の Md が下側引張）。計算書の「引張側」欄（下側／上側）で確かめられる。
 - 疲労は WDJ の `fatigues`（`train_A_count`・`train_B_count`・`service_life` は文字列、`fatigue_list[0]` の M1/V1 に SA・SB・NA06・NB06・NA12・NB12・r1）から Capacita が ΣN を計算する（`RcDan/Calculation/Calc_NRepetition.cs`）。外部プログラム（N-EQUIVALENT など）で求めた値を使う見本と比べるときは、その入力を写す。
+
+
+### ディープビームのせん断（`shear[].deep_beam`、2026-10-26。RC標準 R5 の 3 基準だけ）
+- 杭基礎のフーチングのせん断（見本 設計計算例 第V編 表2.3.10・2.3.11）。`shear[]` の点の要素（`index`・`m_no`・`p_name`）に `deep_beam` を足す。`mode: lower_tension`（く体前面、設計せん断圧縮破壊耐力 Vfdd）は `a1_mm`・`pile_diameter_mm`・`stirrup_b1_mm` が要り、`mode: upper_tension`（杭位置、設計引抜きせん断耐力 Vsd）は `stirrup_count_in_range`（`theta_deg` は省略時 45）が要る。H16 系に付けると WD-411。
+- 引張側は `mode` で決まり、点の `isUpperCalc`・`isLowerCalc` と Md の符号は見ない。部材の幅 B が有効幅 be。Vd は `Vd5_Vd`（安全性（破壊）のせん断）の絶対値。この点は通常のせん断照査（斜め引張破壊など）を行わず、節 `shear_deep_beam_safety_destruction`（`shear_safety_destruction` の次、点ごとに 1 ページ）に出る。
+- 曲げも同じ点で照査するなら、`isMzCalc` を true にして `Md<id>_Md` を符号つきで書く（`deep_beam` の点でも曲げは Md の符号と `isUpperCalc`・`isLowerCalc` で面が決まる）。曲げなしでせん断だけなら `isMzCalc: false`。
+- 見本の丸め：Vfdd は f'cd（小数1桁）・各係数（4桁、pc・pw は5桁）・Vfdd（1桁）を丸めた値で以後を計算する。Vsd の見本 21557.0 は、同じ入力から 21557.8 になる（見本の丸めの違い）。
+- 断面力入力モードで曲げの Md0・1・5・7・8 とせん断の Vd5 だけを書くと、Md3・Md4・Md6 と Vd0〜7 の欄がないので WD-408・WD-409 の警告が出る。結果には影響しない（`NoCalc` では消えない）。

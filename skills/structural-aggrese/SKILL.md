@@ -95,11 +95,12 @@ runner（`STRUCTURAL_MCP_AGGRESE_RUNNER`）は protocol v1。XML と DB1 のフ�
 
 ## 杭基礎の制限値に SOIL-JR の .sdr を取り込む
 
-基礎の照査条件の画面（`ChildFormFoundationSetting`）の「SOIL-JR結果ファイル(*.sdr)」は、SOIL-JR の基礎照査連携データ（.sdr。書式は structural-jrsnap-soil スキルの「.sdr の書式」）から杭基礎の制限値を取り込む。runner と MCP にはない画面だけの機能。コードで確認、Batch 5f609a9（2026-10-23）。
+基礎の照査条件の画面（`ChildFormFoundationSetting`）の「SOIL-JR結果ファイル(*.sdr)」は、SOIL-JR の基礎照査連携データ（.sdr。書式は structural-jrsnap-soil スキルの「.sdr の書式」）から杭基礎の制限値を取り込む。コードで確認、Batch 5f609a9（2026-10-23）。runner（`--sdr <絶対パス> --sdr-direction axial|transverse`。2 つは一緒に。axial＝橋軸方向、transverse＝直角方向）と MCP（`aggrese_inspect`／`aggrese_calculate` の `sdrPath`・`sdrDirection`）からも同じ読み取りを使える（WebPier 決定94、2026-10-25）。runner は `FoundationLinkData` で読んで、メモリ上の `dgLimitValue0` の「普通」の行 0〜9 に入れる（XML は書き換えない）。照査位置（反力・変位の節点）があり制限値が空の杭基礎の XML に `--sdr` がないと `SDR_REQUIRED`、杭基礎でない XML に付けると `INVALID_ARGUMENT`、読めない・液状化時用の .sdr は `INVALID_SDR`。制限値を保存済みの XML は `--sdr` なしでそのまま走る。.sdr の版と DB1 の版が違う警告、ファイル名と中身の食い違い（0008）は runner の警告に出る。
 
 - 読み取りは `Batch/Aggre-SE/datas/FoundationLinkData.vb`（`Read`・`Extract`・`Cells`）。画面の `SelectFoundationDB` で方向（橋軸・直角）を選ぶ。
 - 取り込む値：Lv1（Rvd・Rud・δL・θL）、Lv2（Rvd・δL・θL）、Azen（Rvd・δL・θL）。Ver.5.3 では 安定レベル1(地震時)・安定レベル2・安定レベル3 の行、Ver.5.2 では 残留鉛直変位(L1)・(L2) と「地震時」の段から読む。Rud は引抜きが7列（回転杭）なら列5、6列なら列4。
 - 普通は表「普通」の5列目の行0〜9に10個、液状化は表「液状化」の行0〜6に7個を書く（**液状化では Azen を書かない**）。
+- runner の `--sdr-liquefied <液状化時用の .sdr>`（`--sdr` と `--sdr-direction` と一緒に）は、この「液状化」の表を `dgLimitValue0` の行 10〜16 に入れる（決定95）。XML に液状化の Case（`dgEkijoCase1`・`dgEkijoCase21`・`dgEkijoCase2` のどれかが -1）があり照査位置があって液状化の行が空なら `--sdr-liquefied` が要り（なければ `SDR_REQUIRED`）、液状化の Case がないのに付けると `INVALID_ARGUMENT`、取り違えたファイルは `INVALID_SDR`。制限値の添字（`CalculationFoundation.vb`）：0〜3 復旧性L1（Rvd・Rud・δL・θL）、4〜6 復旧性L2、7〜9 安全性、10〜16 液状化（10〜13 L1、14〜16 復旧性L2）、17〜23 と 24〜30 は液状化の L2 スペクトルⅠ・Ⅱの Case の L1 相当と安全性（空なら通常の値）。MCP は `sdrLiquefiedPath`。
 - 普通か液状化かは、Ver.5.3 では選んだ方向の【水平変位の照査】の 安定レベル3 の指標に「≦」があるか（液状化時用だけ付く）で決め、ファイル名は使わない。名前の「液状化」と食い違うと取り込んだあとに警告を出す（0008）。Ver.5.2 は「地震時」「液状化時」の段で決める。
 - 読み方（Batch の `docs/issues/`、2026-10-23 に対応）：方向の見出しは `(1)橋軸方向`・`(2)直角方向` の完全一致で探す（0009）、4行に満たない・3〜4行目が8列未満のファイルは読み込み失敗（0010）、数値は InvariantCulture で読む（0011）。Ver.5.2 と 5.3 の対応は確認済みでこのとおり（0012）。段の探し方は選んだ方向の段の中に限った（0013、対応済み）。
 - テストは Batch の `tests/Aggre-SE.Test/FoundationLinkDataTests.cs`（`Category=FoundationLink`、見本の .sdr は普通の git にあり LFS 不要）。

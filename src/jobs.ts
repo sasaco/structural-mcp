@@ -131,15 +131,25 @@ async function allowedFile(path: string, config: AppConfig): Promise<{ path: str
   return { path: resolved, bytes: info.size };
 }
 
+/** SOIL-JR's 基礎照査連携用データ (.sdr) a pile foundation takes its limit values from, for the direction of the project. */
+export interface AggreSeSdr {
+  path: string;
+  direction: "axial" | "transverse";
+  /** The .sdr for the liquefaction (杭基礎(液状化時用).sdr), for a project with a liquefaction Case. */
+  liquefiedPath?: string;
+}
+
 /**
  * Copy an Aggre-SE project into a job: the XML unchanged, and for each case every JRSNAP file sharing
  * the DB1 name (SNAPDBLib unpacks *.R10 etc. from them), the direct-foundation CSV and Aspect-SE CSVs.
- * Files Batch itself writes beside a DB1 (*.xlsx / *.csv with the DB1 name) are left out.
+ * Files Batch itself writes beside a DB1 (*.xlsx / *.csv with the DB1 name) are left out. The .sdr, when given, is
+ * copied to input/sdr/ and handed to the runner with its direction.
  */
 export async function createAggreSeJob(
   inputPath: string,
   spectralDuctility: readonly { caseNumber: number; value: number }[],
   config: AppConfig,
+  sdr?: AggreSeSdr,
 ): Promise<PreparedJob> {
   const xml = await resolveInputPath(inputPath, config);
   if (extname(xml).toLowerCase() !== ".xml") throw new Error("入力ファイルの拡張子は.xmlである必要があります。");
@@ -173,6 +183,18 @@ export async function createAggreSeJob(
     }
     sources.set(index, { db1, files });
   }
+  let sdrSource: string | undefined;
+  let liquefiedSource: string | undefined;
+  for (const [name, given] of [["sdrPath", sdr?.path], ["sdrLiquefiedPath", sdr?.liquefiedPath]] as const) {
+    if (given === undefined) continue;
+    if (!win32.isAbsolute(given)) throw new Error(`${name}は絶対パスで指定してください。`);
+    if (extname(given).toLowerCase() !== ".sdr") throw new Error(`${name}の拡張子は.sdrである必要があります。`);
+    const file = await allowedFile(given, config);
+    total += file.bytes;
+    if (total > config.maxBundleBytes) throw new Error("入力XMLとJRSNAP結果の合計がSTRUCTURAL_MCP_MAX_BUNDLE_BYTESを超えています。");
+    if (name === "sdrPath") sdrSource = file.path;
+    else liquefiedSource = file.path;
+  }
   const known = new Set([...sources.keys()].map((index) => index + 1));
   for (const { caseNumber } of spectralDuctility) {
     if (!known.has(caseNumber)) throw new Error(`spectralDuctilityのケース${caseNumber}にはDB1がありません。`);
@@ -191,6 +213,18 @@ export async function createAggreSeJob(
   const snapMapPath = resolve(job.inputDirectory, "snap-map.json");
   await writeFile(snapMapPath, JSON.stringify(snapMap), { encoding: "utf8", flag: "wx" });
   const runnerOptions = ["--snap-map", snapMapPath];
+  if (sdr !== undefined && sdrSource !== undefined) {
+    const target = resolve(job.inputDirectory, "sdr");
+    await mkdir(target, { recursive: true });
+    const copy = resolve(target, basename(sdrSource));
+    await copyFile(sdrSource, copy, constants.COPYFILE_EXCL);
+    runnerOptions.push("--sdr", copy, "--sdr-direction", sdr.direction);
+    if (liquefiedSource !== undefined) {
+      const liquefiedCopy = resolve(target, basename(liquefiedSource));
+      await copyFile(liquefiedSource, liquefiedCopy, constants.COPYFILE_EXCL);
+      runnerOptions.push("--sdr-liquefied", liquefiedCopy);
+    }
+  }
   if (spectralDuctility.length > 0) {
     const ductilityPath = resolve(job.inputDirectory, "spectral-ductility.json");
     const values = Object.fromEntries(spectralDuctility.map(({ caseNumber, value }) => [String(caseNumber - 1), value]));

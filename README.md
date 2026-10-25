@@ -241,7 +241,7 @@ standalone Python雛形では `run_soilstructure(..., generate_excel=True)` に�
 }
 ```
 
-購入オプションはGUIと同じくすべて有効です。任意スペクトル（地盤区分9）のケースはGUIでは応答塑性率μを画面入力するため、先に `aggrese_inspect` で `summary.spectralDuctility` の `source: "missing"` と参考値（等価固有周期・折曲点震度・構造物種類）を確認し、ユーザーが決めた値を `spectralDuctility: [{ "caseNumber": 1, "value": 2.5 }]` で渡します。未指定の場合は `SPECTRAL_DUCTILITY_REQUIRED` で失敗します。`generatePik` はケースのピックアップ対象、`generatePileAnchorBarPdf` は段落し入力が必要で、作れない場合は失敗します。`.pik` とケース毎 `.csv` はShift-JISのため `read_artifact` で取得します。
+購入オプションはGUIと同じくすべて有効です。任意スペクトル（地盤区分9）のケースはGUIでは応答塑性率μを画面入力するため、先に `aggrese_inspect` で `summary.spectralDuctility` の `source: "missing"` と参考値（等価固有周期・折曲点震度・構造物種類）を確認し、ユーザーが決めた値を `spectralDuctility: [{ "caseNumber": 1, "value": 2.5 }]` で渡します。未指定の場合は `SPECTRAL_DUCTILITY_REQUIRED` で失敗します。`generatePik` はケースのピックアップ対象、`generatePileAnchorBarPdf` は段落し入力が必要で、作れない場合は失敗します。`.pik` とケース毎 `.csv` はShift-JISのため `read_artifact` で取得します。杭基礎（`FoundationType` が 0）の制限値は、SOIL-JRの基礎照査連携用データ（`.sdr`）を `sdrPath`（allowed root内の絶対パス）と `sdrDirection`（`axial`＝橋軸方向、`transverse`＝直角方向）で渡して取り込みます（2つは一緒に指定。照査位置（反力・変位の節点）があり制限値が空の杭基礎のXMLに `.sdr` がないと `SDR_REQUIRED`、液状化時用の `.sdr` は `INVALID_SDR`）。液状化の Case（`dgEkijoCase1`・`dgEkijoCase21`・`dgEkijoCase2` のどれかが -1）がある杭基礎のXMLには、液状化時用の `.sdr` を `sdrLiquefiedPath` で渡します（`sdrPath` と同じ検査。なければ `SDR_REQUIRED`、液状化の Case がないのに渡すと `INVALID_ARGUMENT`）。制限値を保存済みのXMLは指定なしで計算できます。
 
 runnerはSNAPDBLibの固定作業フォルダー（`%SystemDrive%\nwl\Docu-SE`、`%TEMP%\Temp002`）を使うため、同時実行はrunner側で直列化されます。build・検証は [Aggre-SE Headless README](./Batch/Aggre-SE/Headless/README.md) を参照してください。実runnerとMCPの接続確認は次のコマンドで行います（`--outputs summary,report,pik,pile`、DB1がXMLと別フォルダーなら `--allowed-root`）。
 

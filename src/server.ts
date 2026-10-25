@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { AppConfig } from "./config.js";
 import type { JobManifest } from "./contracts.js";
 import {
+  type AggreSeSdr,
   createAggreSeJob,
   createJob,
   createNamedJsonJob,
@@ -41,6 +42,24 @@ const aggreSeSpectralDuctility = z.array(z.object({
 }).strict()).max(999).optional()
   .refine((items) => items === undefined || new Set(items.map((item) => item.caseNumber)).size === items.length, "caseNumberが重複しています。")
   .describe("任意スペクトル（地盤区分9）のケースごとの応答塑性率μ。aggrese_inspectのspectralDuctilityでsourceがmissingのケースに指定する");
+
+const aggreSeSdrShape = {
+  sdrPath: z.string().min(1).optional()
+    .describe("杭基礎のプロジェクトで制限値を取り込むSOIL-JRの基礎照査連携用データ（.sdr）の絶対パス（allowed root内）。sdrDirectionと一緒に指定。制限値が空の杭基礎XMLには必須（Aggre-SEの基礎の照査条件の「SOIL-JR結果ファイル」の取り込みと同じ。液状化時用の.sdrは取り込めない）"),
+  sdrLiquefiedPath: z.string().min(1).optional()
+    .describe("液状化時の Case（液状化の旗が立つ Case）がある杭基礎のプロジェクトで、液状化時の制限値を取り込む .sdr（杭基礎(液状化時用).sdr）の絶対パス（allowed root内）。sdrPathが要る。普通の .sdr を渡すと INVALID_SDR"),
+  sdrDirection: z.enum(["axial", "transverse"]).optional()
+    .describe("sdrPathを取り込む方向。axial＝橋軸方向（線路方向）、transverse＝直角方向（線路直角方向）"),
+};
+
+/** The .sdr of a call, or undefined; the path and the direction go together. */
+function aggreSeSdr(sdrPath: string | undefined, sdrDirection: "axial" | "transverse" | undefined,
+  sdrLiquefiedPath?: string): AggreSeSdr | undefined {
+  if ((sdrPath === undefined) !== (sdrDirection === undefined)) throw new Error("sdrPathとsdrDirectionは一緒に指定してください。");
+  if (sdrLiquefiedPath !== undefined && sdrPath === undefined) throw new Error("sdrLiquefiedPathにはsdrPathとsdrDirectionが要ります。");
+  return sdrPath === undefined || sdrDirection === undefined ? undefined
+    : { path: sdrPath, direction: sdrDirection, ...(sdrLiquefiedPath === undefined ? {} : { liquefiedPath: sdrLiquefiedPath }) };
+}
 
 const rebarSideSchema = z.object({
   diameter_mm: z.number().int().positive().optional(),
@@ -426,7 +445,7 @@ export function createServer(config: AppConfig): McpServer {
         readiness: aggreSeEnabled ? "experimental" : "unavailable",
         inputFormats: [".xml（Aggre-SE/Batchプロジェクト）+ SnapDBPathのJRSNAP解析結果（*.DB1と同名ファイル）"],
         outputFormats: ["json", "xlsx", "pdf", "pik", "csv"],
-        options: "購入オプションはすべて有効（GUIと同じ）。任意スペクトル（地盤区分9）の応答塑性率μはspectralDuctilityで指定します。",
+        options: "購入オプションはすべて有効（GUIと同じ）。任意スペクトル（地盤区分9）の応答塑性率μはspectralDuctilityで指定します。杭基礎の制限値はSOIL-JRの基礎照査連携用データ（.sdr）をsdrPathとsdrDirectionで取り込みます。",
         tools: ["aggrese_inspect", "aggrese_calculate"],
       },
       webpier: {
@@ -747,16 +766,17 @@ export function createServer(config: AppConfig): McpServer {
   server.registerTool("aggrese_inspect", {
     title: "Inspect an Aggre-SE (Batch) project",
     description: "Aggre-SE（Batch / Docu-SE）のプロジェクトXMLとJRSNAP解析結果（DB1等）を読み、ケース一覧と、任意スペクトル（地盤区分9）で応答塑性率μの入力が必要なケースと参考値を返します。成果物は作りません。aggrese_calculateの前に呼んでください。XMLとSnapDBPathのDB1はallowed root内に必要です。",
-    inputSchema: { inputPath: aggreSeInputPath, spectralDuctility: aggreSeSpectralDuctility },
+    inputSchema: { inputPath: aggreSeInputPath, spectralDuctility: aggreSeSpectralDuctility, ...aggreSeSdrShape },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ inputPath, spectralDuctility }) => {
+  }, async ({ inputPath, spectralDuctility, sdrPath, sdrDirection, sdrLiquefiedPath }) => {
     if (config.aggreSeRunner === null) return unavailable("aggrese", "STRUCTURAL_MCP_AGGRESE_RUNNER");
     try {
+      const sdr = aggreSeSdr(sdrPath, sdrDirection, sdrLiquefiedPath);
       return await calculate({
         tool: "aggrese_inspect", engine: "aggrese", runnerPath: config.aggreSeRunner,
         command: "inspect", extensions: [".xml"], jobExtension: ".json", runnerOptions: [],
         label: "Aggre-SE 入力確認",
-        prepareJob: () => createAggreSeJob(inputPath, spectralDuctility ?? [], config),
+        prepareJob: () => createAggreSeJob(inputPath, spectralDuctility ?? [], config, sdr),
       }, undefined, undefined, config);
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));
@@ -774,15 +794,17 @@ export function createServer(config: AppConfig): McpServer {
       generatePik: z.boolean().default(false).describe("断面力ピックアップ pickup.pik（CLI cmd=5）。ケースのピックアップ対象指定が必要"),
       generatePileAnchorBarPdf: z.boolean().default(false).describe("杭の段落とし計算書 pile-anchor-bar.pdf（CLI cmd=4）。段落し入力が必要"),
       spectralDuctility: aggreSeSpectralDuctility,
+      ...aggreSeSdrShape,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ inputPath, generateSummaryExcel, generateReportPdf, includeCheckTables, generatePik, generatePileAnchorBarPdf, spectralDuctility }) => {
+  }, async ({ inputPath, generateSummaryExcel, generateReportPdf, includeCheckTables, generatePik, generatePileAnchorBarPdf, spectralDuctility, sdrPath, sdrDirection, sdrLiquefiedPath }) => {
     if (!generateSummaryExcel && !generateReportPdf && !generatePik && !generatePileAnchorBarPdf) {
       return requestFailure("生成する成果物を1つ以上指定してください。");
     }
     if (config.aggreSeRunner === null) return unavailable("aggrese", "STRUCTURAL_MCP_AGGRESE_RUNNER");
     const xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     try {
+      const sdr = aggreSeSdr(sdrPath, sdrDirection, sdrLiquefiedPath);
       return await calculate({
         tool: "aggrese_calculate", engine: "aggrese", runnerPath: config.aggreSeRunner,
         command: "run", extensions: [".xml"], jobExtension: ".json",
@@ -801,7 +823,7 @@ export function createServer(config: AppConfig): McpServer {
           ...(generatePileAnchorBarPdf ? [{ relativePath: "pile-anchor-bar.pdf", mediaType: "application/pdf" }] : []),
         ],
         label: "Aggre-SE 帳票作成",
-        prepareJob: () => createAggreSeJob(inputPath, spectralDuctility ?? [], config),
+        prepareJob: () => createAggreSeJob(inputPath, spectralDuctility ?? [], config, sdr),
       }, undefined, undefined, config);
     } catch (error) {
       return requestFailure(error instanceof Error ? error.message : String(error));

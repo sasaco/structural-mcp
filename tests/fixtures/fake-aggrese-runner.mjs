@@ -35,8 +35,12 @@ function envelope(ok, summary, artifacts, errors) {
   process.exitCode = ok ? 0 : 1;
 }
 
-// The fixture marks case 1 as a user-defined spectrum case.
-if (xml.includes("FAKE_SPECTRAL") && ductility["0"] === undefined && command === "run") {
+const sdr = options.has("--sdr") ? { staged: basename(options.get("--sdr")), directory: basename(dirname(options.get("--sdr"))), direction: options.get("--sdr-direction"), exists: existsSync(options.get("--sdr")), liquefied: options.has("--sdr-liquefied") ? basename(options.get("--sdr-liquefied")) : null } : null;
+
+// The fixture marks a pile foundation with blank limits (no .sdr: an error) and case 1 as a user-defined spectrum case.
+if (xml.includes("FAKE_PILE_BLANK") && sdr === null) {
+  envelope(false, null, [], [{ category: "input", code: "SDR_REQUIRED", message: "limits are blank", details: {} }]);
+} else if (xml.includes("FAKE_SPECTRAL") && ductility["0"] === undefined && command === "run") {
   envelope(false, null, [], [{ category: "input", code: "SPECTRAL_DUCTILITY_REQUIRED", message: "case 1 needs μ", details: { cases: [{ caseNumber: 1, source: "missing" }] } }]);
 } else {
   await mkdir(outputDirectory, { recursive: true });
@@ -47,7 +51,7 @@ if (xml.includes("FAKE_SPECTRAL") && ductility["0"] === undefined && command ===
     await writeFile(resolve(outputDirectory, name), bytes);
     artifacts.push({ kind, mediaType, relativePath: name, bytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") });
   }
-  const summary = { command, input: basename(inputPath), staged, spectralDuctility: ductility, flags: Object.fromEntries(flags.map((flag) => [flag, options.get(flag)])) };
+  const summary = { command, input: basename(inputPath), staged, spectralDuctility: ductility, sdr, flags: Object.fromEntries(flags.map((flag) => [flag, options.get(flag)])) };
   await artifact("result-json", "result.json", "application/json", `${JSON.stringify(summary)}\n`);
   if (options.get("--summary-xlsx") === "true") await artifact("summary-xlsx", "summary.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Buffer.from("PK\u0003\u0004fake"));
   if (options.get("--report-pdf") === "true") await artifact("report-pdf", "report.pdf", "application/pdf", Buffer.from("%PDF-1.4\n% fake\n"));
