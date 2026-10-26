@@ -17,6 +17,7 @@ const runnerKeys = {
   jrsnap: "STRUCTURAL_MCP_JRSNAP_RUNNER",
   webdan2: "STRUCTURAL_MCP_WEBDAN_RUNNER",
   aggrese: "STRUCTURAL_MCP_AGGRESE_RUNNER",
+  soilstructure: "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER",
 };
 // The 出力項目 and the items each uses, as WebPier's inputs/outputs.py has them.
 const items = [

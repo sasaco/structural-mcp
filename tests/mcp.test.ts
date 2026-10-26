@@ -891,7 +891,7 @@ test("the WebPier contract says which output items the detected runners can gene
     generationTool: string;
   };
   assert.deepEqual(contract.runners.map(({ engine, available }) => [engine, available]),
-    [["fempython", true], ["jrsnap", false], ["webdan2", true], ["aggrese", true]]);
+    [["fempython", true], ["jrsnap", false], ["webdan2", true], ["aggrese", true], ["soilstructure", true]]);
   assert.deepEqual(contract.outputs.map((output) => output.key), webPierItems);
   assert.deepEqual(contract.stages.map(({ id, output }) => [id, output]), [["0400", "detailing"], ["0500", "ground_model"],
     ["0610", "longitudinal"], ["0612", "longitudinal_frame_analysis"], ["0711", "longitudinal_nonlinear_analysis"]]);
@@ -959,6 +959,7 @@ test("WebPier generates the input's output items from the project's input with o
     STRUCTURAL_MCP_FEMPYTHON_RUNNER: fakeFemRunner,
     STRUCTURAL_MCP_WEBDAN_RUNNER: fakeRunner,
     STRUCTURAL_MCP_AGGRESE_RUNNER: fakeAggreSeRunner,
+    STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER: fakeRunner,
   });
   // libuv adds the variables Windows needs (USERPROFILE, WINDIR, ...) to every child's environment.
   const windows = ["HOMEDRIVE", "HOMEPATH", "LOGONSERVER", "SYSTEMDRIVE", "USERDOMAIN", "USERNAME", "USERPROFILE", "WINDIR"];

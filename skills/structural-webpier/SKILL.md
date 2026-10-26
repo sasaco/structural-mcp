@@ -57,7 +57,7 @@ WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 R
 - 「0612 まで作って」なら `ground_model`・`reactions`・`longitudinal`・`longitudinal_frame_analysis` を `true` にする（0500・0600・0610 の計算書も作られる）。
 - `detailing`（0400）は入力だけで作れ、runner は要らない。ただし柱・梁・フーチング（上面を含む）の配筋と `片持ち梁の照査.外観の照査` がすべて要る（空欄は入力エラー）。
 - **杭基礎（`下部構造.基礎形式` が場所打ち杭・鋼管ソイルセメント杭）で選べるのは `detailing`・`ground_model`・`reactions`・`longitudinal`・`transverse`（と、場所打ち杭だけ `longitudinal_seismic`・`transverse_seismic`・`longitudinal_nonlinear_analysis`・`transverse_nonlinear_analysis`・`footing`）だけ**（`longitudinal`・`transverse` は杭を入れた骨組で、SOIL-JR の .sdc のばねをそのまま使う。SOIL-JR が動いた後に計算するので、`webpier_validate` では計算を確かめない。WebPier 決定88）（ほかは `outputs.<項目>` の入力エラー。段ごとに広がる。`webpier_get_contract` の各項目の `pileFoundation` に、選べるか〔`supported`〕・runner・ファイル〔液状化を考慮する入力だけのファイルは `conditionalFiles`〕・足りる runner〔`available`・`missingRunners`〕がある）。杭基礎の `ground_model`（0500）は **JRSNAP の runner が要り**（SOIL-JR を動かす。runner がなければ止まる）、`output/0500_杭基礎.pdf`（SOIL-JR の帳票そのもの）と `post/杭基礎.sdt`・`.sdr`・`.sdc`（液状化を考慮するときは `杭基礎(液状化時用).sdr`・`.sdc` も）を作る。SOIL-JR は判定を返さない（`not_evaluated`）。WebPier 決定85、ADR-0013。
-- **地震時の項目（0710・0720）は JRSNAP の runner が要る**。JRSNAP がなければ地震時以外の6項目だけを `true` にする。
+- **地震時の項目（0710・0720）は JRSNAP の runner が要る**。JRSNAP がなければ地震時以外の6項目だけを `true` にする。地盤区分 G3〜G5 の杭基礎は地盤変位（応答変位法）も考慮し、0710・0720 に **SoilStructure の runner** と地盤の層の `せん断弾性波速度_Vs` が要る（WebPier 決定97。`references/stages.md`）。
 - 静的非線形解析を含む生成（`*_nonlinear_analysis`・`footing`・`cantilever`）は1方向数分かかり、JRSNAP の画面が出て、JRSNAP のインストール先の共用ファイルを書く。**実行の前に利用者に確かめる**。同じ PC で JRSNAP を同時に動かせない。
 - 利用者の案件の `outputs` を勝手に書き換えない。作りたいものと違うときは、変えてよいかを確かめてから直す。
 - 段階・依存・成果物の一覧は `references/stages.md`、照査の中身は `references/checks.md`。

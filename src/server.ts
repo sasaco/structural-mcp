@@ -272,7 +272,7 @@ function unavailable(engine: string, environmentVariable: string) {
 }
 
 interface WebPierRunner {
-  engine: "fempython" | "jrsnap" | "webdan2" | "aggrese";
+  engine: "fempython" | "jrsnap" | "webdan2" | "aggrese" | "soilstructure";
   environmentVariable: string;
   path: string | null;
 }
@@ -290,6 +290,8 @@ function webPierRunners(config: AppConfig): WebPierRunner[] {
     { engine: "jrsnap", environmentVariable: "STRUCTURAL_MCP_JRSNAP_RUNNER", path: config.jrsnapRunner },
     { engine: "webdan2", environmentVariable: "STRUCTURAL_MCP_WEBDAN_RUNNER", path: capacita !== null && existsSync(capacita) ? capacita : null },
     { engine: "aggrese", environmentVariable: "STRUCTURAL_MCP_AGGRESE_RUNNER", path: config.aggreSeRunner },
+    // the 地盤変位 of a pile foundation on G3〜G5 (WebPier decision 97)
+    { engine: "soilstructure", environmentVariable: "STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER", path: config.soilStructureRunner },
   ];
 }
 
