@@ -29,6 +29,7 @@ run --input <.ndu または .ndt の絶対パス> --output-dir <空の、また�
 - インストール先は runner の横の `jrsnap-headless.json`（`{"installDir": ...}`）で決め、版は `JRSNAP_Input.exe` の AssemblyVersion（5.2.3.1・5.3.1.3）で判定する。別の版で試すときは、その形の JSON を `--config` で渡す（設定ファイルそのものは書き換えない）。同じインストール先の解析は `Global\structural-mcp-jrsnap` の mutex と起動中のプロセスの検査で直列にする。
 - `engineeringStatus` は成功なら `not_checked`（解析は応答を求めるだけで、耐震性能は判定しない）。`.LOG` の警告は `LOG_WARNING`、`.EMG` の各行は `ENGINE_MESSAGE` で、失敗にはしない。
 - データ確認図・荷重図の PDF（`figures`）はスキル `structural-jrsnap-figures`。
+- 結果のファイルは暗号化 zip なので、節点の変位は `results --input <.DB1> --output-dir <空のフォルダー> --joints <節点番号,…>` で読む（JRSNAPHeadless 8044fac、2026-10-26）。インストール先の `SNAPDBLib.dll` を 32 ビットの補助が読み、全出力ステップの `dx`・`dy`（m）・`rotation`（rad）と `loadStep`（荷重の倍率は `loadStep / loadDivisions`）を `displacements.json` に書く。値はステップ 0 の死荷重の変位を引いていない。DB1 の横に同じ名前の結果ファイルが要る。
 
 ## 入力画面を起動せずに既存の .ndt を解析する
 
