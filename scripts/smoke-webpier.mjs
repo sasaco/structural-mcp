@@ -4,8 +4,8 @@
 //
 // Files whose bytes are not WebPier's to fix are reported but do not fail the run: the reports with pages of other
 // programs (FEMPython's load diagrams in 0610/0620, Capacita's sections in 0611/0621/0810/0820/0910 — its font subset
-// names change every run —, JRSNAP's figures in 0710/0720, Aggre-SE's report as 0711/0721; ADR-0005, ADR-0008,
-// decisions 50, 51, 56), Aggre-SE's workbooks, the JRSNAP result folders, and every result JSON or sidecar that
+// names change every run —, JRSNAP's figures in 0710/0720, Aggre-SE's report as 0711/0721, SOIL-JR's report as the 0500 of
+// a pile foundation; ADR-0005, ADR-0008, decisions 50, 51, 56, 85), Aggre-SE's workbooks, the JRSNAP result folders, and every result JSON or sidecar that
 // records one of those files' SHA-256.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -79,6 +79,9 @@ async function files(directory) {
 // The kinds (artifact kind without the stage) whose bytes are another program's, and the reports with its pages.
 const foreignKinds = new Set(["jrsnap", "xlsx"]);
 const foreignReports = new Set(["0610", "0611", "0620", "0621", "0710", "0711", "0720", "0721", "0810", "0820", "0910"]);
+// The 0500 of a pile foundation is SOIL-JR's report as it printed it (WebPier decision 85).
+const input = JSON.parse((await readFile(inputPath, "utf8")).replace(/^\uFEFF/, ""));
+if (input?.下部構造?.基礎形式 !== "直接基礎") foreignReports.add("0500");
 
 try {
   await client.connect(transport);
@@ -110,7 +113,8 @@ try {
   const webPier = template.variables.find((item) => item.engine === "webpier").value;
   const python = resolve(dirname(webPier), ".venv", "Scripts", "python.exe");
   const cli = spawnSync(python, ["-X", "utf8", resolve(dirname(webPier), "run_design.py"), "--input", inputPath,
-    "--output-dir", resolve(cliOutput, "output"), "--post-dir", resolve(cliOutput, "post")], {
+    "--output-dir", resolve(cliOutput, "output"), "--post-dir", resolve(cliOutput, "post"),
+    "--export-dir", resolve(cliOutput, "export")], {
     cwd: root, windowsHide: true, timeout: timeoutMs, encoding: "utf8",
     env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP, ...runners },
   });
