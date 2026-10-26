@@ -26,6 +26,7 @@ Aggre-SE（Batch.exe、Docu-SE）は JRSNAP の解析結果（各 Case の `.DB1
 - `<DB1名>_Output_Chokukiso.csv`：直接基礎の照査値。JRSNAP の基礎照査機能（`S_SubstCheck.exe`）が書くが、**Aggre-SE（2026-10-23 以降の Batch）はこの CSV を読まない**（読むコードを削除。以前は形式の不一致で例外になり、空の `Catch` で握りつぶされて、一度も読めずに DB1 から求めていた。Batch の issue 0015・ADR 0002）。直接基礎の照査値は常に DB1 から求める。**CSV と DB1 から求めた値は一致しない**（5.3 の Rvd 最大 31%・Mmd 最大 17%、岩盤の Hd は 246 ステップで符号が逆。どちらが基礎照査機能の式に合うかは未確認。実アプリで確認、2026-10-23）。CSV を置いても結果は変わらない。
 - `_Output_PIC.csv`・`_直接基礎照査No1.csv` も同じ機能の出力だが、Aggre-SE は読まない。
 - `Aspect-SE_*.csv`：任意スペクトルのとき（DB1 と同じフォルダー）。
+- **JRSNAP の等価せん断スパン法の `<DB1名>.CSV` は渡さない**：runner は計算書（`--report-pdf true`）を作るとき、DB1 の横に `<DB1名>.csv`・`.xlsx`（Aggre-SE の Case ごとの出力の名前。Windows では大文字小文字を区別しない）があると `--check-tables false` でも `OUTPUT_CONFLICT` で断る（`AggreSeRunner.cs`）。JRSNAP は杭頭部に等価せん断スパン法を使う解析で同じ名前の帳票を書くので、Aggre-SE に渡す複製から外す（Aggre-SE はこれを読まない。WebRamen R6d で確認、2026-10-26）。
 
 ## MCP で照査・集計させる（先にこちら）
 

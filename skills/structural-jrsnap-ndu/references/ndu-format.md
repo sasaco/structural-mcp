@@ -31,6 +31,7 @@
 - **`DataInfo` の最後の欄**（0＝なし、1＝あり）。コードで確認（`JRSNAP_Input.exe` 5.2.3.1 を逆コンパイル）：画面は `frmEditKihonJyoken.chkVasud`（`G_intSNAP_FLG == 1` のときだけ表示）、値は `mdlGlobal.G_intChkVasud`。`mdlDataFile.cs` は `DataInfo` の整数16欄・実数4欄のあとに `KISOFLG, KISO_SHUBETU, NiniZahyoFlg, SendanSpan, [GanmaC], ChkVasud` を書く（`GanmaC` は `G_intViewFlg[22] == 1` のときだけ書く。読込みは `GanmaC`・`ChkVasud` の順に読む）。
 - Batch の見本「T形両端固定」（26欄）では第26欄。0→1 にしただけの NDU を runner の `--analyze false` で書き出すと、NDT の差は DA ブロック1行目の1文字（`GanmaC` の次。1 なら `1`、0 なら空白）だけだった。
 - 解析すると、両端固定（`TanbuShiji<n>=2,<部材長 mm>`）の断面の両端の M-θ 部材で、総括表の Vmu が `|Mm1 − Mm2| / L` になる（実アプリで確認。DB1 の値はスキル `structural-aggrese` の outputs.md）。見本（開発機のみ。structural-mcp の repo のルートから）：`Batch/tests/JRSNAP_Ver5.2-L03/08_両端固定のVmu・Vud(V52-L03)/`。
+- **`SendanSpan`（`DataInfo` の実数4欄のあとの4番目、全体の第24欄）は「場所打ち杭の杭頭部への等価せん断スパン法の適用」**（操作説明書 表2-19）：0＝適用しない、1＝適用する（Vdd に側方鉄筋を考慮しない）、2＝適用する（Vdd に側方鉄筋を考慮する）。解析で確かめた（JRSNAP 5.2-L03、WebRamen R6d、2026-10-26）：1・2 にすると杭頭の要素の `VddVasud` が入り、Vud は Vyd と Vdd の大きいほうになる（RC 円形の杭、圧縮側で 1166.5 → 1 で 1501.7、2 で 1640.3）。**`KGInfo<n>` の第4欄に 1/β（m）が要る**（0 のままだと LOG にエラー 1311「杭基礎設定用データ：等価せん断スパン法の適用時は1/βの入力が必要です」で解析が止まり、runner は `ANALYSIS_FAILED`）。適用すると解析は各 Case の DB1 の横に `<DB1名>.CSV`（等価せん断スパン法の帳票。Shift-JIS）を書く。`.ATR` に「W:場所打ち杭の杭頭部に等価せん断スパン法を適用しています.」。
 - 旧版を保存したときに `DataInfo` 末尾に足される `,0,0,0`（上の節）は、`SendanSpan`・`GanmaC`・`ChkVasud` と推定（未確認）。5.3-L01体験版2 は調べていない。
 
 ## 5.2-L03 の読込の制約（2026-10-17、インストール済み 5.2-L03 の読込・保存処理で一時モデルを確認）
