@@ -16,3 +16,6 @@
 [submodule "WebPier"]
 	path = WebPier
 	url = https://github.com/sasaco/WebPier.git
+[submodule "WebRamen"]
+	path = WebRamen
+	url = https://github.com/sasaco/WebRamen.git
