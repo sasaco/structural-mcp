@@ -52,3 +52,11 @@ JRSNAP の解析条件「破壊形態の判定において、両端固定支持�
 - Aggre-SE（Batch eb74d80 以降）：M-θ で La ≦ −999 の部材を両端固定（`cls破壊形態の照査.is両端固定`）とし、総括表の M-θ シートと計算書の La を `-----` と出す。Vmu・Vud・Vmu/Vud は DB1 の値のまま。カスタムせん断耐力の設定があっても、この部材の Vud は算定し直さない。それより前の Batch では La が `-999.999` と出る。
 - 確かめるテスト（開発機のみ。structural-mcp の repo のルートから）：`Batch/tests/Aggre-SE.Test/BothEndsFixedVmuVudTests.cs`。見本は `Batch/tests/JRSNAP_Ver5.2-L03/08_両端固定のVmu・Vud(V52-L03)/`。
 - zip の中の日時は 1980-01-01 で固定だが、`xl/workbook.xml` の `documentId`、各シート・図の `xr:uid`・`a16:creationId` の GUID と `docProps/core.xml` の `dcterms:modified` が毎回変わるので、同じ入力でもバイトが変わる（2026-10-19、2回作って比べた）。検査するならシート名の並びを見る。
+
+## RC 部材の設計せん断耐力 Vud（JRSNAP の pw·fwyd/f'cd ≦ 0.1）
+
+計算書の「破壊形態」「せん断」の Vud は、JRSNAP が DB1 に書いた値（`Sendan.Vyd`、a/d＞2 は Vyd と Vwcd の小さいほう、a/d＜2 は Vdd。操作説明書 付録3 付3-3）で、Aggre-SE は算定し直さない。
+
+- JRSNAP（5.2-L03）は RC 部材の Vyd のせん断補強鉄筋の項を、**pw·fwyd/f'cd ≦ 0.1 で頭打ち**にする（付録の警告 34「pw・fwyd/f'cd>0.1 のため、Vyd または Vasud において、pw・fwyd/f'cd=0.1 で計算しています」）。選べるのは、この式の f'cd に使う γc を入力値（1.3）にするか 1.0 にするかだけ（解析条件「せん断耐力算定時（鉄筋コンクリート部材）の pw・fwyd/f'cd≦0.1 の照査式に適用するγc」、NDT の DataInfo の H、51カラム目：0 入力値、1 γc=1.0。警告 35）。
+- 例（WebRamen の RC ラーメン高架橋の中間部の上層梁、2026-10-27、本物の JRSNAP・Aggre-SE）：bw 750・d 977・D16 4本 @100（pw 1.059 %、pw·fwyd/f'cd＝0.176）で、Vud 1577.5 kN＝Vcd 374.6＋0.1×20.77×750×(977/1.15)/1.1。頭打ちしない手計算（見本の設計計算例 III-210 の 2488.8）より 37 % 小さく、せん断耐力の照査が NG（1.074）になった。γc=1.0 なら 1938.7。
+- 帯鉄筋が少ない部材（同じ例の柱 D19 2本 @125、0.090）は頭打ちにならず、手計算と合う。
