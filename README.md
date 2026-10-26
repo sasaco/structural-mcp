@@ -36,6 +36,7 @@
 | `webdan_validate` | WDJの構造・参照・選択・主要な重複fieldを検証 | 検証結果、診断 |
 | `webdan_compose_wdj` | 既存WDJへ明示された意味変更を適用 | 新しいWDJ、変更差分、検証結果 |
 | `webdan_calculate` | Capacita の RC 断面照査を実行 | 要約、`result.json`、PDF または Markdown、任意 XLSX |
+| `webdan_impact` | 設計衝撃係数（RC標準 4.4.4）を Capacita に取り込んだ VePP-I の計算で求める | 部材ごとの ω・n・α・iα・ic・i の `result.json` |
 | `steeldan_calculate` | Capacita の鋼部材照査を実行 | 照査要約、`result.json`、任意 PDF |
 | `soilstructure_get_schema` | document schemaVersion 1、単位、operation別必須sectionを取得 | JSON Schema、入力例 |
 | `soilstructure_get_runner_contract` | standalone script用のrunner契約を取得 | command、artifact、文字コード、Python雛形 |
@@ -129,7 +130,7 @@ dotnet build .\FEMPython\FrameWebforCS\Headless\FrameWebforCS.Headless.csproj -c
 
 現行の Capacita adapter は、protocol v1 互換の `WebDanforCS.Headless` runnerを `STRUCTURAL_MCP_WEBDAN_RUNNER` で受け取ります。未指定時は、このリポジトリ内のRelease buildを使用します。
 
-Capacita runner のRC commandは `inspect-rc`、`validate-rc`、`compose-rc`、`run-rc` です。`webdan_compose_wdj` は入力元を直接上書きせず、MCPのjob directoryに `generated.wdj` を生成します。対象プロジェクトへの配置と命名はclient側のskillが担当します。
+Capacita runner のRC commandは `inspect-rc`、`validate-rc`、`compose-rc`、`run-rc` です。`webdan_impact` は `run-impact`（JSON の `rows` に部材を並べる。契約は Capacita の README の「Headless runner の run-impact」）を呼びます。`webdan_compose_wdj` は入力元を直接上書きせず、MCPのjob directoryに `generated.wdj` を生成します。対象プロジェクトへの配置と命名はclient側のskillが担当します。
 
 SoilStructure adapter は `STRUCTURAL_MCP_SOILSTRUCTURE_RUNNER` の runner に、次の非対話commandで接続します。
 

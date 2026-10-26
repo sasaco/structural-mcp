@@ -423,7 +423,7 @@ export function createServer(config: AppConfig): McpServer {
         compatibilityTool: "webdan_calculate",
         inputFormats: [".wdj", "inline-json"],
         outputFormats: ["wdj", "json", "pdf", "markdown"],
-        tools: ["webdan_inspect", "webdan_validate", "webdan_compose_wdj", "webdan_calculate"],
+        tools: ["webdan_inspect", "webdan_validate", "webdan_compose_wdj", "webdan_calculate", "webdan_impact"],
       },
       webdan2: { enabled: capacitaEnabled, readiness: capacitaEnabled ? "production" : "unavailable", aliasFor: "capacita", deprecated: true, outputFormats: ["wdj", "json", "pdf", "markdown"] },
       steeldan: { enabled: steelDanEnabled, readiness: "experimental", outputFormats: ["json", "pdf"] },
@@ -604,6 +604,25 @@ export function createServer(config: AppConfig): McpServer {
         command: "compose-rc", extensions: [".wdj"], jobExtension: ".json", runnerOptions: [], jsonInput: true,
         label: "Capacita RC入力作成",
       }, inputPath, input, config, (baseDocument) => JSON.stringify({ baseDocument, request }));
+    } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
+  });
+
+  server.registerTool("webdan_impact", {
+    title: "Calculate design impact factor (VePP-I)",
+    description: "設計衝撃係数（RC標準 4.4.4・付属資料4）を、CapacitaのVePP-I 5.0-L03の計算（固有振動数の片持ち梁式・両端固定梁式・四辺固定スラブ式、速度効果の衝撃係数の表EA・ボギー・連接）で求めます。入力はrowsに部材ごとのmodel・寸法・E・I・質量（ρAℓと先端重量、ρA、ρhは呼び出し側が求める）・vehicle・speed・lb（・lv）を並べたJSONで、result.jsonにω・n・α・表を引いたスパン・iα・ic・iを丸めずに返します。複線の低減と3/4倍は含みません。inputPathまたはinputの一方だけを指定してください。",
+    inputSchema: sourceShape,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ inputPath, input }) => {
+    if (config.capacitaRunner === null) return unavailable("capacita", "STRUCTURAL_MCP_WEBDAN_RUNNER");
+    const invalid = invalidSourceSelection(inputPath, input);
+    if (invalid) return invalid;
+    try {
+      return await calculate({
+        tool: "webdan_impact", engine: "webdan2", runnerPath: config.capacitaRunner,
+        command: "run-impact", extensions: [".json"], jobExtension: ".json", runnerOptions: [], jsonInput: true,
+        requiredArtifacts: [{ relativePath: "result.json", mediaType: "application/json" }],
+        label: "Capacita 設計衝撃係数（VePP-I）",
+      }, inputPath, input, config);
     } catch (error) { return requestFailure(error instanceof Error ? error.message : String(error)); }
   });
 

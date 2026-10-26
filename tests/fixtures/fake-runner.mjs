@@ -11,7 +11,7 @@ const inputPath = options.get("--input");
 const outputDirectory = options.get("--output-dir");
 if (!command || !inputPath || !outputDirectory) throw new Error("missing required runner arguments");
 
-const engine = ["run-rc", "inspect-rc", "validate-rc", "compose-rc"].includes(command)
+const engine = ["run-rc", "inspect-rc", "validate-rc", "compose-rc", "run-impact"].includes(command)
   ? "webdan2"
   : command === "run-steel"
     ? "steeldan"
@@ -30,7 +30,7 @@ if (command === "validate" && !["pile", "sdc", "ground"].includes(options.get("-
 
 const source = await readFile(inputPath, "utf8");
 if (engine === "soilstructure") JSON.parse(source);
-if (["inspect-rc", "validate-rc"].includes(command)) JSON.parse(source);
+if (["inspect-rc", "validate-rc", "run-impact"].includes(command)) JSON.parse(source);
 const composeInput = command === "compose-rc" ? JSON.parse(source) : null;
 if (composeInput !== null) {
   JSON.parse(composeInput.baseDocument);

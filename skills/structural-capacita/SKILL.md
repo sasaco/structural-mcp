@@ -1,6 +1,6 @@
 ---
 name: structural-capacita
-description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
+description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、設計衝撃係数（固有振動数 n・速度パラメータ α・iα・ic・i、VePP-I の計算）を webdan_impact か runner の run-impact で求める、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
 ---
 
 # Capacita で RC 断面照査を行う
@@ -32,6 +32,15 @@ dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォ
 - `summary.reportSections`：PDF のとき、計算書の節ごとのページ範囲を先頭ページの順に `{id, firstPage, lastPage}`（1始まり、両端を含む）で返す。何も印刷しなかった節は含まない。節の ID の表は Capacita の README。計算書を節ごとに切り分けて他の帳票に差し込む利用者との契約なので、ID を変えるときは利用者に知らせる。
 - 鋼管杭とフーチングの結合部の設計曲げ耐力 Mu は別の命令 `run-pile-joint --input <json> --output-dir <空のフォルダー>`（VePP-HS の HsCalc、鉄筋差込み方式。入力は鋼管・鉄筋・中詰めコンクリート・安全係数・行ごとの軸力 N'd。f'cc・ε'cu は HsCalc が求めるので渡さない）。成果物は `result.json` だけで、`engineeringStatus` は常に `not_run`。契約は `Capacita/README.md` の「Headless runner の run-pile-joint」を正とする。WebPier の 0612・0622 が呼ぶ。
 - 着目点の番号の付け方と、断面力入力モード（`--pickup` なし）の WDJ は `references/wdj.md`。
+
+## 設計衝撃係数（webdan_impact／run-impact、2026-10-26、Capacita 43b6463 の本物の runner で確認）
+
+- VePP-I 5.0-L03 の CmnDI（`CalcFrequency`・`CalcImpactCoeff`）と表 `Table\EA.txt`・`BOGIE.txt`・`RENSET.txt` を `Capacita/ImpactSolver/` に取り込んだもの。VePP-I のインストールは要らない。契約は `Capacita/README.md` の「Headless runner の run-impact」を正とする。
+- 入力は `rows` に部材を並べた JSON。`model` は `cantilever`（ρAℓ と先端の集中重量 m）・`fixedBoth`（換算等分布荷重 ρA）・`fixedPlate`（四辺固定スラブ、a≦b≦3a、ρh）の3つだけ。E は kN/mm2、I は m4。**質量は呼び出し側が死荷重から求める**（VePP-I の荷重の表と換算は持たない）。断面と配筋から EI を求める機能もない。
+- `vehicle` は `EA`・`BOGIE`・`RENSET`。BOGIE・RENSET は `lv`（車両長）が必須、EA では入力エラー。
+- 返す値は丸めない（ω・n・α・表を引いたスパン・iα・ic・i）。複線の低減（1−Lb/200）と 3/4 倍は VePP-I にないので呼び出し側。
+- iα は VePP-I の表どおり、Lb が表の列の間なら**両側の列の大きいほう**を取る。付属資料4の図を手で読んだ値（近い列や 0 と読む）と違うことがある（例：Lb 5.000・α 0.024 で 0.0295、Lb 7.861・α 0.059 で 0.0238）。
+- Capacita 43b6463 より前の runner は、失敗の envelope の engine が `webdan2-headless` で `summary` もなかったため、MCP や engine を確かめる呼び出し側では入力エラーの本文が「unexpected engine」「protocol v1 違反」に隠れていた。
 
 ## WDJ の落とし穴（2026-10-18、本物の runner で確認）
 

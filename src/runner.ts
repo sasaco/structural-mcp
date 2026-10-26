@@ -3,7 +3,7 @@ import { pythonForScript, type AppConfig } from "./config.js";
 import { runnerEnvelopeSchema, type RunnerEnvelope } from "./contracts.js";
 
 export type RunnerCommand =
-  | "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel"
+  | "run-rc" | "inspect-rc" | "validate-rc" | "compose-rc" | "run-steel" | "run-impact"
   | "validate" | "run" | "export-sdc" | "run-ground-displacement" | "inspect" | "contract" | "schema";
 
 export type RunnerEngine = "fempython" | "webdan2" | "steeldan" | "soilstructure" | "aggrese" | "webpier";

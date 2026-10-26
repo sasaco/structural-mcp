@@ -71,6 +71,7 @@ test("lists all tools and reports independently available runners", async () => 
     "steeldan_calculate",
     "webdan_calculate",
     "webdan_compose_wdj",
+    "webdan_impact",
     "webdan_inspect",
     "webdan_validate",
     "webpier_generate",
@@ -97,6 +98,7 @@ test("lists all tools and reports independently available runners", async () => 
     "webdan_validate",
     "webdan_compose_wdj",
     "webdan_calculate",
+    "webdan_impact",
   ]);
   assert.equal(engines.soilstructure.enabled, true);
   assert.deepEqual(engines.soilstructure.outputFormats, ["json", "pdf", "xlsx", "sdc", "jot"]);
@@ -199,6 +201,27 @@ test("calls Capacita through the generalized runner and reads an artifact", asyn
   const read = await client.callTool({ name: "read_text_artifact", arguments: { jobId: structured.jobId, artifactId: "result", maxBytes: 4096 } });
   assert.equal(read.isError, undefined);
   assert.match((read.structuredContent as { text: string }).text, /"command":"run-rc"/);
+});
+
+test("calculates the design impact factor with the Capacita run-impact command", async () => {
+  const input = JSON.stringify({
+    rows: [{ id: "上層横梁", model: "fixedBoth", length: 5, e: 26.5, i: 0.2391, rhoA: 57.8, vehicle: "EA", speed: 130, lb: 5 }],
+  });
+  const result = await client.callTool({ name: "webdan_impact", arguments: { input } });
+  assert.equal(result.isError, undefined);
+  const structured = result.structuredContent as {
+    tool: string;
+    engine: string;
+    summary: { command: string };
+    artifacts: Array<{ artifactId: string; name: string }>;
+  };
+  assert.equal(structured.tool, "webdan_impact");
+  assert.equal(structured.engine, "webdan2");
+  assert.equal(structured.summary.command, "run-impact");
+  assert.ok(structured.artifacts.some((item) => item.name === "result.json"));
+
+  const both = await client.callTool({ name: "webdan_impact", arguments: { input, inputPath: "C:/input.json" } });
+  assert.equal(both.isError, true);
 });
 
 test("inspects, validates, and composes Capacita WDJ artifacts", async () => {

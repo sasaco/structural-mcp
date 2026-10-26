@@ -54,6 +54,7 @@ export interface JobManifest {
     | "webdan_inspect"
     | "webdan_validate"
     | "webdan_compose_wdj"
+    | "webdan_impact"
     | "steeldan_calculate"
     | "soilstructure_validate"
     | "soilstructure_calculate"
