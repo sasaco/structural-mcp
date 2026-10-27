@@ -32,6 +32,7 @@ JRSNAP の帳票アプリ（S_DataCheck・S_LoadPicture）は、どれも同じ 
    - 画面の監視は `EnumWindows` とプロセス ID で行う。`EnumThreadWindows` は UI スレッドの画面しか見ないので、別のスレッドに出る表示（評価版の通知など）を見落とす。
    - `#32770` は、アプリが `Expected` で認めたもの（データ確認図ではプリンターの選択「印刷」）だけを取り消して進める。それ以外と知らない画面は記録して閉じ、失敗（`UNKNOWN_DIALOG`）にする。
    - 答えた窓は閉じるまで次のタイマーでも見えるので、窓ごとに1回だけ答える。2回目を未知の画面と数えると、「印刷: プリンター …」で失敗する（実際に起きた）。
+   - `Steer` の中で例外が出たら、それを記録し、開いている画面（主画面のほか）をすべて閉じる。モーダルの画面が開いたままだと `Work` の `ShowDialog` が戻らず、補助が答えないまま runner のタイムアウトまで止まる（2026-10-27、横長の骨組の荷重図で実際に起きた。`load-picture.md`）。
 6. 組み立てたページを、ComponentOne の PDF 出力（`<C1PrintDocument>.Export("<名前>.pdf")`）で書く。プリンターは使わない。「Microsoft Print to PDF」は、スプールが非同期でファイルが遅れて現れるので使わない。
 7. 結果は `Reporter.Answer`（最初のドメイン）で stdout に1回だけ書いて flush する。その後、アプリを閉じずに `TerminateProcess` で即座に終える。
    - 閉じると設定の INI を書き、S_LoadPicture は `.lpd` の保存を問い、`EndApp` で終わる。

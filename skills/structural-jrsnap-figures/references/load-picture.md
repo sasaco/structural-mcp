@@ -56,12 +56,14 @@
 ## 画面の答え方（`Steer`）
 
 - **`frmSetPaper`（軸線レイアウト）：**
-  - 表示されて2回分待ち、さらに `blnFormLoadFlg` が true になってから答える。
+  - 表示されて2回分待ち、さらに `blnFormLoadFlg` が true になり、**プレビューの生成が終わってから**答える（画面の `C1PrintDocument` 型のプロパティのどれも `IsGenerating` でない）。
+  - 横長のモデル（WebRamen の橋軸方向ラーメン、幅 49 m）は、`MSI_Chk_NDTData` が横向きにし、画面を開いたときのプレビューの生成に時間がかかる。その途中で `optV` を選ぶと `SetPaperPreview` が「ドキュメントの生成が既に開始されています。」の例外を出す。縦長の橋脚・直角方向の骨組では起きなかった（2026-10-27、5.2-L03）。
+  - `optV` を選ぶとプレビューをもう一度作るので、「次へ」はそれが終わった後のタイマーで押す。`WG_bytSystemDataFlg` が 0 のあいだ（荷重レイアウトへ進むまで）は、1秒ごとに押し直す。1 になってから押すと、作画して画面を閉じる別の経路に入るので押さない。
   - `optA4`・`optV` を選び、`cboX`・`cboY` の `SelectedIndex = 0`（自動）にして、`cmdOK`（「次へ」）を押す。
   - `optV` を選ぶと `SetPaperPreview` が縦で縮尺を計算し直す。
   - `cmdOK_Click` の中で `frmLoadLayout` が開く。
   - `frmSetPaper` は、全ケースのタイトルの位置（`MSI_Get_InitPosition`）も決めるので、飛ばさない。
-- **`frmLoadLayout`（荷重レイアウト）：** `cmdOK` を押す。`WG_bytSystemDataFlg = 2` になる。FarPoint の表を使うが、評価版の表示は出ない。
+- **`frmLoadLayout`（荷重レイアウト）：** プレビュー（`C1PrintDocument2`）の生成が終わってから `cmdOK` を押す。`WG_bytSystemDataFlg = 2` になる。FarPoint の表を使うが、評価版の表示は出ない。
 - **`frmPreView`：** 下の「3. ページを組む」。
 - **それ以外の画面と `#32770`：** 失敗にする。「データエラー」「読込みエラー」（100〜104）「入力値エラー」が出るはずのものは、手順の中で検査して先に止める。
 
