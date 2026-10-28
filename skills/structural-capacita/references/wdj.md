@@ -54,3 +54,21 @@
 - 曲げも同じ点で照査するなら、`isMzCalc` を true にして `Md<id>_Md` を符号つきで書く（`deep_beam` の点でも曲げは Md の符号と `isUpperCalc`・`isLowerCalc` で面が決まる）。曲げなしでせん断だけなら `isMzCalc: false`。
 - 見本の丸め：Vfdd は f'cd（小数1桁）・各係数（4桁、pc・pw は5桁）・Vfdd（1桁）を丸めた値で以後を計算する。Vsd の見本 21557.0 は、同じ入力から 21557.8 になる（見本の丸めの違い）。
 - 断面力入力モードで曲げの Md0・1・5・7・8 とせん断の Vd5 だけを書くと、Md3・Md4・Md6 と Vd0〜7 の欄がないので WD-408・WD-409 の警告が出る。結果には影響しない（`NoCalc` では消えない）。
+
+## 自分で解いた骨組の断面力を PIK にして渡す（2026-10-27、Capacita の本物の runner で確認）
+
+案件で骨組を FEMPython 以外で解いたとき（例：円形立坑のリング梁）も、断面力を PIK の書式で書いて `--pickup` で渡すと、Capacita が Mmax・Mmin・Nmax・Nmin の行から照査用の断面力を選ぶ。断面力入力モード（`force[]`）で自分で行を選ぶより、原本（旧 WebDan の計算書）に合った。
+
+- 書式は固定幅（`PickupImporter.ParsePik`）。先頭行は読み飛ばす。1 行は、PickUpNo・種別（`M`・`S`・`N`）・部材・最大側の組合せ・最小側の組合せ・着目点名・位置（各 5・5・5・5・5・5・10 桁）、続けて最大側の Md・Vd・Fx、最小側の Md・Vd・Fx（各 10 桁）。Fx は圧縮が負（Capacita が符号を反転して軸力 Nd にする）。M の行は Md の最大・最小、S は Vd、N は Fx の最大・最小を取った組合せ。
+- WDJ の `schema_version` は `"1.0.0"` の形（数値の 1 だと `pickup_import_failed`）。`basic.pickup_moment`・`pickup_shear_force` の `no` に PIK の PickUpNo を入れる。
+- 着目点の引張側（外側・内側）は、行の Md の符号で Capacita が決める（正が下側＝`rebar2`）。`rebar1`・`rebar2` の題を面の呼び名にそろえる。正負の両方が現れる部材は 2 列になる。
+- `bar[].rebar_lines` は**1 段当たりの本数**、`rebar_space` が**段間隔**、`rebar_n` が総本数（段数＝`rebar_n/rebar_lines`）。有効高さは `rebar_cover`（1 段目の芯かぶり）＋重心までの段の距離（例：lines 5・n 10・space 190・cover 126 で d=221、n(段)=2）。段数を `rebar_lines` に書くと d と ひび割れ幅が狂う。
+- `safety_factor` の `range` は、耐久性の曲げ（縁圧縮応力度）で 1（引張鉄筋だけ）にすると圧縮鉄筋を数えず σc が大きく出る。原本が圧縮鉄筋を「－」と印字しているときは 1。
+- R5 の `crack[].k4` は水掛かりの程度に応じた値を WDJ に書く（常時湿潤 0.7）。0.85 を書くと 0.7 より照査値が約 2 割大きく出る（原本は 0.7）。
+
+### FEMPython の PIK を渡すとき（2026-10-27、円形立坑のリング梁 62 点で確認）
+
+- FEMPython の `pickup.pik` は各部材の ITAN と JTAN を出す。WDJ の着目点と一致させるため、照査したい着目点（例：ITAN だけ）の行に絞ってから渡す。
+- M の符号は、閉合骨組を時計回りに i→j と並べると外側引張が正（局所 y が外向き）。Capacita は正の Md が下側引張。原本が外側引張を負と印字しているなら、PIK の Md の符号を反転する。**M の行は反転で最大と最小が入れ替わる**ので、最大側と最小側（組合せ番号と Md・Vd・Fx）も入れ替える。S・N の行は Md の符号だけ反転する。
+- PIK だけで `calc.print_section_force_checked: true`（断面力一覧表）と `print_safety_ratio_checked: true`（検討結果一覧表）を立てると、`reportSections` に `section_forces`（62 点で 16 頁）と `safety_ratios`（7 頁）が加わる。曲げ・せん断の節の頁数は 13・26 頁ずつ（62 点）。
+- 原本が 1 m 幅で照査しているときは、骨組の断面力も 1 m 幅に換算してから渡す（FEMPython の入力の断面・ばね・荷重を同じ比で縮める）。

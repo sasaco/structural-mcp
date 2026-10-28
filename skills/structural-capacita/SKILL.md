@@ -129,7 +129,7 @@ R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで
 ## 配筋の既定と数え方
 
 - `side_cover`・`side_ss` を空欄にすると、RcDan（`DefaultValue.CalcDefaultUedgeAndPitchForSideBar`）が上下の主鉄筋の間に側方鉄筋を等分し、側方の芯かぶりを主鉄筋の芯にする。
-- **安全性（破壊）の曲げは側方鉄筋を数えない**（Ase「-」。旧 WebDan も同じ）。復旧性の曲げは数える。
+- **数える軸方向鉄筋は安全係数の行ごとの `range` で決まる**（1 引張鉄筋だけ、2 引張・圧縮鉄筋、3 側方鉄筋を含む全軸方向鉄筋。RcDan `ModelDataForCalc.GetValidReBarData`。基準では分けない）。WebDanforJS の既定は安全性（破壊）（id 5）と疲労（id 2）が 2 なので側方鉄筋を数えず（Ase「-」。旧 WebDan も同じ）、使用性・復旧性（損傷）（id 6・7）と最小鉄筋量（id 8）は 3 で数える。id 5 を 3 にすると曲げ耐力と安全性（破壊）のせん断耐力の両方が側方鉄筋を含めて変わり、Ase に面積が出る（2026-10-27、Capacita の本物の runner で確認。R5 の見本 Example橋脚4 は数えている）。
 
 ## 詳しく
 

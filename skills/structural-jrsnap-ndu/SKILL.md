@@ -6,7 +6,7 @@ description: JRSNAP の入力データ .ndu（Shift-JIS・CRLF のキー＝カ�
 # JRSNAP の NDU の項目を読む・編集する
 
 - 断面・材料・配筋のキーとフィールド：`references/section-fields.md`
-- 直接基礎・支点・全体の設定、版の保存で足される項目、読込の制約、節点番号の順・破壊形態と抜出し量補正係数（`NonLinInfo`）・節点荷重（`JLoadInfo`）、荷重の組合せ（`SNAPConb` の ρm・αf・正向／逆向、`ConbAlpf`）、両端固定 M-θ 部材の Vmu・Vud のチェック（`DataInfo` の最後の欄）：`references/ndu-format.md`
+- 直接基礎・支点・全体の設定、版の保存で足される項目、読込の制約、節点番号の順・破壊形態と抜出し量補正係数（`NonLinInfo`）・節点荷重（`JLoadInfo`）・要素荷重（`MLoadInfo` の iT 4・iT 6 の向き、M-θ のばね要素）、荷重の組合せ（`SNAPConb` の ρm・αf・正向／逆向、`ConbAlpf`）、両端固定 M-θ 部材の Vmu・Vud のチェック（`DataInfo` の最後の欄）：`references/ndu-format.md`
 - フィールドの意味は、特定のモデルで観測した対応を含む。各資料の「確認範囲」を見て、別の版・断面形状・案件へ無条件に当てはめない。
 - 公式の説明：JRSNAP Ver5.2-L03 操作説明書（JRSNAP のインストールに付く PDF。T形断面 100頁、引張鉄筋段数 101頁・表2-33、DR の入力 103頁・図2-70、フランジ内軸方向鉄筋 105頁・図2-71・表2-36、主筋段数 90・530頁）。
 

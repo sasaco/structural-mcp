@@ -57,6 +57,12 @@ A4縦、縮尺は X・Y とも自動、1ケース1ページ、色はすべて黒
 - ヘッダーは両方の図で `【Ver5.2-L03】<印刷日>『<.ndt の名前>/<データ名>』` の右揃えに固定する（`Pilot.FixHeader`、`G_HeaderFlg` = 1,1,1,1,0,2）。インストール先の `ini\DataInputTool.ini [Header]` にはよらない。印刷日が入るので、同じ入力でも PDF のバイト列は日ごとに変わる。ハッシュで比べず、同じ日に出したものを PNG にして画素で比べる。
 - PDF は `pypdfium2`（例：`uv run --no-project --with pypdfium2 --with pillow python -X utf8 …`）で開いて確かめる。荷重図の確かめ方（A4縦、ページ数＝ケース数、`CASE-<n>` の文字、ページ番号なし、評価版の文字なし、色の画素0、インストール先と TEMP の前後比較）は `references/load-picture.md`。
 
+## 入力データリスト：input-list（結果リスト S_OutputList.exe、2026-10-28 追加）
+
+- `input-list --input <解析した .ndt の絶対パス> --output-dir <空のフォルダー>`。横に同じ名前の `.OUT`（S_ANALYSIS の結果）が要る。成果物は `input-list.pdf`（kind `input-list`）。操作説明書 7.2.1 の「入力データリスト」（構造基本データ・非線形解析制御データ・節点座標・要素・ばね・支点・DL・AP・荷重・有効抵抗土圧・杭基礎設定用データ）。契約と失敗の種類は JRSNAPHeadless の README。
+- 仕組み：補助 `JRSNAP.OutputList.exe` が ReportHost で S_OutputList を2つ目のドメインで動かし、画面の「一括処理」（`frmIkkatsu.cmdPrint_Click`、`G_intPDF = 2` 入力データリスト（OUTファイル））の1ファイル分と同じこと（`DataFileFukugo` で `.OUT` を `%TEMP%\Temp001\wk0062` に復号 → `mdlVSPrinter.Preview(2, 0)` → `C1PrintDocument1` を PDF）を行う。普通の開き方 `mdlDataOpen` はインストール先に `nrwork.dir` を書くので通らない。インストール先の `*.wk0`・`nrflag.fil`（JRSNAP_Input.exe から引き渡されたデータ）があると BUSY。
+- **本物で確かめた（2026-10-28、5.2-L03、WebRamen R10f）**：柱列のラーメン（節点 129・要素 132）の1 Case で 39頁。実行の前後でインストール先の全ファイル（307、大きさと時刻）が変わらなかった（`nrwork.dir`・`Doc1.doc`・INI を書かない）。ヘッダーは `【Ver5.2-L03】<印刷日>[<.ndt の名前>]` とページ番号（`G_OptOutFile` 日付・ファイル名・枠付・ページ番号を 1）。S_OutputList の `PrintHeader` は `G_HeaderFlg` の [0] 版と [5] 揃えしか使わず、データ名は出ない。
+
 ## 詳しく
 
 - `references/report-host.md`：補助の中で帳票アプリを動かす共通の仕組み（ReportHost）と、別の帳票アプリを足すとき。
