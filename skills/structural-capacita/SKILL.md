@@ -23,13 +23,14 @@ Capacita（RcDan／WebDanforCS）は WDJ（JSON）の部材・着目点・配筋
 ## runner を直接呼ぶ（--pickup、スクリプトから使うとき）
 
 ```powershell
-dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォルダー> [--output-format pdf|markdown] [--pickup <断面力データ>]
+dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォルダー> [--output-format pdf|markdown] [--pickup <断面力データ>] [--commentary-chapter <n> --commentary-first-section <k>]
 ```
 
 - stdout は protocol v1 の envelope。メッセージは `\uXXXX` なので Python などで読む。
 - 成果物は `result.json`、`report.pdf`（Markdown なら `report.md`）、選択時の `summary.xlsx`、`--pickup` のときだけ `model.wdj`（取り込んだ WDJ。GUI が保存するのと同じバイト列で、GUI で開ける）。`--pickup` なしでは `model.wdj` は返らない。
 - `--pickup` は GUI の「断面力データ取込」と同じコード（`PickupImporter`）。ファイルがなければ `pickup_not_found`、取り込めなければ `pickup_import_failed`（どちらも終了コード 2 で何も書かない）。
-- `summary.reportSections`：PDF のとき、計算書の節ごとのページ範囲を先頭ページの順に `{id, firstPage, lastPage}`（1始まり、両端を含む）で返す。何も印刷しなかった節は含まない。節の ID の表は Capacita の README。計算書を節ごとに切り分けて他の帳票に差し込む利用者との契約なので、ID を変えるときは利用者に知らせる。
+- `summary.reportSections`：PDF のとき、計算書の節ごとのページ範囲を先頭ページの順に `{id, firstPage, lastPage, heading}`（1始まり、両端を含む）で返す。何も印刷しなかった節は含まない。`heading` は解説付き出力でその節が持つ群の見出し番号（例 `"8.7"`）で、番号なし・群の2番目以降の節は `null`（キーは常にある）。節の ID の表は Capacita の README。計算書を節ごとに切り分けて他の帳票に差し込む利用者との契約なので、ID を変えるときは利用者に知らせる。
+- 解説付き出力：WDJ の `calc.print_commentary_checked: true`（省略時 false。GUI の「計算・印刷」の「解説」）で、PDF の各節の照査結果の前に解説（群の見出し・照査式・記号・流れ図。値は書かない）を印字し、解説はその節のページ範囲に入る。見出し番号は `--commentary-chapter n --commentary-first-section k`（両方、正の整数。片方だけは `incomplete_commentary_numbering`、それ以外は `invalid_commentary_number` で終了コード 2）を付けたときだけ、印字した群に n.k から欠番なく振る。解説は日本語のみ（英語の WDJ は WD-4001 の warn）、Markdown には入らない（WD-4002 の warn）。文章は鉄道の6基準（H16・R5 × JR各社・運輸機構・JR東日本）にあり、基準ごとの方法の違いはコードの分岐に合わせてある（2026-10-29）。MCP の `webdan_calculate` に番号の引数はない（WDJ の項目だけで解説は付く）。
 - 鋼管杭とフーチングの結合部の設計曲げ耐力 Mu は別の命令 `run-pile-joint --input <json> --output-dir <空のフォルダー>`（VePP-HS の HsCalc、鉄筋差込み方式。入力は鋼管・鉄筋・中詰めコンクリート・安全係数・行ごとの軸力 N'd。f'cc・ε'cu は HsCalc が求めるので渡さない）。成果物は `result.json` だけで、`engineeringStatus` は常に `not_run`。契約は `Capacita/README.md` の「Headless runner の run-pile-joint」を正とする。WebPier の 0612・0622 が呼ぶ。
 - 着目点の番号の付け方と、断面力入力モード（`--pickup` なし）の WDJ は `references/wdj.md`。
 
