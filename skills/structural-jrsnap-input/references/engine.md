@@ -14,4 +14,7 @@
 
 - NDU に直接基礎の照査のデータ（`ChokuKisoNum`・`CHOKU_KISO`・`CHOKU_KISO_Link`）がなければ、解析の後の「基礎照査機能を起動しますか？」の確認自体が出ず、この CSV はできない。
 - 単一解析で「はい」と答えたときだけ動く。`scripts/run-analysis.ps1` と JRSNAPHeadless は「いいえ」と答えるので、この CSV を作らない。
+- **解析をやり直さずに、既存の結果から CSV だけを作り直せる**（2026-10-28、5.2-L03・5.3-L01体験版2 の実アプリで確認）。インストール先の直下に `<データ名>.wk0`（中身は `"<.ndt の絶対パス>"` の1行、Shift-JIS）を置き、`S_SubstCheck.exe` を `run-analysis.ps1` と同じライセンス引数で起動する（`frmMain_Load` が `*.wk0` を読む）。窓「基礎照査機能(Ver.…) - 新規作成」の「照査実行」を押すと CSV を書き、窓「プレビュー」が開く。「閉じる」→「終了」で、確認は出ずに終わる。`.wk0` は残るので自分で消す。「照査実行」は計算が終わるまで戻らないので、`BM_CLICK` は `SendMessage` でなく `PostMessage` で送る。
+- `.ndt` の横に `.ved`（基礎照査の条件）があると、その `DataFile1=` の `.ndt` を開く。**結果を別のフォルダーに複製したときは `DataFile1` が元の場所を指したまま**なので、そのまま照査すると元の場所に CSV を上書きする。窓の題名と画面の `.ndt` のパスを確かめ、複製の `.ved` の `DataFile1` を複製のパスに直してから照査する。
+- 計算そのものは `mdlKisoShousa.CalcMain`（直接基礎は `CHOKUKISO_MAIN`・`D_KISO`）。qvd は各ステップの Hd/Vd から荷重の傾斜の補正係数を求め直して計算する（DB1 の qvd は基礎が Mmd に達した後は固定された値なので、その後のステップでは合わない。Batch の issue 0020）。逆コンパイルしたソースはインストール先の `S_SubstCheck\`（`E_SubstCheck\` は JRElastic 用で、計算のコードは同じ）。
 - Aggre-SE が `_Output_Chokukiso.csv` を読む関係（ないときは DB1 から求め、値が一致しないことがある）はスキル `structural-aggrese` を参照。
