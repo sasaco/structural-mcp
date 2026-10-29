@@ -13,7 +13,7 @@ WebPier は、入力 `pre/input.json`（schema 2）から直接基礎の鉄道 R
 
 ## できること・できないこと
 
-- 計算できるのは直接基礎だけ（杭基礎〔場所打ち杭・鋼管ソイルセメント杭〕は入力の形（`下部構造.基礎形式`・`杭基礎`）と検査ができ、計算できる出力項目は段ごとに広げている。いま選べるのは `detailing`・`ground_model`・`reactions`・`longitudinal`・`transverse`、場所打ち杭は `longitudinal_seismic`・`transverse_seismic`（0710・0720）と `longitudinal_nonlinear_analysis`・`transverse_nonlinear_analysis`（0711・0721）も。ほかを選ぶと `outputs.<項目>` が入力エラー。WebPier 決定84・85・88・93・94）。0612・0622 の支持層は砂質土・砂礫だけ。2線まで（列車分担 L3・L4 は空欄）。
+- 計算できるのは直接基礎だけ（杭基礎〔場所打ち杭・鋼管ソイルセメント杭〕は入力の形（`下部構造.基礎形式`・`杭基礎`）と検査ができ、計算できる出力項目は段ごとに広げている。いま選べるのは `detailing`・`ground_model`・`reactions`・`longitudinal`・`transverse`、`longitudinal_seismic`・`transverse_seismic`（0710・0720）と `longitudinal_nonlinear_analysis`・`transverse_nonlinear_analysis`（0711・0721）も（鋼管ソイルセメント杭も。WebPier 決定122）。ほかを選ぶと `outputs.<項目>` が入力エラー。WebPier 決定84・85・88・93・94）。0612・0622 の支持層は砂質土・砂礫だけ。2線まで（列車分担 L3・L4 は空欄）。
 - **寸法・配筋の最適化はしない**。入力した寸法・配筋の計算書を作るだけ。NG なら利用者が寸法・配筋を決め直す。
 - 値を補わない。計算に要る値が空欄（`null`）なら入力エラー。**資料から決まらない値は推測で埋めず、利用者に聞く**。見本（Example橋脚2）の値を流用しない。
 - 0611・0621・0810・0820・0910（Capacita）と 0711・0721（Aggre-SE）の照査は判定を返さない（`not_evaluated`）。OK/NG は計算書のページで読む。判定を返すのは 0400 の照査の前提と 0612・0622 の基礎の照査だけ（`ok`／`not_ok`）。
