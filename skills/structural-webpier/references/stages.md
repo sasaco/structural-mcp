@@ -6,7 +6,7 @@
 
 | 段階 | 内容 | 依存 | 出力項目 | `output/` | `post/`（各ファイルに付帯JSON `<名前>.provenance.json`） |
 |---|---|---|---|---|---|
-| 0400 | 照査の前提（柱・梁・フーチングの構造細目、配筋図。杭基礎は杭の構造細目と杭の配筋図も〔鋼管ソイルセメント杭は入力だけから〕） | —（場所打ち杭は 0500） | `detailing` | `0400_照査の前提` | `配筋図.dxf` |
+| 0400 | 照査の前提（柱・梁・フーチングの構造細目、配筋図。杭基礎は杭の構造細目と杭の配筋図も〔鋼管ソイルセメント杭はずれ止めの段数に 0711・0721 を使う〕） | —（場所打ち杭は 0500、鋼管ソイルセメント杭は 0711・0721） | `detailing` | `0400_照査の前提` | `配筋図.dxf` |
 | 0500 | 直接基礎の地盤ばね・支持力係数 | — | `ground_model` | `0500_直接基礎.pdf`・`.json` | — |
 | 0500（杭基礎） | 杭基礎の地盤のモデル化（SOIL-JR 5.2-L03 に計算させる。帳票は SOIL-JR のもの） | — | `ground_model` | `0500_杭基礎.pdf`（SOIL-JR の帳票そのまま）・`.json` | `杭基礎.sdt`（入力）・`杭基礎.sdr`（設計限界値）・`杭基礎.sdc`（解析用地盤ばね）、液状化を考慮するとき `杭基礎(液状化時用).sdr`・`.sdc` |
 | 0600 | 上部工反力・橋脚自重・移動荷重の反力 | — | `reactions` | `0600_上部工反力` | — |
@@ -40,7 +40,7 @@
 | 上に `longitudinal_frame_analysis`・`transverse_frame_analysis` | 上に 0611・0612・0621・0622 | FEMPython・JRSNAP・Capacita |
 | 上の6項目に `*_nonlinear_analysis` 2つと `cantilever` | 上の6段階に 0711・0721・0900・0910 | 4つすべて |
 | 13項目すべて | 全18段階 | 4つすべて |
-| `detailing` だけ | 0400 | なし（場所打ち杭は `ground_model` も選び、JRSNAP が要る） |
+| `detailing` だけ | 0400 | なし（場所打ち杭は `ground_model` も選び JRSNAP が要る。鋼管ソイルセメント杭は `longitudinal_nonlinear_analysis`・`transverse_nonlinear_analysis` も選び、JRSNAP・Aggre-SE が要る） |
 | `ground_model` だけ（`reactions` だけ） | 0500（0600） | なし |
 | `ground_model`・`reactions`・`longitudinal` | 0500・0600・0610 | FEMPython |
 | それに `longitudinal_frame_analysis` | 0500・0600・0610・0611・0612 | FEMPython・Capacita |
