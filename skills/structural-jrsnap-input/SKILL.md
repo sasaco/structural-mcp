@@ -10,6 +10,7 @@ description: JRSNAP（鉄道総研の静的非線形解析。Ver.5.2-L03／Ver.5
 - 画面の起動と NDU の保存（開く・上書き保存、版の形式番号）：`references/open-save.md`
 - 解析用データ出力（.ndu→.ndt）を画面なしで行う仕組み：`references/ndt-export.md`
 - 解析エンジンの画面・結果ファイル・基礎照査機能：`references/engine.md`
+- SOIL-JR の .sdc を JRSNAP_Input 自身に画面なしで連携させ、杭のばねを自前の計算と比べる試しの道具：`references/soil-link.md`
 - 耐震設計総括表（SSheet.exe。Output-JR）の入出力と、損傷レベルが小数点以下7桁であること、Docu-SE との突き合わせ：`references/summary-sheet.md`
 - 見本データ（開発機のみ。structural-mcp の repo のルートから）：`Batch/tests/JRSNAP_Ver5.3-L01体験版2/`・`Batch/tests/JRSNAP_Ver5.2-L03/`。原本を直接開いて保存しない（複製を使う）。
 
