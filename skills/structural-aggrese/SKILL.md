@@ -118,7 +118,7 @@ runner（`STRUCTURAL_MCP_AGGRESE_RUNNER`）は protocol v1。XML と DB1 のフ�
 
 - `references/project-xml.md`：XML の項目と画面の対応、クラスと画面のソースの場所、配列の長さ。
 - `references/outputs.md`：report.pdf・pickup.pik・summary.xlsx の構成、見出しの出どころ、毎回変わる部分、引数と成果物の対応、版による違い、両端固定 M-θ 部材の Vmu・Vud（DB1 の値と Aggre-SE の表示）。
-- `references/foundation-steps.md`：直接基礎のステップ表（`--foundation-steps`）の列と step の番号、SNAPDBLib で DB1 を画面なしで覗く方法（`UnsafeLoadFrom`、値はフィールド）、Batch 側のテスト。
+- `references/foundation-steps.md`：直接基礎のステップ表（`--foundation-steps`）の列と step の番号、SNAPDBLib で DB1 を画面なしで覗く方法（`UnsafeLoadFrom`、値はフィールド。M-θ 要素の M と部材角、支点の鉛直変位の読み方）、Batch 側のテスト。
 
 ## 知見を足すとき
 
