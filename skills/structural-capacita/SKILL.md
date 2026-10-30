@@ -138,7 +138,7 @@ R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで
 
 ## 詳しく
 
-- `references/wdj.md`：GUI で保存し直した WDJ との比べ方、`--pickup` の着目点の番号、断面力入力モードの WDJ（`force[]`・`shear[]`・La・返る節）、疲労の繰返し回数、上側鉄筋なし、他のエンジンの PIK を渡すとき。
+- `references/wdj.md`：GUI で保存し直した WDJ との比べ方、`--pickup` の着目点の番号、断面力入力モードの WDJ（`force[]`・`shear[]`・La・返る節）、疲労の繰返し回数、上側鉄筋なし、他のエンジンの PIK を渡すとき、骨組の一部の点だけを照査する WDJ（点・面・グループの選び方、疲労の行と係数、変断面の tan、プレビューモードの配筋、T 形）。
 - `references/develop.md`：手で試す手順（ページを画像にする）、Capacita を直すときのビルドとテスト。
 
 ## 知見を足すとき
