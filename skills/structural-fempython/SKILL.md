@@ -9,7 +9,7 @@ FEMPython（FrameWeb3 のモノレポ）は、Python の FEM エンジン `Frame
 
 - ソース（開発機のみ。structural-mcp の repo のルートから）：`FEMPython/FrameWeb/src/`（計算）、`FEMPython/FrameWebforCS/calculation/CalculationRequest.cs`（保存 JSON を計算要求に直す）、`FEMPython/FrameWebforCS/Headless/`（runner。引数・成果物・失敗のコードは同じフォルダーの README.md を正とする）、用語は `FEMPython/GLOSSARY.md`。
 - 解析の式・組合せ・印刷は FEMPython の責務。足りないもの・おかしなものは FEMPython の repo で直し、呼び出す側で回避しない（結果の書き換え、代わりの実装はしない）。
-- 確認した版：FEMPython 1e653c4（structural-mcp が固定している版。i 端・j 端の集中荷重（マーク 1・11）を断面力に効かせ、runner に橋面荷重の表の節を足した版）、2026-10-30。
+- 確認した版：FEMPython 1a39aa1（structural-mcp が固定している版。i 端・j 端の集中荷重（マーク 1・11）を断面力に効かせ、runner に橋面荷重の表の節を足し、橋面荷重の計算を速くした版）、2026-10-30。
 - 事実の出どころ：「本物で確認」は本物の runner で解いて確かめたもの（日付と、確かめた案件の段）、「コードで確認」はソースを読んで確かめたもの（実行はしていない）。
 
 ## MCP で使う（先にこちら）
