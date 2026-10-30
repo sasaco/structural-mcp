@@ -150,7 +150,7 @@ client AIは、入力作成前に`soilstructure_get_schema`、standalone Python�
 
 ### FrameWebforCSの計算・PIK・PDF・PICKUP CSV出力
 
-`fempython_calculate` はFrameWebforCSで保存したJSONを受け取り、保存済み結果を使わず再計算します。`generatePik`、`generatePdf` は既定で `true` です。PIKには2次元モデルとPICKUP定義が必要です。PDFの既定項目は、入力データ・断面力・pickup断面力・変位・pickup変位です。`pdfSections` に次のIDの部分集合を指定すると掲載項目を変更できます。
+`fempython_calculate` はFrameWebforCSで保存したJSONを受け取り、保存済み結果を使わず再計算します。`generatePik`、`generatePdf` は既定で `true` です。PIKには2次元モデルとPICKUP定義が必要です。PDFの既定項目は、入力データ・断面力・pickup断面力・変位・pickup変位です。`pdfSections` にIDの部分集合を指定すると掲載項目を変更できます。指定できるIDは、既定の5つ（下の例）のほか、2次元専用の `load_diagram`（荷重図）・`section_diagram`（断面力図）・`pickup_section_diagram`（pickup断面力図）と、3次元専用の `bridge_definitions`（橋面定義）・`bridge_loads`（橋面荷重の入力強度）・`bridge_audit`（橋面荷重の荷重分配確認）です。図の配置・成分はrunnerの既定（1頁1図、全成分）で、変えるにはrunnerを直接呼びます。橋面荷重の表は橋面荷重のあるケースが要り、3次元なので `generatePik: false` にします。橋面荷重図は3D画面の撮影なので出せません。
 
 ```json
 {

@@ -1,6 +1,6 @@
 ---
 name: structural-fempython
-description: FEMPython（structural-mcp の FEMPython サブモジュール。骨組解析エンジン FrameWeb、Headless runner の FrameWebforCS.Headless）で 2D 骨組を解くときに使う。FrameWeb の入力 JSON（node・member・element・rigid・fix_node・fix_member・load・define・combine・pickup）を書く・読む、MCP の fempython_calculate か runner の run で計算して result.json・pickup.pik・report.pdf・PICKUP CSV を得る、荷重図・断面力図だけを PDF にする（load_diagram・section_diagram）、部材荷重 load_member のマーク（1 集中・2 分布・9 温度・11 集中モーメント）と L1・L2・P1・P2 の意味、収縮を温度荷重で書く、剛域 rigid、支点とばね（0・1・ばね値の意味、長期・短期のばねの組、杭の区間ばね）、作用の組合せ（define の符号の反転、combine の係数、pickup）、符号の規約（y 下向き、軸力 fx は引張が正、節点のモーメント rz、曲げ mz）、result.json の derived.combines の読み方、PICKUP_UNAVAILABLE・PICKUP_REQUIRED・EMPTY_LOAD_CASE_SKIPPED で失敗・警告するとき、杭の周面ばねがあって反力の和が荷重と合わないとき、PIK を Capacita に渡すときの着目点の並びを調べるときにも使う。
+description: FEMPython（structural-mcp の FEMPython サブモジュール。骨組解析エンジン FrameWeb、Headless runner の FrameWebforCS.Headless）で 2D 骨組を解くときに使う。FrameWeb の入力 JSON（node・member・element・rigid・fix_node・fix_member・load・define・combine・pickup）を書く・読む、MCP の fempython_calculate か runner の run で計算して result.json・pickup.pik・report.pdf・PICKUP CSV を得る、荷重図・断面力図だけを PDF にする（load_diagram・section_diagram）、3D の橋面荷重（bridge_loads）の表を PDF にする（bridge_definitions・bridge_loads・bridge_audit）、部材荷重 load_member のマーク（1 集中・2 分布・9 温度・11 集中モーメント）と L1・L2・P1・P2 の意味、収縮を温度荷重で書く、剛域 rigid、支点とばね（0・1・ばね値の意味、長期・短期のばねの組、杭の区間ばね）、作用の組合せ（define の符号の反転、combine の係数、pickup）、符号の規約（y 下向き、軸力 fx は引張が正、節点のモーメント rz、曲げ mz）、result.json の derived.combines の読み方、PICKUP_UNAVAILABLE・PICKUP_REQUIRED・EMPTY_LOAD_CASE_SKIPPED で失敗・警告するとき、杭の周面ばねがあって反力の和が荷重と合わないとき、PIK を Capacita に渡すときの着目点の並びを調べるときにも使う。
 ---
 
 # FEMPython で骨組を解く
@@ -9,15 +9,15 @@ FEMPython（FrameWeb3 のモノレポ）は、Python の FEM エンジン `Frame
 
 - ソース（開発機のみ。structural-mcp の repo のルートから）：`FEMPython/FrameWeb/src/`（計算）、`FEMPython/FrameWebforCS/calculation/CalculationRequest.cs`（保存 JSON を計算要求に直す）、`FEMPython/FrameWebforCS/Headless/`（runner。引数・成果物・失敗のコードは同じフォルダーの README.md を正とする）、用語は `FEMPython/GLOSSARY.md`。
 - 解析の式・組合せ・印刷は FEMPython の責務。足りないもの・おかしなものは FEMPython の repo で直し、呼び出す側で回避しない（結果の書き換え、代わりの実装はしない）。
-- 確認した版：FEMPython eb6d4af（structural-mcp が固定している版。i 端・j 端の集中荷重（マーク 1・11）を断面力に効かせた版）、2026-10-30。
+- 確認した版：FEMPython 1e653c4（structural-mcp が固定している版。i 端・j 端の集中荷重（マーク 1・11）を断面力に効かせ、runner に橋面荷重の表の節を足した版）、2026-10-30。
 - 事実の出どころ：「本物で確認」は本物の runner で解いて確かめたもの（日付と、確かめた案件の段）、「コードで確認」はソースを読んで確かめたもの（実行はしていない）。
 
 ## MCP で使う（先にこちら）
 
 1. `get_capabilities` で `fempython` が使えるかを見る。runner の場所は `get_environment_template`（`engine: "fempython"`）か環境変数 `STRUCTURAL_MCP_FEMPYTHON_RUNNER`。runner は FEMPython のチェックアウトの中（`FrameWeb/src` と `FrameWeb/.venv` を上へ辿って探す）に置いたままにする。exe だけを別の場所へ複写しても動かない。
-2. `fempython_calculate` に FrameWeb の入力を `input`（JSON の文字列）で渡す。`generatePik`・`generatePdf` は既定 true、`pdfSections` は `input`・`section_force`・`pickup_section_force`・`displacement`・`pickup_displacement` の部分集合、`generatePickupDisplacementCsv`・`generatePickupReactionCsv` は既定 false。
+2. `fempython_calculate` に FrameWeb の入力を `input`（JSON の文字列）で渡す。`generatePik`・`generatePdf` は既定 true、`pdfSections` の既定は `input`・`section_force`・`pickup_section_force`・`displacement`・`pickup_displacement`。ほかに 2D の図（`load_diagram`・`section_diagram`・`pickup_section_diagram`）と 3D の橋面荷重の表（`bridge_definitions`・`bridge_loads`・`bridge_audit`）も選べる。`generatePickupDisplacementCsv`・`generatePickupReactionCsv` は既定 false。
 3. 成果物は `read_artifact` で読み、バイト数と SHA-256 を確かめてから置く。`engineeringStatus` は常に `not_checked`（解析であって照査ではない）。
-- MCP は荷重図・断面力図（`load_diagram`・`section_diagram`・`pickup_section_diagram`）と用紙の指定を公開していない（`src/fempython-contract.ts`、2026-10-30）。それらは runner を直接呼ぶ。
+- MCP は図の配置・成分（`--load-diagram-*`・`--section-diagram-*`）と用紙の指定を公開していない（`src/fempython-contract.ts`、2026-10-30）。1頁1図・全成分以外が要るときは runner を直接呼ぶ。
 - 起動の仕方と成果物の一覧は `fempython_get_runner_contract` でも取れる。
 
 ## runner を直接呼ぶ（スクリプトから使うとき）
@@ -37,6 +37,8 @@ FEMPython（FrameWeb3 のモノレポ）は、Python の FEM エンジン `Frame
 - 荷重図と断面力図の両方が要るときの分け方（本物で確認、2026-10-30、WebRamen R1g-c）：解く run（`--pdf-sections section_diagram --section-diagram-components mz,fy --section-diagram-layout split_vertical`。result.json と PIK もこの run で得る）と、荷重図だけの run（計算しない）の2回にする。
 - `--load-diagram-axis true` の荷重図は、1頁目が軸線図、2頁目から基本ケースごとの頁（本物で確認、同上）。
 - `section_diagram` は基本ケースごとの図で、COMBINE の図は出さない（本物で確認、同上）。PICKUP の最大・最小の図は `pickup_section_diagram`。
+- 橋面荷重の表（3D）：`bridge_definitions`（パネル・経路）・`bridge_loads`（ケースごとの入力強度と方向）・`bridge_audit`（解析時の荷重分配確認：入力と節点の合力・モーメント、保存誤差、荷重ごとの長さ・面積、等価節点荷重）。3D なので `--generate-pik false`。橋面荷重図は 3D 画面の撮影なので runner からは出ない（本物で確認、2026-10-30、合成桁格子の 12 ケースで 36 頁）。
+- 橋面荷重（`bridge_loads`）の書き方・監査のキー・張出しの扱いは、FEMPython の repo の `.claude/skills/headless-runner/SKILL.md` と `FrameWebforCS/tests/data/合成桁格子検証/README.md`（合成桁の設計例との照合の記録）にある。
 - 既知の作図の課題：縦に長い骨組（杭が約 22 m で部材の分割が多い）では、荷重図・断面力図の数値の字が重なって読めない所が多い（本物で確認、同上）。直すなら FEMPython の repo で直す。
 
 ## 失敗と警告のコード（runner）
@@ -48,6 +50,7 @@ FEMPython（FrameWeb3 のモノレポ）は、Python の FEM エンジン `Frame
 | `EMPTY_LOAD_CASE_SKIPPED`（警告） | 荷重の行が実質ない荷重ケースは計算から外し、`result.json` の `skippedLoadCases` に並べる。0 の結果は作らない |
 | `PIK_REQUIRES_2D`・`LOAD_DIAGRAM_REQUIRES_2D`・`SECTION_DIAGRAM_REQUIRES_2D` | 3D の入力で 2D だけの出力を頼んだ |
 | `LOAD_DIAGRAM_REQUIRES_LOADS`・`LOAD_DIAGRAM_UNKNOWN_CASE` | 荷重ケースがない、`--load-diagram-single-cases` にない番号 |
+| `BRIDGE_LOADS_REQUIRE_3D`・`BRIDGE_LOADS_REQUIRED` | 2D の入力で橋面荷重の表を頼んだ。橋面荷重のあるケースがない（`bridge_definitions` だけならパネルか経路がない） |
 
 ### 中身のない荷重ケース
 

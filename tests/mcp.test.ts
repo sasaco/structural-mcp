@@ -540,6 +540,23 @@ test("FrameWeb forwards optional output flags and selected report sections", asy
     generatePickupDisplacementCsv: false, generatePickupReactionCsv: false, pdfSections: ["input"] });
 });
 
+test("FrameWeb forwards the runner's diagram and bridge-load report sections", async () => {
+  const sections = ["input", "bridge_definitions", "bridge_loads", "bridge_audit"];
+  const result = await client.callTool({ name: "fempython_calculate", arguments: {
+    input: '{"dimension":3}', generatePik: false, pdfSections: sections,
+  } });
+  assert.equal(result.isError, undefined);
+  assert.deepEqual((result.structuredContent as { summary: { pdfSections: string[] } }).summary.pdfSections, sections);
+  const contract = await client.callTool({ name: "fempython_get_runner_contract", arguments: {} });
+  const values = (contract.structuredContent as {
+    contract: { optionalArguments: Record<string, { values: string[]; default: string }> };
+  }).contract.optionalArguments["--pdf-sections"]!;
+  assert.deepEqual(values.values, ["input", "section_force", "pickup_section_force", "displacement",
+    "pickup_displacement", "load_diagram", "section_diagram", "pickup_section_diagram",
+    "bridge_definitions", "bridge_loads", "bridge_audit"]);
+  assert.equal(values.default, "input,section_force,pickup_section_force,displacement,pickup_displacement");
+});
+
 test("FrameWeb exposes independent PICKUP CSV options and downloads exact UTF-8 bytes", async () => {
   const tools = await client.listTools();
   const schema = tools.tools.find((tool) => tool.name === "fempython_calculate")!.inputSchema;

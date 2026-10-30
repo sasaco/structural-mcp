@@ -20,7 +20,7 @@ import {
   type PreparedJob,
 } from "./jobs.js";
 import { runEngine, type RunnerCommand } from "./runner.js";
-import { femPythonPdfSections, femPythonRunnerContract } from "./fempython-contract.js";
+import { femPythonDefaultPdfSections, femPythonPdfSections, femPythonRunnerContract } from "./fempython-contract.js";
 import {
   soilStructureDocumentSchema,
   soilStructureExamples,
@@ -409,7 +409,8 @@ export function createServer(config: AppConfig): McpServer {
         inputFormats: [".json", "inline-json"],
         outputFormats: ["json", "pik", "pdf", "csv"],
         tools: ["fempython_calculate", "fempython_get_runner_contract"],
-        defaultPdfSections: femPythonPdfSections,
+        defaultPdfSections: femPythonDefaultPdfSections,
+        pdfSections: femPythonPdfSections,
         pikRequirements: "2次元モデルと計算可能なPICKUP定義が必要です。",
         pickupNodeCsv: {
           displacement: { option: "generatePickupDisplacementCsv", artifact: "pickup-displacement.csv", default: false },
@@ -508,7 +509,8 @@ export function createServer(config: AppConfig): McpServer {
       generatePickupReactionCsv: z.boolean().default(false).describe("反力のPICKUP CSV（pickup-reaction.csv、2D/3D、解析単位の未丸め値）を生成する"),
       pdfSections: z.array(z.enum(femPythonPdfSections)).min(1).max(femPythonPdfSections.length)
         .refine((sections) => new Set(sections).size === sections.length, "pdfSections must not contain duplicates")
-        .default([...femPythonPdfSections]),
+        .default([...femPythonDefaultPdfSections])
+        .describe("PDFの掲載項目。既定は input・section_force・pickup_section_force・displacement・pickup_displacement。load_diagram・section_diagram・pickup_section_diagram は2次元専用（図の配置はrunnerの既定）、bridge_definitions・bridge_loads・bridge_audit（橋面荷重の定義・入力強度・荷重分配確認の表）は3次元専用で、3次元ではgeneratePik=falseが必要"),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async ({ inputPath, input, generatePdf, generatePik, generatePickupDisplacementCsv, generatePickupReactionCsv, pdfSections }) => {

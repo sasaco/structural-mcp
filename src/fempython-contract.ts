@@ -1,9 +1,22 @@
-export const femPythonPdfSections = [
+export const femPythonDefaultPdfSections = [
   "input",
   "section_force",
   "pickup_section_force",
   "displacement",
   "pickup_displacement",
+] as const;
+
+// Every section the runner accepts. Diagrams are 2D only; the bridge-load tables are 3D only
+// (the runner rejects the other dimension with LOAD_DIAGRAM_/SECTION_DIAGRAM_REQUIRES_2D or
+// BRIDGE_LOADS_REQUIRE_3D).
+export const femPythonPdfSections = [
+  ...femPythonDefaultPdfSections,
+  "load_diagram",
+  "section_diagram",
+  "pickup_section_diagram",
+  "bridge_definitions",
+  "bridge_loads",
+  "bridge_audit",
 ] as const;
 
 export const femPythonRunnerContract = {
@@ -17,7 +30,7 @@ export const femPythonRunnerContract = {
     "--generate-pik": { values: ["true", "false"], default: "true" },
     "--generate-pickup-displacement-csv": { values: ["true", "false"], default: "false" },
     "--generate-pickup-reaction-csv": { values: ["true", "false"], default: "false" },
-    "--pdf-sections": { format: "comma-separated", values: femPythonPdfSections, default: femPythonPdfSections.join(",") },
+    "--pdf-sections": { format: "comma-separated", values: femPythonPdfSections, default: femPythonDefaultPdfSections.join(",") },
   },
   artifacts: [
     { name: "result.json", mediaType: "application/json", required: true },
