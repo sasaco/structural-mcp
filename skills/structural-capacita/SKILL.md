@@ -1,6 +1,6 @@
 ---
 name: structural-capacita
-description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、設計衝撃係数（固有振動数 n・速度パラメータ α・iα・ic・i、VePP-I の計算）を webdan_impact か runner の run-impact で求める、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
+description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、設計衝撃係数（固有振動数 n・速度パラメータ α・iα・ic・i、VePP-I の計算）を webdan_impact か runner の run-impact で求める、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・疲労の k=0.12 の等価繰返し回数が空欄の WD-3301・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
 ---
 
 # Capacita で RC 断面照査を行う
@@ -51,6 +51,7 @@ dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォ
 - **せん断スパン `shear[].La` は mm で書く。** m の値を書いてもエラーにならず、極端に小さいせん断スパン比で計算されて耐力を過大に見積もる。`La: 1` は「自動算定」の意味（`references/wdj.md`、2026-10-19 に本物の runner で確認）。
 - **`--pickup` で取り込むなら `bar[].position` を書かない。** 取込みは着目点の `position` と照合し、`"6.250"` のような値は不一致になる。
 - `calc.print_section_force_checked: true` で断面力一覧表（曲げ・せん断の2頁）が先頭に付く（節 `section_forces`）。断面力入力モードでは効かない。
+- **疲労の k=0.12 の等価繰返し回数（`NA12`・`NB12`）を空欄にしない。** RcDan は鉄筋ごとに k を選び（γi･σsrd/(fsr200/γb)≦1.0 なら 0.06、超えれば 0.12。`RcDan/Calculation/Calc_NRepetition.cs`）、k=0.12 となった鉄筋で本数が 0 でない列車の値が空欄（null・キーなし・空文字列）なら、照査を止めて error の **WD-3301** で失敗する（`ok: false`、`errors` は `calculation_failed` だけで、理由は `messages` の WD-3301 の本文：照査・鉄筋・空欄の列車・算出点・引張側）。`0` を明示すれば今までどおり 0 として計算する（ΣN が小さく出て省略になりやすい、危険側）。それより前の版は空欄を黙って 0 にしていた（Capacita、2026-10-31 に本物の runner で確認）。k=0.06 の鉄筋だけなら空欄でよい。
 - `conditions_list`（JR-001・JR-004）は RcDan が読むが計算に使わない。入力しても結果は変わらない。
 - 安全係数表：行6（H16 の復旧性（損傷）地震時以外、R5 の使用性（損傷））の γi は運輸機構・JR各社 1.2、JR東日本だけ 1.0（WebDanforJS の `safety-factors-material-strengths.service.ts` の例外に合わせた）。WebDanforJS の `default_safety_factor` は H16 と R5 で同じ値で、違うのは行6 の名前だけ（コードで確認、2026-10-21）。
 - 旧 WebDan で作った計算書と今の Capacita では耐力が少し違うことがある（同じ WDJ を今の Capacita で計算しても同じ差が出るので、旧 WebDan との違い。照査値は一致した例がある）。
