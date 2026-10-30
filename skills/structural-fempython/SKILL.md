@@ -34,6 +34,10 @@ FEMPython（FrameWeb3 のモノレポ）は、Python の FEM エンジン `Frame
 - 荷重図：`--pdf-sections load_diagram`（`--load-diagram-layout single|split_horizontal|split_vertical`、`--load-diagram-axis true|false`、`--load-diagram-single-cases 1,2`）。荷重図だけを頼み PIK・CSV もないときは、Python を起動せず計算もせずに `report.pdf` だけを返す（`result.json` なし、`summary.calculated: false`）。
 - 断面力図：`section_diagram`（荷重ケースごと）・`pickup_section_diagram`（PICKUP ごとの最大・最小）。`--section-diagram-components mz,fy,fx,disg`・`--section-diagram-layout`。荷重図と同じ PDF に入れるなら layout をそろえる。
 - 計算書に荷重図を差し込む使い方（WebPier・WebRamen）：同じ FrameWeb の入力を `load_diagram` で描かせ、返ったページを自分の計算書に pypdf で挟む。荷重図は FrameWeb に渡した荷重そのものの図になる。FEMPython の PDF のバイトは毎回同じとは限らない。
+- 荷重図と断面力図の両方が要るときの分け方（本物で確認、2026-10-30、WebRamen R1g-c）：解く run（`--pdf-sections section_diagram --section-diagram-components mz,fy --section-diagram-layout split_vertical`。result.json と PIK もこの run で得る）と、荷重図だけの run（計算しない）の2回にする。
+- `--load-diagram-axis true` の荷重図は、1頁目が軸線図、2頁目から基本ケースごとの頁（本物で確認、同上）。
+- `section_diagram` は基本ケースごとの図で、COMBINE の図は出さない（本物で確認、同上）。PICKUP の最大・最小の図は `pickup_section_diagram`。
+- 既知の作図の課題：縦に長い骨組（杭が約 22 m で部材の分割が多い）では、荷重図・断面力図の数値の字が重なって読めない所が多い（本物で確認、同上）。直すなら FEMPython の repo で直す。
 
 ## 失敗と警告のコード（runner）
 
@@ -93,7 +97,7 @@ FEMPython（FrameWeb3 のモノレポ）は、Python の FEM エンジン `Frame
 ## 詳しく
 
 - `references/frameweb-json.md`：FrameWeb の入力の各キー（node・member・element・rigid・fix_node・fix_member・load・define・combine・pickup）、単位、支点の 0・1・ばね値、区間ばね、剛域、部材荷重の細部、移動荷重、WebPier・WebRamen の書き方の例。
-- `references/results.md`：result.json の構成、FEMPython が足す節点、読み戻しの確かめ方。
+- `references/results.md`：result.json の構成、FEMPython が足す節点、つりあいと読み戻しの確かめ方、鉄道の設計計算例の断面力の表との符号の対応（N'・V・M と fx・fy・mz）。
 
 ## 知見を足すとき
 
