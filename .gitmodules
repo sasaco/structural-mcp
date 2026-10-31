@@ -19,3 +19,6 @@
 [submodule "WebRamen"]
 	path = WebRamen
 	url = https://github.com/sasaco/WebRamen.git
+[submodule "WebPCGirder"]
+	path = WebPCGirder
+	url = https://github.com/sasaco/WebPCGirder.git
