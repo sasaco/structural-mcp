@@ -62,6 +62,9 @@
 
 - ねじりだけを照査する点：`points[]` を `isMtCalc: true`（曲げ・せん断を照査しないなら `isMzCalc`・`isVyCalc` は false）、`calc.calculate_torsional_moment: true`。断面力は `force[]` の `Mt<id>_Mt`・`Mt<id>_Md`・`Mt<id>_Vd`・`Mt<id>_Nd`（id は曲げ・せん断と同じ：1 耐久性 永久作用、5 安全性（破壊）、6・7 復旧性）。安全性（破壊）の Mtud1・Mtud2 は `Mt5_Md`・`Mt5_Vd` と、同じ点の配筋から求めた Mud・Vyd で求める。Md の符号は曲げと同じ（正が下側引張）。
 - 与えない行は warn の WD-410（例：Mt5 だけなら 4 件）。返る節は与えた行のものだけ（Mt5 だけなら `torsion_safety_destruction` の 3 頁）。
+- 耐久性のねじりひび割れは、省略の判定（Mthd ≦ 0.7Mtud）に行 0「耐久性 ひび割れ判定」（永久＋変動）、σwpd の照査に行 1（永久作用）の断面力を使う。行 0 を書かないと行 1 で代える（`CalcResult_TorsionCrack.cs`。WD-410 は出る）。Mt1 だけで 3 頁の節 `torsion_durability`（2026-10-31、H16_Rail で確認）。
+- 曲げとの組合せの Mtud1・Mtud3 は行の Md だけ、せん断との組合せの Mtud2・Mtud4 は行の Vd だけを使う（Nd＝0 なら Mud・Vyd は他方によらない）。ただし Vd は配筋の行の `tan`（変断面の傾き）で **Vd − Md·tanθ/d に補正してから**使う（`Calc_Vcd` に点の TanForV を渡す）。別々の状態の |Md|・|Vd| の最大を1行に組むときは、`tan` を書かずに補正しない Vd を渡す（大きい |Md| で Vd を小さく見すぎないため）。
+- ねじり補強鉄筋の ΣAtl・b0・d0 は Capacita が配筋から求める。設計計算例 II-277（D32 6本＋D19 2本×2＋D22 4本、帯鉄筋 D22）で ΣAtl 4242.8・b0 708.0・d0 714.2（見本 7459.6・670.0・715.0）になり、Mtyd が 447.6（見本 734.3）と小さく出た。数え方は未確認（2026-10-31）。
 - 安全係数は安全性（破壊）の行（id 5）の `V_rc`（γc）・`V_rs`（γs）・`M_rbs`（Mud の γb）・`V_rbc`・`V_rbs`・`T_rbt`（Mtcd・Mtyd・Mtcud の γb）・`ri`。
 - **Kt は既定でフランジを無視した矩形**（T形も B×H）。T形・L形の Kt＝Σbi²·di/η1i（RC標準 R5 第III編 表7.7.1、H16 表7.2.2）にするには、部材に `torsion_flange` を書く（Capacita の README の `members[].torsion_flange`）：
   - `left_overhang_mm`・`right_overhang_mm`：左右の突縁の張出しの**上限**（片持ち部は張出し長さ bc、中間部は主梁の内側面間距離の半分 bs/2。0 はその側になし）。有効幅 λt＝min(3·t, 上限)（R5 第III編 式(7.7.30)）は Capacita が決めるので、3t で打ち切った値を渡さない。
