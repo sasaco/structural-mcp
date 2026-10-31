@@ -1,6 +1,6 @@
 ---
 name: structural-capacita
-description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、設計衝撃係数（固有振動数 n・速度パラメータ α・iα・ic・i、VePP-I の計算）を webdan_impact か runner の run-impact で求める、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・疲労の k=0.12 の等価繰返し回数が空欄の WD-3301・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
+description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、設計衝撃係数（固有振動数 n・速度パラメータ α・iα・ic・i、VePP-I の計算）を webdan_impact か runner の run-impact で求める、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く（ねじり、T 形の Kt の突縁 members[].torsion_flange を含む）、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・疲労の k=0.12 の等価繰返し回数が空欄の WD-3301・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
 ---
 
 # Capacita で RC 断面照査を行う
@@ -30,7 +30,7 @@ dotnet "<runner の .dll>" run-rc --input <model.wdj> --output-dir <空のフォ
 - 成果物は `result.json`、`report.pdf`（Markdown なら `report.md`）、選択時の `summary.xlsx`、`--pickup` のときだけ `model.wdj`（取り込んだ WDJ。GUI が保存するのと同じバイト列で、GUI で開ける）。`--pickup` なしでは `model.wdj` は返らない。
 - `--pickup` は GUI の「断面力データ取込」と同じコード（`PickupImporter`）。ファイルがなければ `pickup_not_found`、取り込めなければ `pickup_import_failed`（どちらも終了コード 2 で何も書かない）。
 - `summary.reportSections`：PDF のとき、計算書の節ごとのページ範囲を先頭ページの順に `{id, firstPage, lastPage, heading}`（1始まり、両端を含む）で返す。何も印刷しなかった節は含まない。`heading` は解説付き出力でその節が持つ群の見出し番号（例 `"8.7"`）で、番号なし・群の2番目以降の節は `null`（キーは常にある）。節の ID の表は Capacita の README。計算書を節ごとに切り分けて他の帳票に差し込む利用者との契約なので、ID を変えるときは利用者に知らせる。
-- 解説付き出力：WDJ の `calc.print_commentary_checked: true`（省略時 false。GUI の「計算・印刷」の「解説」）で、PDF の各節の照査結果の前に解説（群の見出し・照査式・記号・流れ図。値は書かない）を印字し、解説はその節のページ範囲に入る。見出し番号は `--commentary-chapter n --commentary-first-section k`（両方、正の整数。片方だけは `incomplete_commentary_numbering`、それ以外は `invalid_commentary_number` で終了コード 2）を付けたときだけ、印字した群に n.k から欠番なく振る。解説は日本語のみ（英語の WDJ は WD-4001 の warn）、Markdown には入らない（WD-4002 の warn）。文章は鉄道の6基準（H16・R5 × JR各社・運輸機構・JR東日本）にあり、基準ごとの方法の違いはコードの分岐に合わせてある（2026-10-29）。MCP の `webdan_calculate` に番号の引数はない（WDJ の項目だけで解説は付く）。
+- 解説付き出力：WDJ の `calc.print_commentary_checked: true`（省略時 false。GUI の「計算・印刷」の「解説」）で、PDF の各節の照査結果の前に解説（群の見出し・照査式・記号・流れ図。値は書かない）を印字し、解説はその節のページ範囲に入る。見出し番号は `--commentary-chapter n --commentary-first-section k`（両方、正の整数。片方だけは `incomplete_commentary_numbering`、それ以外は `invalid_commentary_number` で終了コード 2）を付けたときだけ、印字した群に n.k から欠番なく振る。解説は日本語のみ（英語の WDJ は WD-4001 の warn）、Markdown には入らない（WD-4002 の warn）。文章は鉄道の6基準（H16・R5 × JR各社・運輸機構・JR東日本）にあり、基準ごとの方法の違いはコードの分岐に合わせてある（2026-10-29）。MCP の `webdan_calculate` に番号の引数はない（WDJ の項目だけで解説は付く）。解説の文と流れ図には「…の場合はNGとする」「NG」の語が入る（H16 JR各社の曲げひび割れ・せん断ひび割れの解説）ので、PDF の文字の層で NG の数を数えて判定を確かめるときは「照査結果」を含む頁（解説の頁は含まない）だけで数える（2026-10-30、Capacita 1.0.0 の本物の runner で確認）。
 - 鋼管杭とフーチングの結合部の設計曲げ耐力 Mu は別の命令 `run-pile-joint --input <json> --output-dir <空のフォルダー>`（VePP-HS の HsCalc、鉄筋差込み方式。入力は鋼管・鉄筋・中詰めコンクリート・安全係数・行ごとの軸力 N'd。f'cc・ε'cu は HsCalc が求めるので渡さない）。成果物は `result.json` だけで、`engineeringStatus` は常に `not_run`。契約は `Capacita/README.md` の「Headless runner の run-pile-joint」を正とする。WebPier の 0612・0622 が呼ぶ。
 - 着目点の番号の付け方と、断面力入力モード（`--pickup` なし）の WDJ は `references/wdj.md`。
 
@@ -118,7 +118,8 @@ R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで
 
 ### R5 の最小鉄筋量と最大鉄筋量（`bending_rebar_amount`、2026-10-21、Capacita 5104588 で確認）
 
-- 行8「最小鉄筋量」の断面力（断面力入力モードでは `Md8_Md`・`Md8_Nd`、`--pickup` では `pickup_moment` の id 8 の `no`）から、R5 系（id 3・4・8）は同じ節に2つの表を新しいページから印刷する。H16 系は Mcrd/Myd の表だけで変わらない。
+- 行8「最小鉄筋量」の断面力（断面力入力モードでは `Md8_Md`・`Md8_Nd`、`--pickup` では `pickup_moment` の id 8 の `no`）から、R5 系（id 3・4・8）は同じ節に2つの表を新しいページから印刷する。H16 系は Mcrd/Myd の表だけで変わらない。H16 の表（「最小鉄筋量の照査結果」、ftk・Gft・lch・k0b・fbck・Zc・Mcrd・My・Myd）も γc 1.00・γs 1.00・γb 1.10・ρm 1.30 で固定で、WDJ の行8 の安全係数（例 γc 1.3・γb 1.0）は使わない（2026-10-30、H16_Rail・Capacita 1.0.0 の本物の runner で確認）。
+- 照査値を一覧にするときは、計算書（report.pdf）の文字の層から `x.xxx ≦ 1.0`・`x.xxx < 1.0` の形の値を頁ごとに全部拾う（`re.findall(r'(\d+\.\d{3})\s*[≦<]\s*1\.0', page.get_text())`）。一部の頁だけ見て決める照査を取り違えた例がある（2026-10-30、下床版のスパン中央のひび割れ幅 wd/wlim 0.984 を見落とした）。
 - 「最小鉄筋量の照査結果」：Mcrd/Myd の行（ρm 1.3、γc 1.0・γs 1.0・γb 1.1 固定）に続けて、軸方向力の最大値から定まる最小鉄筋量 As ≧ 0.008Ac の行（N'd・f'ck・γc・f'cd・f'yd・kc・γi・γb・Ac・0.008Ac・As・0.008Ac/As）。Ac＝γi·γb·N'd/(kc·f'cd＋0.008f'yd)、kc＝min(1−0.003f'ck, 0.85)。γi 1.0・γb 1.3・γc 1.3・γs 1.0 は固定で、WDJ の安全係数は使わない。N'd は行8 の最大圧縮（引張なら 0）、As は側方鉄筋を含む全軸方向鉄筋。照査結果は Mcrd/Myd と 0.008Ac/As の両方が OK で OK。
 - 「最大鉄筋量の照査結果」：pt＝Ast/(b·d) ≦ 0.75pb（行 pt/0.75pb）。pb は釣合状態の式で、σ's は xb＝ε'cu/(ε'cu+εsy)·d の圧縮鉄筋のひずみから Es·ε's（0〜f'syd、圧縮鉄筋がなければ 0）。b は換算矩形の幅（T形はウェブ幅）、γc 1.3・γs 1.0 固定。
 - N'd＝0（フーチングなど）でも落ちない：Ac＝0、0.008Ac＝0、0.008Ac/As＝0.000 で OK、pb は N'd の項なし。
@@ -138,7 +139,7 @@ R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで
 
 ## 詳しく
 
-- `references/wdj.md`：GUI で保存し直した WDJ との比べ方、`--pickup` の着目点の番号、断面力入力モードの WDJ（`force[]`・`shear[]`・La・返る節）、疲労の繰返し回数、上側鉄筋なし、他のエンジンの PIK を渡すとき。
+- `references/wdj.md`：GUI で保存し直した WDJ との比べ方、`--pickup` の着目点の番号、断面力入力モードの WDJ（`force[]`・`shear[]`・La・返る節）、ねじりの断面力入力と T 形・L 形のねじり係数 Kt（`members[].torsion_flange`）、疲労の繰返し回数、上側鉄筋なし、他のエンジンの PIK を渡すとき、骨組の一部の点だけを照査する WDJ（点・面・グループの選び方、疲労の行と係数、変断面の tan、プレビューモードの配筋、T 形）。
 - `references/develop.md`：手で試す手順（ページを画像にする）、Capacita を直すときのビルドとテスト。
 
 ## 知見を足すとき

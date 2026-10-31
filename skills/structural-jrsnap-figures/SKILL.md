@@ -35,13 +35,16 @@ JRSNAP の帳票アプリ（`S_DataCheck.exe`・`S_LoadPicture.exe`）には PDF
 
 | `--data-check` の名前 | 作画条件設定（`frmSetPaper`）の作画帳票(軸線図) | 印刷実行（`frmPrint`）の対象図 |
 |---|---|---|
+| `node-numbers` | `_optJIKUSEN_1` 節点番号図 | `_chkOutput_0` 軸線図 |
+| `element-numbers` | `_optJIKUSEN_2` 要素番号図 | `_chkOutput_0` 軸線図 |
 | `nonlinear-numbers` | `_optJIKUSEN_3` 非線形番号図 | `_chkOutput_0` 軸線図 |
 | `section-numbers` | `_optJIKUSEN_4` 断面番号図 | `_chkOutput_0` 軸線図 |
 | `element-table` | `_optJIKUSEN_5` 要素関連データ一覧表 | `_chkOutput_0` 軸線図 |
 | `section-detail` | （どれか1つは要る。`_optJIKUSEN_4`） | `_chkOutput_5` 断面詳細図 |
 | `node-springs` | 同上 | `_chkOutput_2` 節点ばね分布図 |
 
-- まだ名前のない図：`_optJIKUSEN_1` 節点番号図、`_2` 要素番号図、`_6` 着目点一覧表、`_chkOutput_1` 要素ばね分布図、`_3`/`_4` 地盤抵抗分布図、`_6` 要素諸元一覧、`_7` 地盤変位図。足すときは runner の `FiguresOptions.KnownFigures`（`JRSNAPHeadless/src/JRSNAP.Headless/RunOptions.cs`）と `JRSNAPHeadless/src/DataCheck/DataCheck.cs` の `Figure.Known` の両方に足す。その入力で S_DataCheck が無効にする図を選ぶと、印刷実行で「対象図名が選択されていません」が出て `UNKNOWN_DIALOG` になる（例：杭のない直接基礎では地盤抵抗分布図が無効）。
+- `node-numbers`・`element-numbers` は 2026-10-29 に足した（WebRamen の 0740 の1章 (1) の骨組み図の次の頁、roadmap R12a）。作画条件の「節点番号と要素番号は別の帳票」（`chkFlg` を外す）なので、2つは別の図になる。本物の S_DataCheck で描いたかどうかは JRSNAPHeadless の git log を見る（足したときは単体テストの名前の受付だけ）。
+- まだ名前のない図：`_optJIKUSEN_6` 着目点一覧表、`_chkOutput_1` 要素ばね分布図、`_3`/`_4` 地盤抵抗分布図、`_6` 要素諸元一覧、`_7` 地盤変位図。足すときは runner の `FiguresOptions.KnownFigures`（`JRSNAPHeadless/src/JRSNAP.Headless/RunOptions.cs`）と `JRSNAPHeadless/src/DataCheck/DataCheck.cs` の `Figure.Known` の両方に足す。その入力で S_DataCheck が無効にする図を選ぶと、印刷実行で「対象図名が選択されていません」が出て `UNKNOWN_DIALOG` になる（例：杭のない直接基礎では地盤抵抗分布図が無効）。
 - 作画条件は全図で同じ（A4縦、各番号図に寸法線あり、着目点なし、節点番号と要素番号は別の帳票、縮尺は自動、出力断面番号は全断面）。変えるときは `DataCheck.cs` の `Steer` で設定するコントロール（`optA4`・`optV`・`chkSunpo`・`chkTyakumoku`・`chkFlg`・`chkPrintPage`・`Text1`）を直す。
 - 1回の印刷の中の図の順序は S_DataCheck が決める（軸線図の帳票、要素ばね、節点ばね、地盤抵抗、断面詳細、要素諸元、地盤変位、着目点の順）。別の順にするには、図ごとに作画条件設定と印刷を1回ずつ行う（runner はそうしている）。
 - 作図は部材の外形の枠を描かない（古い版の見本には外形の灰色の枠がある）。版の違いで、直さない。

@@ -38,6 +38,7 @@ $db.OutputInfo.OutChokukiso[$k].ChokuItem[$j]
 - `.OUT` はパスワード付き zip で読めない。
 - repo の `Batch/Aggre-SE/SNAPDBLib.dll` は、`LoadFrom` が 0x80131515 で失敗した（ダウンロードしたファイルとしてブロックされている）。`[Reflection.Assembly]::UnsafeLoadFrom(...)` なら読める（2026-10-22、32 ビットの Windows PowerShell 5.1 で確認）。
 - `IKihonInfo`・`IOutSokatuBreak` などは `CSNAPDB` の入れ子の型で、値はプロパティではなく**フィールド**（一覧は `GetFields()`）。
+- `OutputInfo.StepCtrl[$i].MemberItem[$e].M_Kaiseki_S` の M1〜M4 は C・Yb・M・Y 点の M で、θ は持たない。M-θ 要素の応答の部材角は、要素両端の節点の `JointItem[$n].DeltaT` の差で求まり、Aggre-SE の θd と一致した。支点ばねの節点の鉛直変位は `JointItem[$n].DeltaY` で読める（2026-10-30、JRSNAP 5.2-L03 の本物の DB1、WebRamen R6）。
 - Windows PowerShell 5.1 は BOM なしのスクリプトを ANSI で読むので、日本語のパスはスクリプトに書かず引数で渡す。
 
 ## Batch 側のテスト

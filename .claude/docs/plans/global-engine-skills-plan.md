@@ -225,6 +225,8 @@ GridLayoutPdf の参照 → JRSNAPHeadless のリモートと submodule → WebP
 
 **結果（2026-10-19、完了）**：`structural-jrsnap-input`・`-figures`・`-ndu`・`-soil` と `structural-capacita`。WebPier は `webpier-jrsnap`（新規）と `webpier-capacita`（`capacita-column-check` を改名）にし、WebPier の `jrsnap-*` は前倒しで消した（受入の補助 `jrsnap-input-open-save/scripts/` は残す）。FEMPython・SoilStructure は作らない（どの案件にもエンジンの知識を持つスキルがなく、MCP のツール説明と契約で足りている）。26_桑園 の案件の記録はグローバルに入れず、桑園のコピーに残した。詳細・判断待ち（フーチングの WDJ の La の単位）は `phase5-engine-skills.md`。
 
+**追記（2026-10-30、owner の決定）**：FEMPython のスキル `structural-fempython` を作った。WebPier と WebRamen が FrameWeb の入力を書き、本物の FEMPython で確かめた規約（符号、部材荷重のマーク、ばねの組、define・combine・pickup、中身のない荷重ケースの PICKUP_UNAVAILABLE、周面ばねの反力）が両方の repo に散らばっていたため。SoilStructure は作らないまま。
+
 ### Phase 6：installer
 
 1. `build-installer.ps1`：`skills/`、WebPier（uv の lock から作る配布物。FEMPython と同じオンライン bootstrap）、JRSNAPHeadless の runner を payload に含める。`payload.mjs` の provenance に加える。
