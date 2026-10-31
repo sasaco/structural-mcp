@@ -2,7 +2,7 @@
 
 Windows x64 向けのユーザー単位 MSI です。Node.js と各 .NET 計算エンジンの実行環境を同梱します。利用先 PC に Node.js、.NET SDK、Python、uv、Codex CLI を個別に入れる必要はありません。Codex アプリと、初回の Python 環境構築に使うインターネット接続が必要です。Excel 帳票を作る場合だけ Microsoft Excel が必要です。
 
-鉄道橋脚の設計計算アプリ WebPier と、Claude Code・Codex 用のスキル `structural-*` も入ります。WebPier の計算書は PC にある Windows の書体（MS明朝・MSゴシック・Calibri・Times New Roman の Italic）で組みます。JRSNAP（鉄道総研）とその runner JRSNAPHeadless は同梱しないので、WebPier の 0710 以降（JRSNAP を使う段階と、それに依存する段階）と、杭基礎の 0500（SOIL-JR を JRSNAPHeadless の runner で動かす）は使えません（杭基礎で MSI から作れるのは、鋼管ソイルセメント杭は 0400 と 0600、場所打ち杭は 0600 だけです。場所打ち杭の 0400 は 0500 の 1/β を使うため。WebPier 決定98。鋼管ソイルセメント杭の 0400 は杭の構造細目も入力だけから作る、決定99）。
+鉄道橋脚の設計計算アプリ WebPier と、Claude Code・Codex 用のスキル `structural-*` も入ります。WebPier の計算書は PC にある Windows の書体（MS明朝・MSゴシック・Calibri・Times New Roman の Italic）で組みます。JRSNAP（鉄道総研）とその runner JRSNAPHeadless は同梱しないので、WebPier の 0710 以降（JRSNAP を使う段階と、それに依存する段階）と、杭基礎の 0500（SOIL-JR を JRSNAPHeadless の runner で動かす）は使えません（杭基礎で MSI から作れるのは 0600 だけです。場所打ち杭の 0400 は 0500 の 1/β を使い〔WebPier 決定98〕、鋼管ソイルセメント杭の 0400 は結合部のずれ止めの段数を 0711・0721 の杭頭反力で決めるため〔決定123〕）。
 
 ## 別の PC に入れる
 
