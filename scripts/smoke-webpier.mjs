@@ -108,7 +108,7 @@ try {
   // The CLI with the venv, the input and the runners the server used.
   const template = await call("get_environment_template", { engine: "all" });
   const runners = Object.fromEntries(template.variables
-    .filter((item) => item.readable && ["fempython", "capacita", "aggrese", "jrsnap"].includes(item.engine))
+    .filter((item) => item.readable && ["fempython", "capacita", "aggrese", "jrsnap", "soilstructure"].includes(item.engine))
     .map((item) => [item.name, item.engine === "capacita" ? item.value.replace(/\.dll$/i, ".exe") : item.value]));
   const webPier = template.variables.find((item) => item.engine === "webpier").value;
   const python = resolve(dirname(webPier), ".venv", "Scripts", "python.exe");
