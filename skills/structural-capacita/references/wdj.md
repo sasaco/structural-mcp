@@ -58,6 +58,18 @@
 - 見本の丸め：Vfdd は f'cd（小数1桁）・各係数（4桁、pc・pw は5桁）・Vfdd（1桁）を丸めた値で以後を計算する。Vsd の見本 21557.0 は、同じ入力から 21557.8 になる（見本の丸めの違い）。
 - 断面力入力モードで曲げの Md0・1・5・7・8 とせん断の Vd5 だけを書くと、Md3・Md4・Md6 と Vd0〜7 の欄がないので WD-408・WD-409 の警告が出る。結果には影響しない（`NoCalc` では消えない）。
 
+### ねじりの断面力入力と T 形の Kt（`members[].torsion_flange`、2026-10-31、H16_Rail・Capacita の本物の runner で確認）
+
+- ねじりだけを照査する点：`points[]` を `isMtCalc: true`（曲げ・せん断を照査しないなら `isMzCalc`・`isVyCalc` は false）、`calc.calculate_torsional_moment: true`。断面力は `force[]` の `Mt<id>_Mt`・`Mt<id>_Md`・`Mt<id>_Vd`・`Mt<id>_Nd`（id は曲げ・せん断と同じ：1 耐久性 永久作用、5 安全性（破壊）、6・7 復旧性）。安全性（破壊）の Mtud1・Mtud2 は `Mt5_Md`・`Mt5_Vd` と、同じ点の配筋から求めた Mud・Vyd で求める。Md の符号は曲げと同じ（正が下側引張）。
+- 与えない行は warn の WD-410（例：Mt5 だけなら 4 件）。返る節は与えた行のものだけ（Mt5 だけなら `torsion_safety_destruction` の 3 頁）。
+- 安全係数は安全性（破壊）の行（id 5）の `V_rc`（γc）・`V_rs`（γs）・`M_rbs`（Mud の γb）・`V_rbc`・`V_rbs`・`T_rbt`（Mtcd・Mtyd・Mtcud の γb）・`ri`。
+- **Kt は既定でフランジを無視した矩形**（T形も B×H）。T形・L形の Kt＝Σbi²·di/η1i（RC標準 R5 第III編 表7.7.1、H16 表7.2.2）にするには、部材に `torsion_flange` を書く（Capacita の README の `members[].torsion_flange`）：
+  - `left_overhang_mm`・`right_overhang_mm`：左右の突縁の張出しの**上限**（片持ち部は張出し長さ bc、中間部は主梁の内側面間距離の半分 bs/2。0 はその側になし）。有効幅 λt＝min(3·t, 上限)（R5 第III編 式(7.7.30)）は Capacita が決めるので、3t で打ち切った値を渡さない。
+  - `thickness_mm`：突縁の平均厚さ t（0 より大きく H より小さい）。変厚のスラブは照査断面での平均厚さを渡す。
+  - ウェブは部材の B×H（H はせん断用ハンチを含む）。分割は「ウェブの全高＋両側の突縁」と「突縁の全幅＋ウェブの突縁より下」のねじり剛性が大きいほうを Capacita が採る。
+  - 曲げの T 形（`shape: 2`、`Bt`・`t`）とは独立。矩形（`shape: 1`）の部材にも書ける。円形・小判に書くと ID 205、欄の欠け・範囲外は ID 206（どちらもエラーで部材要素を作らない）。
+- 確かめた例：設計計算例 ＲＣラーメン高架橋（場所打ち杭）II-273〜277 の電車線柱受け梁（B 850・H 840、t 344、上限 1785、f'ck 27、γc 1.3・γbt 1.3）で、Kt 188943.6×10³ mm³（見本 1.889×10⁸）、Mtcd 231.4（見本 231.4）、γi·Mtd/Mtcd 0.895（見本 0.90）。`torsion_flange` を外すと Kt 122931.3×10³、Mtcd 150.6。
+
 ## 自分で解いた骨組の断面力を PIK にして渡す（2026-10-27、Capacita の本物の runner で確認）
 
 案件で骨組を FEMPython 以外で解いたとき（例：円形立坑のリング梁）も、断面力を PIK の書式で書いて `--pickup` で渡すと、Capacita が Mmax・Mmin・Nmax・Nmin の行から照査用の断面力を選ぶ。断面力入力モード（`force[]`）で自分で行を選ぶより、原本（旧 WebDan の計算書）に合った。

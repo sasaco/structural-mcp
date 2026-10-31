@@ -1,6 +1,6 @@
 ---
 name: structural-capacita
-description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、設計衝撃係数（固有振動数 n・速度パラメータ α・iα・ic・i、VePP-I の計算）を webdan_impact か runner の run-impact で求める、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
+description: Capacita（structural-mcp の Capacita サブモジュール。RC 計算コア RcDan、アプリ WebDanforCS、旧名 WebDan・WebDan2）で RC 断面照査を行うときに使う。WDJ（.wdj）を MCP の webdan_inspect／webdan_validate／webdan_compose_wdj／webdan_calculate で読む・検証する・変える・計算する、設計衝撃係数（固有振動数 n・速度パラメータ α・iα・ic・i、VePP-I の計算）を webdan_impact か runner の run-impact で求める、Headless runner の run-rc を直接呼ぶ（--pickup で .pik などの断面力を取り込む、計算書の節ごとのページ範囲 summary.reportSections）、断面力入力モード（pickup_filename が空）の WDJ を書く（ねじり、T 形の Kt の突縁 members[].torsion_flange を含む）、断面力0で飛ばされる照査（H16 の WD-1901〜1913、R5 の WD-1914〜1926）や WD-408〜410 の警告、R5 の最小鉄筋量・最大鉄筋量（bending_rebar_amount）、WD-1001「有効な算出点がありません」・WD-9999・WDJ-FORMAT-CONFLICT・IMPORT-EXISTING-POINT-IDENTITY で失敗するとき、旧 WebDan の WDJ を今の Capacita で読む・計算するとき、側方鉄筋の既定の配置、疲労の繰返し回数、安全係数、計算書のページを画像にして確かめるときにも使う。tool ID と環境変数の webdan は旧名で、変えない。
 ---
 
 # Capacita で RC 断面照査を行う
@@ -138,7 +138,7 @@ R5（id 3・4・8。`ErrorHelper.ErrorZeroForce` の R5 の分岐、コードで
 
 ## 詳しく
 
-- `references/wdj.md`：GUI で保存し直した WDJ との比べ方、`--pickup` の着目点の番号、断面力入力モードの WDJ（`force[]`・`shear[]`・La・返る節）、疲労の繰返し回数、上側鉄筋なし、他のエンジンの PIK を渡すとき、骨組の一部の点だけを照査する WDJ（点・面・グループの選び方、疲労の行と係数、変断面の tan、プレビューモードの配筋、T 形）。
+- `references/wdj.md`：GUI で保存し直した WDJ との比べ方、`--pickup` の着目点の番号、断面力入力モードの WDJ（`force[]`・`shear[]`・La・返る節）、ねじりの断面力入力と T 形・L 形のねじり係数 Kt（`members[].torsion_flange`）、疲労の繰返し回数、上側鉄筋なし、他のエンジンの PIK を渡すとき、骨組の一部の点だけを照査する WDJ（点・面・グループの選び方、疲労の行と係数、変断面の tan、プレビューモードの配筋、T 形）。
 - `references/develop.md`：手で試す手順（ページを画像にする）、Capacita を直すときのビルドとテスト。
 
 ## 知見を足すとき
